@@ -16,6 +16,9 @@ COM_SENSORS_URL = (
     "/on-street-parking-bay-sensors/records"
 )
 
+# Explore API only accepts -1 <= limit <= 100 (5000+ returns HTTP 400).
+_PAGE_SIZE = 100
+
 CACHE_TTL = int(os.getenv("SENSOR_CACHE_TTL", "60"))  # seconds
 
 _cache = {
@@ -50,38 +53,53 @@ def get_live_sensors():
 def _fetch_from_com():
     """
     Pull all sensor records from the CoM API.
-    The API paginates at 100 by default; we request up to 5000.
+
+    The Explore API caps ``limit`` at 100, so we page with ``offset`` until a short page.
+
+    Field names follow the current Explore API dataset (kerbsideid, status_description,
+    nested location); older schemas used bay_id / st_marker_id and top-level lat/lon.
     """
-    params = {
-        "limit": 5000,
-        "select": "bay_id,st_marker_id,status,lat,lon,location,lastupdated",
-    }
+    select = (
+        "kerbsideid,zone_number,status_description,location,"
+        "lastupdated,status_timestamp"
+    )
+    records = []
+    offset = 0
 
-    resp = requests.get(COM_SENSORS_URL, params=params, timeout=30)
-    resp.raise_for_status()
-    raw = resp.json()
+    while True:
+        params = {
+            "limit": _PAGE_SIZE,
+            "offset": offset,
+            "select": select,
+        }
+        resp = requests.get(COM_SENSORS_URL, params=params, timeout=60)
+        resp.raise_for_status()
+        raw = resp.json()
+        batch = raw.get("results", [])
+        records.extend(batch)
+        if not batch or len(batch) < _PAGE_SIZE:
+            break
+        offset += _PAGE_SIZE
 
-    records = raw.get("results", [])
-
-    # Standardise into a clean format
+    # Standardise into a clean format (frontend expects bay_id, status Present|Unoccupied)
     sensors = []
     for r in records:
-        lat = r.get("lat")
-        lon = r.get("lon")
-
-        # Some records store coords in a nested "location" field
-        if lat is None and r.get("location"):
-            loc = r["location"]
-            lat = loc.get("lat")
-            lon = loc.get("lon")
+        lat, lon = r.get("lat"), r.get("lon")
+        if lat is None or lon is None:
+            loc = r.get("location") or {}
+            lat = lat if lat is not None else loc.get("lat")
+            lon = lon if lon is not None else loc.get("lon")
 
         if lat is None or lon is None:
             continue
 
+        kid = r.get("kerbsideid")
+        status = r.get("status_description") or r.get("status") or "Unknown"
+
         sensors.append({
-            "bay_id": r.get("bay_id"),
-            "marker_id": r.get("st_marker_id"),
-            "status": r.get("status", "Unknown"),
+            "bay_id": str(kid) if kid is not None else None,
+            "marker_id": r.get("zone_number"),
+            "status": status,
             "lat": float(lat),
             "lon": float(lon),
             "last_updated": r.get("lastupdated"),
