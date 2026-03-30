@@ -17,6 +17,10 @@ The translator:
 import requests
 from datetime import datetime, timedelta
 
+from app.db import get_connection
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+
 COM_RESTRICTIONS_URL = (
     "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets"
     "/on-street-car-park-bay-restrictions/records"
@@ -31,6 +35,23 @@ def get_bay_restrictions(bay_id):
     Returns a list of restriction window dicts, or None on error.
     """
     try:
+        # 1) Prefer local Gold/Postgres restrictions (static data).
+        engine = get_connection()
+        if engine is not None:
+            try:
+                with engine.connect() as conn:
+                    rows = conn.execute(
+                        text("SELECT * FROM restrictions WHERE bay_id::text = :bay_id"),
+                        {"bay_id": str(bay_id)},
+                    ).fetchall()
+
+                if rows:
+                    return _windows_from_db_rows(rows)
+            except SQLAlchemyError as e:
+                # If DB is down or misconfigured, fall back to CoM API.
+                print(f"[restriction_service] DB lookup failed for {bay_id}: {e}")
+
+        # 2) Fall back to CoM API (wide-column format) if no DB data.
         params = {
             "limit": 10,
             "where": f'bayid="{bay_id}"',
@@ -53,6 +74,44 @@ def get_bay_restrictions(bay_id):
     except Exception as e:
         print(f"[restriction_service] Error fetching restrictions for {bay_id}: {e}")
         return None
+
+
+def _windows_from_db_rows(rows):
+    """
+    Convert normalised `restrictions` rows from the Gold database into the
+    window dict shape expected by translate_restriction().
+    """
+    windows = []
+
+    for row in rows:
+        r = row._mapping  # SQLAlchemy Row -> mapping for column access
+
+        type_desc = str(r.get("type_desc") or "")
+        if type_desc.upper().endswith("OLD"):
+            continue
+
+        from_day = _safe_int(r.get("from_day"))
+        to_day = _safe_int(r.get("to_day"))
+
+        window = {
+            "from_day": from_day,
+            "to_day": to_day,
+            "start_time": r.get("start_time") or "",
+            "end_time": r.get("end_time") or "",
+            "type_desc": type_desc,
+            # Gold tables use *_min column names from clean_to_silver.py
+            "duration": _safe_int(r.get("duration_min")),
+            "disability_ext": _safe_int(r.get("disability_ext_min")),
+            "effective_on_ph": r.get("effective_on_ph"),
+            "exemption": r.get("exemption") or "",
+        }
+
+        if window["from_day"] is not None and window["to_day"] is not None:
+            window["day_range"] = _format_day_range(window["from_day"], window["to_day"])
+
+        windows.append(window)
+
+    return windows
 
 
 def translate_restriction(bay_id, arrival, duration_min):

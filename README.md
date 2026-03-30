@@ -18,7 +18,7 @@ MelOPark joins three City of Melbourne open datasets (live bay sensors, parking 
 | Frontend | React + Vite + Tailwind CSS + Leaflet.js | Fast dev server, mobile-first styling, free map tiles (no API key) |
 | Backend | Python Flask | Same language as data pipeline, simple REST API |
 | Data pipeline | Pandas (+ DuckDB in later iterations) | Handles cleaning and transformation |
-| Database | SQLite (Gold layer) | Zero config, good enough for demo scale |
+| Database | PostgreSQL (Supabase) (Gold layer) | Static data store for restrictions + geometry/meter data |
 | Data architecture | Medallion (Bronze/Silver/Gold) | Traceability from raw API to app-ready tables |
 
 ## Project structure
@@ -43,15 +43,15 @@ melopark/
 ├── data/                  # Medallion architecture
 │   ├── bronze/            # Raw API dumps (gitignored)
 │   ├── silver/            # Cleaned CSVs (committed)
-│   └── gold/              # SQLite database (gitignored, generated)
+│   └── gold/              # Optional local artifacts (runtime reads from Postgres)
 │
 ├── scripts/               # Data pipeline
 │   ├── fetch_bronze.py    # Pull raw data from CoM APIs
 │   ├── clean_to_silver.py # Bronze -> Silver transforms
-│   ├── build_gold.py      # Silver -> Gold (SQLite database)
+│   ├── build_gold.py      # Silver -> Gold (Postgres via DATABASE_URL)
 │   └── notebooks/         # Jupyter notebooks for exploration
 │
-├── .env.example
+├── backend/.env.example
 ├── .gitignore
 └── README.md
 ```
@@ -88,7 +88,7 @@ venv\Scripts\activate
 pip install -r requirements.txt
 
 # Create your .env file
-cp ../.env.example .env
+cp ./.env.example .env
 
 # Start the Flask server
 python run.py
@@ -112,9 +112,11 @@ npm run dev
 
 The app should now be running at http://localhost:5173. Open it in your browser and you should see a map of Melbourne CBD with coloured dots for parking bays.
 
-### 4. Data pipeline (optional, for offline Gold DB)
+### 4. Data pipeline (optional, to populate Gold tables in Postgres)
 
-The app works without this step because it fetches directly from CoM APIs. But if you want to run the full medallion pipeline:
+The app works without this step because sensors are fetched live from the City of Melbourne (CoM) APIs. If you want to run the full medallion pipeline and store static data in Postgres:
+
+Make sure `backend/.env` has a valid `DATABASE_URL` before running this.
 
 ```bash
 cd scripts
@@ -125,7 +127,7 @@ python fetch_bronze.py
 # Step 2: Clean into silver/
 python clean_to_silver.py
 
-# Step 3: Build Gold SQLite database
+# Step 3: Build Gold tables in Postgres
 python build_gold.py
 ```
 

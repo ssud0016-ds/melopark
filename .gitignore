@@ -28,6 +28,7 @@ dist/
 .env
 .env.*
 !.env.example
+!backend/.env.example
 
 # OS
 .DS_Store
