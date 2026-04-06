@@ -44,6 +44,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+*.logs
 
 # Local databases (if any)
 *.sqlite3
