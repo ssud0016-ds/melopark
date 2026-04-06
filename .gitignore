@@ -36,6 +36,7 @@ Thumbs.db
 
 # IDE / editors
 .idea/
+.claude/
 *.swp
 *.swo
 *~
