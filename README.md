@@ -16,7 +16,7 @@ MelOPark joins three City of Melbourne open datasets (live bay sensors, parking 
 | Layer | Tech | Why |
 |-------|------|-----|
 | Frontend | React + Vite + Tailwind CSS + Leaflet.js | Fast dev server, mobile-first styling, free map tiles (no API key) |
-| Backend | Python Flask | Same language as data pipeline, simple REST API |
+| Backend | Python FastAPI + Mangum | API framework with Lambda-ready adapter |
 | Data pipeline | Pandas (+ DuckDB in later iterations) | Handles cleaning and transformation |
 | Database | PostgreSQL (Supabase) (Gold layer) | Static data store for restrictions + geometry/meter data |
 | Data architecture | Medallion (Bronze/Silver/Gold) | Traceability from raw API to app-ready tables |
@@ -33,12 +33,14 @@ melopark/
 │   │   └── App.jsx        # Main app component
 │   └── package.json
 │
-├── backend/               # Flask REST API
+├── backend/               # FastAPI REST API
 │   ├── app/
-│   │   ├── routes/        # /api/sensors, /api/bays, /api/restrictions
-│   │   └── services/      # Sensor fetcher, restriction parser/translator
+│   │   ├── core/          # Settings + SQLAlchemy setup
+│   │   ├── routers/       # API routers (currently health)
+│   │   └── tests/         # Backend tests
+│   ├── lambda_handler.py  # AWS Lambda entrypoint (Mangum)
 │   ├── requirements.txt
-│   └── run.py
+│   └── README.md
 │
 ├── data/                  # Medallion architecture
 │   ├── bronze/            # Raw API dumps (gitignored)
@@ -90,15 +92,24 @@ pip install -r requirements.txt
 # Create your .env file
 cp ./.env.example .env
 
-# Start the Flask server
-python run.py
+# Start the FastAPI server
+uvicorn app.main:app --reload --port 8000
 ```
 
-The API should now be running at http://localhost:5000. Test it:
+The API should now be running at http://localhost:8000. Test it:
 ```bash
-curl http://localhost:5000/api/health
-# Should return: {"service":"melopark-api","status":"ok"}
+curl http://localhost:8000/health
+# Should return: {"status":"ok","environment":"development"}
 ```
+
+Run backend tests:
+```bash
+pytest
+```
+
+API docs:
+- http://localhost:8000/docs
+- http://localhost:8000/redoc
 
 ### 3. Frontend setup
 
@@ -131,37 +142,13 @@ python clean_to_silver.py
 python build_gold.py
 ```
 
-## API endpoints
+## API endpoints (scaffold)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/health` | Health check |
-| GET | `/api/sensors/` | All live sensor data. Optional query params: `lat`, `lon`, `radius`, `status` |
-| GET | `/api/sensors/<bay_id>` | Single bay sensor data |
-| GET | `/api/bays/` | Parking bay geometry. Optional: `limit`, `offset` |
-| GET | `/api/bays/<marker_id>` | Single bay geometry |
-| GET | `/api/restrictions/<bay_id>` | Raw restriction windows for a bay |
-| GET | `/api/restrictions/<bay_id>/translate` | **Restriction translator**. Optional: `arrival` (ISO datetime), `duration` (minutes) |
+| GET | `/health` | Health check |
 
-### Example: translate a restriction
-
-```
-GET /api/restrictions/12345/translate?arrival=2026-03-30T14:00:00&duration=90
-```
-
-Returns:
-```json
-{
-  "bay_id": "12345",
-  "can_park": true,
-  "verdict": "You can park here for 2 hours. Your time expires at 04:00 PM. Payment required at the meter.",
-  "time_limit": "2 hours",
-  "expires_at": "04:00 PM",
-  "cost_estimate": "Metered (check meter for rate)",
-  "warnings": [],
-  "active_restriction": { ... }
-}
-```
+For deployment on AWS Lambda, use `backend/lambda_handler.py` as the function entrypoint.
 
 ## Data sources
 
