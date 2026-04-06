@@ -19,7 +19,7 @@ SILVER_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "silver")
 
 
 def _backend_import_path() -> str:
-    # Ensure `from app.db import get_connection` works when running from /scripts.
+    # Ensure backend package imports work when running from /scripts.
     return os.path.join(os.path.dirname(__file__), "..", "backend")
 
 
@@ -28,13 +28,9 @@ def build():
     if backend_dir not in sys.path:
         sys.path.insert(0, backend_dir)
 
-    from app.db import get_connection  # noqa: E402
+    from app.core.db import engine  # noqa: E402
 
     print("Building Gold database in Postgres...\n")
-
-    engine = get_connection()
-    if engine is None:
-        raise RuntimeError("Could not connect to Postgres. Ensure DATABASE_URL is set in backend/.env")
 
     # Load and insert bays
     bays_path = os.path.join(SILVER_DIR, "bays.csv")

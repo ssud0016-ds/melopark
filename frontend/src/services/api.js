@@ -1,11 +1,11 @@
 /**
- * API client for the Flask backend.
+ * API client for the FastAPI backend.
  *
- * In development, Vite proxies /api/* to localhost:5000.
+ * In development, defaults to localhost:8000.
  * In production, set VITE_API_URL to the deployed backend URL.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api'
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 async function fetchJSON(path, params = {}) {
   const url = new URL(path, window.location.origin)
