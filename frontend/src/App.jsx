@@ -7,14 +7,14 @@ import { useSensors } from './hooks/useSensors'
 import { useRestrictionTranslator } from './hooks/useRestrictionTranslator'
 
 export default function App() {
-  const [mapCentre, setMapCentre] = useState(null)
+  const [destination, setDestination] = useState(null)
   const [selectedSensor, setSelectedSensor] = useState(null)
 
   const { sensors, loading, error, refresh } = useSensors()
   const translator = useRestrictionTranslator()
 
   const handleSearch = useCallback((location) => {
-    setMapCentre({ lat: location.lat, lng: location.lng })
+    setDestination(location)
     setSelectedSensor(null)
     translator.clear()
   }, [translator])
@@ -52,7 +52,7 @@ export default function App() {
       <main className="flex-1 relative">
         <ParkingMap
           sensors={sensors}
-          centre={mapCentre}
+          destination={destination}
           onBayClick={handleBayClick}
         />
 

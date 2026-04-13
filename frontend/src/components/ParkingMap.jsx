@@ -1,5 +1,6 @@
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMap } from 'react-leaflet'
 import { useEffect } from 'react'
+import L from 'leaflet'
 
 // Melbourne CBD centre
 const MELBOURNE_CBD = { lat: -37.8136, lng: 144.9631 }
@@ -11,8 +12,24 @@ const STATUS_COLOURS = {
   unknown: '#9ca3af',  // grey
 }
 
+// Blue pin icon for the searched destination (uses a CSS div, no image assets needed)
+const destinationIcon = L.divIcon({
+  className: '',
+  html: `
+    <div style="
+      width: 18px; height: 18px;
+      background: #2563eb;
+      border: 3px solid white;
+      border-radius: 50%;
+      box-shadow: 0 0 0 2px #2563eb, 0 3px 8px rgba(0,0,0,0.35);
+    "></div>`,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+  popupAnchor: [0, -12],
+})
+
 /**
- * Recenter the map when the target position changes.
+ * Recenter and zoom the map when the target position changes.
  */
 function MapRecentre({ lat, lng }) {
   const map = useMap()
@@ -28,12 +45,12 @@ function MapRecentre({ lat, lng }) {
  * Main parking map component.
  *
  * Props:
- *   sensors - array of sensor objects from useSensors hook
- *   centre - { lat, lng } to centre the map on (e.g. search result)
- *   onBayClick - callback when user clicks a bay marker, receives sensor object
+ *   sensors     - array of bay objects from useSensors hook
+ *   destination - { lat, lng, name } from a successful search, or null
+ *   onBayClick  - callback when user clicks a bay marker
  */
-export default function ParkingMap({ sensors = [], centre, onBayClick }) {
-  const mapCentre = centre || MELBOURNE_CBD
+export default function ParkingMap({ sensors = [], destination, onBayClick }) {
+  const mapCentre = destination || MELBOURNE_CBD
 
   return (
     <MapContainer
@@ -42,7 +59,6 @@ export default function ParkingMap({ sensors = [], centre, onBayClick }) {
       minZoom={14}
       maxZoom={19}
       className="w-full h-full rounded-lg"
-      // Mobile friendly settings
       tap={true}
       touchZoom={true}
       dragging={true}
@@ -53,8 +69,21 @@ export default function ParkingMap({ sensors = [], centre, onBayClick }) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      {centre && <MapRecentre lat={centre.lat} lng={centre.lng} />}
+      {destination && <MapRecentre lat={destination.lat} lng={destination.lng} />}
 
+      {/* Destination pin */}
+      {destination && (
+        <Marker position={[destination.lat, destination.lng]} icon={destinationIcon}>
+          <Popup>
+            <div className="text-sm">
+              <p className="font-semibold text-blue-700">Destination</p>
+              <p className="text-gray-600 mt-0.5 max-w-[200px]">{destination.name}</p>
+            </div>
+          </Popup>
+        </Marker>
+      )}
+
+      {/* Parking bay markers */}
       {sensors.map((sensor) => {
         const colour = STATUS_COLOURS[sensor.status] || STATUS_COLOURS.unknown
 
