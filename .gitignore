@@ -30,6 +30,9 @@ dist/
 !.env.example
 !backend/.env.example
 
+# RDS TLS bundles (do not commit)
+backend/certs/*.pem
+
 # OS
 .DS_Store
 Thumbs.db
