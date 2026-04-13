@@ -3,7 +3,11 @@
 import httpx
 from fastapi import APIRouter, HTTPException
 
-from app.services.parking_service import fetch_parking_bays, fetch_raw_parking_bays
+from app.services.parking_service import (
+    SensorCacheEmptyError,
+    fetch_parking_bays,
+    fetch_raw_parking_bays,
+)
 
 router = APIRouter(prefix="/api/parking", tags=["parking"])
 
@@ -17,6 +21,11 @@ async def get_parking_bays():
     """
     try:
         return await fetch_parking_bays()
+    except SensorCacheEmptyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Parking data is not available yet — the server is still loading or the upstream API is temporarily unavailable. Please try again shortly.",
+        ) from exc
     except httpx.HTTPStatusError as exc:
         raise HTTPException(
             status_code=502,
@@ -31,10 +40,15 @@ async def get_parking_bays():
 
 @router.get("/raw")
 async def get_raw_parking_bays():
-    """Return raw parking bay data from the City of Melbourne Open Data API."""
+    """Return raw parking bay data (from cache) as-is from the upstream source."""
     try:
         data = await fetch_raw_parking_bays()
         return {"count": len(data), "data": data}
+    except SensorCacheEmptyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Parking data is not available yet — cache is still loading.",
+        ) from exc
     except httpx.HTTPStatusError as exc:
         raise HTTPException(
             status_code=502,
