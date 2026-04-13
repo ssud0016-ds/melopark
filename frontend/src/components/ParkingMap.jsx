@@ -6,9 +6,9 @@ const MELBOURNE_CBD = { lat: -37.8136, lng: 144.9631 }
 
 // Marker colours based on status
 const STATUS_COLOURS = {
-  Unoccupied: '#22c55e', // green
-  Present: '#ef4444',     // red
-  stale: '#9ca3af',       // grey
+  free: '#22c55e',     // green
+  occupied: '#ef4444', // red
+  unknown: '#9ca3af',  // grey
 }
 
 /**
@@ -56,14 +56,12 @@ export default function ParkingMap({ sensors = [], centre, onBayClick }) {
       {centre && <MapRecentre lat={centre.lat} lng={centre.lng} />}
 
       {sensors.map((sensor) => {
-        const colour = sensor.is_stale
-          ? STATUS_COLOURS.stale
-          : STATUS_COLOURS[sensor.status] || STATUS_COLOURS.stale
+        const colour = STATUS_COLOURS[sensor.status] || STATUS_COLOURS.unknown
 
         return (
           <CircleMarker
-            key={sensor.bay_id || sensor.marker_id}
-            center={[sensor.lat, sensor.lon]}
+            key={sensor.bay_id}
+            center={[sensor.lat, sensor.lng]}
             radius={6}
             pathOptions={{
               color: colour,
@@ -78,8 +76,8 @@ export default function ParkingMap({ sensors = [], centre, onBayClick }) {
             <Popup>
               <div className="text-sm">
                 <p className="font-semibold">Bay {sensor.bay_id}</p>
-                <p className={sensor.status === 'Unoccupied' ? 'text-green-600' : 'text-red-600'}>
-                  {sensor.is_stale ? 'Status uncertain' : sensor.status}
+                <p className={sensor.status === 'free' ? 'text-green-600' : 'text-red-600'}>
+                  {sensor.status === 'free' ? 'Available' : sensor.status === 'occupied' ? 'Occupied' : 'Unknown'}
                 </p>
                 <p className="text-gray-500 text-xs mt-1">Tap for parking rules</p>
               </div>

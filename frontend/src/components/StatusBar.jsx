@@ -18,9 +18,9 @@ export default function StatusBar({ sensors, loading, error }) {
     )
   }
 
-  const free = sensors.filter(s => s.status === 'Unoccupied' && !s.is_stale).length
-  const occupied = sensors.filter(s => s.status === 'Present' && !s.is_stale).length
-  const stale = sensors.filter(s => s.is_stale).length
+  const free = sensors.filter(s => s.status === 'free').length
+  const occupied = sensors.filter(s => s.status === 'occupied').length
+  const unknown = sensors.filter(s => s.status === 'unknown').length
   const total = sensors.length
 
   return (
@@ -33,10 +33,10 @@ export default function StatusBar({ sensors, loading, error }) {
         <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
         {occupied} occupied
       </span>
-      {stale > 0 && (
+      {unknown > 0 && (
         <span className="flex items-center gap-1.5 text-gray-400">
           <span className="w-2.5 h-2.5 rounded-full bg-gray-400" />
-          {stale} uncertain
+          {unknown} unknown
         </span>
       )}
       <span className="text-gray-400 ml-auto">
