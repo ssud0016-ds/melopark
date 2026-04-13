@@ -1,25 +1,47 @@
 """Fetches and caches bay type information from the CoM restrictions dataset.
 
 Provides a lookup dict {bay_id -> bay_type} used to enrich parking bay records.
-The lookup is refreshed at most once per CACHE_TTL_SECONDS to avoid hammering
-the upstream API on every request.
+
+Architecture: same background-refresh, read-cache-only model as parking_service.
+  - start_background_restrictions_refresh() launches a background task (call once at startup).
+  - The task refreshes the lookup once per REFRESH_INTERVAL (1 hour).
+  - fetch_restrictions_lookup() is a pure cache reader — it NEVER calls upstream.
+  - On refresh failure, stale cache is preserved (never cleared on error).
+  - If cache is empty (first refresh failed), fetch_restrictions_lookup() returns {}.
+    /api/parking will still respond with bay_type="Other" for all bays, which is
+    acceptable degraded behaviour.
 """
 
-import time
+import asyncio
+import logging
 
 import httpx
 
-COM_RESTRICTIONS_URL = (
-    "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets"
-    "/on-street-car-park-bay-restrictions/records"
-)
-ODS_PAGE_SIZE = 100
-REQUEST_TIMEOUT = 15
-CACHE_TTL_SECONDS = 3600  # refresh restrictions lookup once per hour
+logger = logging.getLogger(__name__)
 
-# Module-level cache
+_ODS_BASE = (
+    "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets"
+    "/on-street-car-park-bay-restrictions"
+)
+# Primary: /exports/json — full dataset in one request (no 100-record cap).
+# Fallback: /records — paginated, works without API key.
+_EXPORTS_URL = f"{_ODS_BASE}/exports/json"
+_RECORDS_URL = f"{_ODS_BASE}/records"
+ODS_PAGE_SIZE = 100
+REQUEST_TIMEOUT = 60   # generous for a single large export response
+REFRESH_INTERVAL = 3600  # refresh once per hour
+
+# ---------------------------------------------------------------------------
+# Restrictions lookup cache
+#
+# Design: system-driven refresh, user read-cache-only.
+#   - _background_refresh_loop() is the ONLY writer.
+#   - fetch_restrictions_lookup() is a pure reader — never touches upstream.
+#   - If cache is empty, returns {} (bays get bay_type="Other"; not fatal).
+# ---------------------------------------------------------------------------
+
 _cache: dict[int, str] = {}
-_cache_ts: float = 0.0
+_cache_lock = asyncio.Lock()
 
 
 def _map_type_desc(raw: str | None) -> str:
@@ -57,57 +79,148 @@ def _extract_bay_id(record: dict) -> int | None:
     return None
 
 
-async def fetch_restrictions_lookup(force_refresh: bool = False) -> dict[int, str]:
-    """Return a cached {bay_id: bay_type} lookup dict.
-
-    Fetches fresh data from CoM if the cache is empty or has expired.
-    On upstream failure, returns the stale cache (or an empty dict).
-    """
-    global _cache, _cache_ts
-
-    if not force_refresh and _cache and (time.monotonic() - _cache_ts) < CACHE_TTL_SECONDS:
-        return _cache
-
+def _build_lookup(records: list[dict]) -> dict[int, str]:
+    """Convert a flat list of raw restriction records into a {bay_id: bay_type} dict."""
     lookup: dict[int, str] = {}
+    for record in records:
+        bay_id = _extract_bay_id(record)
+        if bay_id is None:
+            continue
+        if bay_id not in lookup:
+            lookup[bay_id] = _map_type_desc(_extract_type_desc(record))
+    return lookup
+
+
+async def _fetch_via_exports(client: httpx.AsyncClient) -> list[dict]:
+    """Fetch all restriction records in one request via /exports/json."""
+    response = await client.get(
+        _EXPORTS_URL,
+        params={"limit": -1},
+        headers={"User-Agent": "MelOPark/1.0"},
+    )
+    response.raise_for_status()
+    records = response.json()
+    if not isinstance(records, list):
+        raise ValueError(
+            f"Unexpected exports response type: {type(records).__name__}. "
+            f"First 200 chars: {str(records)[:200]}"
+        )
+    return records
+
+
+async def _fetch_via_records(client: httpx.AsyncClient) -> list[dict]:
+    """Fetch all restriction records via paginated /records (100 per page)."""
+    records: list[dict] = []
     offset = 0
+    while True:
+        response = await client.get(
+            _RECORDS_URL,
+            params={"limit": ODS_PAGE_SIZE, "offset": offset},
+            headers={"User-Agent": "MelOPark/1.0"},
+        )
+        response.raise_for_status()
+        payload = response.json()
+        batch = payload.get("results", [])
+        if not batch:
+            break
+        records.extend(batch)
+        offset += len(batch)
+        if offset >= payload.get("total_count", 0):
+            break
+    return records
 
-    try:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            while True:
-                response = await client.get(
-                    COM_RESTRICTIONS_URL,
-                    params={"limit": ODS_PAGE_SIZE, "offset": offset},
-                    headers={"User-Agent": "MelOPark/1.0"},
+
+async def _fetch_restrictions_from_upstream() -> dict[int, str]:
+    """Fetch all restriction records and return a {bay_id: bay_type} dict.
+
+    Strategy (mirrors parking_service):
+      1. Try /exports/json — full dataset in one HTTP request.
+      2. If 401/403/429, fall back to paginated /records.
+    """
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        try:
+            raw = await _fetch_via_exports(client)
+            logger.info(
+                "Restrictions fetch via /exports/json — %d raw records", len(raw)
+            )
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            if status in (401, 403, 429):
+                logger.warning(
+                    "Restrictions /exports/json returned HTTP %s. "
+                    "Falling back to paginated /records.",
+                    status,
                 )
-                response.raise_for_status()
-                payload = response.json()
-                batch = payload.get("results", [])
-                if not batch:
-                    break
+                raw = await _fetch_via_records(client)
+                logger.info(
+                    "Restrictions fetch via /records (paginated) — %d raw records",
+                    len(raw),
+                )
+            else:
+                raise
+    return _build_lookup(raw)
 
-                for record in batch:
-                    bay_id = _extract_bay_id(record)
-                    if bay_id is None:
-                        continue
-                    type_desc = _extract_type_desc(record)
-                    bay_type = _map_type_desc(type_desc)
-                    # Only store the first restriction found per bay
-                    if bay_id not in lookup:
-                        lookup[bay_id] = bay_type
 
-                offset += len(batch)
-                total = payload.get("total_count", 0)
-                if offset >= total:
-                    break
+async def _refresh_restrictions_cache() -> bool:
+    """Fetch fresh restrictions data and atomically replace the cache.
 
-        _cache = lookup
-        _cache_ts = time.monotonic()
-
+    Returns True if the upstream responded with 429 (rate-limited),
+    False otherwise (success or other error).
+    On any failure, the existing cache is kept intact (never cleared on error).
+    """
+    global _cache
+    try:
+        fresh = await _fetch_restrictions_from_upstream()
+        async with _cache_lock:
+            _cache = fresh
+        logger.info("Restrictions cache refreshed — %d bays mapped", len(fresh))
+        return False
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 429:
+            logger.warning(
+                "Restrictions cache refresh rate-limited (429). Stale cache preserved."
+            )
+            return True  # signal backoff to caller
+        logger.warning("Failed to refresh restrictions lookup: %s", exc)
+        return False
     except Exception as exc:  # noqa: BLE001
-        # Return stale cache on failure rather than breaking /api/parking
-        import logging
-        logging.warning("Failed to refresh restrictions lookup: %s", exc)
-        if not _cache:
-            return {}
+        logger.warning("Failed to refresh restrictions lookup: %s", exc)
+        return False
 
-    return _cache
+
+async def _background_refresh_loop() -> None:
+    """Runs forever: refresh immediately on startup, then every REFRESH_INTERVAL.
+
+    On upstream 429, backs off for 2 hours before retrying to avoid
+    extending the rate-limit window on a sliding-window quota system.
+    """
+    while True:
+        rate_limited = await _refresh_restrictions_cache()
+        if rate_limited:
+            backoff = 2 * 3600  # 2 hours
+            logger.warning(
+                "Restrictions upstream rate-limited (429). Backing off for %d hours.",
+                backoff // 3600,
+            )
+            await asyncio.sleep(backoff)
+        else:
+            await asyncio.sleep(REFRESH_INTERVAL)
+
+
+async def start_background_restrictions_refresh() -> None:
+    """Launch the restrictions cache background loop as a fire-and-forget asyncio task.
+
+    Call once from the FastAPI lifespan startup hook.
+    """
+    asyncio.create_task(_background_refresh_loop())
+
+
+async def fetch_restrictions_lookup() -> dict[int, str]:
+    """Return a copy of the current cached {bay_id: bay_type} lookup.
+
+    This function NEVER fetches from upstream — it only reads the cache.
+    Returns an empty dict if the cache has not yet been filled (bays will
+    show bay_type='Other', which is acceptable degraded behaviour).
+    """
+    async with _cache_lock:
+        return dict(_cache)
