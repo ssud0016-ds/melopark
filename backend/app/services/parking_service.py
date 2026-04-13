@@ -1,5 +1,7 @@
 """Service layer for Melbourne Open Data parking API."""
 
+import asyncio
+
 import httpx
 
 # CoM migrated from Socrata to OpenDataSoft (ODS) API v2.1.
@@ -87,6 +89,20 @@ def _transform_bay(raw: dict) -> dict | None:
 
 
 async def fetch_parking_bays() -> list[dict]:
-    """Fetch and transform parking bay records into a frontend-ready format."""
-    raw_records = await fetch_raw_parking_bays()
-    return [bay for r in raw_records if (bay := _transform_bay(r)) is not None]
+    """Fetch and transform parking bay records, enriched with bay_type from restrictions."""
+    from app.services.restriction_lookup_service import fetch_restrictions_lookup
+
+    # Fetch sensor data and restrictions lookup in parallel
+    raw_records, restrictions = await asyncio.gather(
+        fetch_raw_parking_bays(),
+        fetch_restrictions_lookup(),
+    )
+
+    result = []
+    for r in raw_records:
+        bay = _transform_bay(r)
+        if bay is None:
+            continue
+        bay["bay_type"] = restrictions.get(bay["bay_id"], "Other")
+        result.append(bay)
+    return result
