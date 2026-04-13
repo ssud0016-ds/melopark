@@ -13,7 +13,7 @@ export default function App() {
   const [destination, setDestination] = useState(null)
   const [selectedSensor, setSelectedSensor] = useState(null)
 
-  const { sensors, loading, error, refresh } = useSensors()
+  const { sensors, loading, error, lastUpdated, refresh } = useSensors()
   const translator = useRestrictionTranslator()
 
   // When a destination is set, only show bays within SEARCH_RADIUS_M metres.
@@ -55,7 +55,7 @@ export default function App() {
             <span className="text-xs text-gray-400 hidden sm:inline">Melbourne Parking Intelligence</span>
           </div>
           <SearchBar onSearch={handleSearch} loading={loading} />
-          <StatusBar sensors={visibleSensors} loading={loading} error={error} />
+          <StatusBar sensors={visibleSensors} loading={loading} error={error} destination={destination} lastUpdated={lastUpdated} />
         </div>
       </header>
 
