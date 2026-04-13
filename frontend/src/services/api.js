@@ -24,20 +24,12 @@ async function fetchJSON(path, params = {}) {
 }
 
 
-export async function getSensors({ lat, lon, radius, status } = {}) {
-  return fetchJSON(`${BASE_URL}/sensors/`, { lat, lon, radius, status })
-}
-
-export async function getSensor(bayId) {
-  return fetchJSON(`${BASE_URL}/sensors/${bayId}`)
-}
-
-export async function getBays({ limit, offset } = {}) {
-  return fetchJSON(`${BASE_URL}/bays/`, { limit, offset })
-}
-
-export async function getBay(markerId) {
-  return fetchJSON(`${BASE_URL}/bays/${markerId}`)
+/**
+ * Returns a flat array of simplified bay objects:
+ * [{ bay_id, lat, lng, status, last_updated }, ...]
+ */
+export async function getParkingBays() {
+  return fetchJSON(`${BASE_URL}/api/parking`)
 }
 
 export async function getRestrictions(bayId) {

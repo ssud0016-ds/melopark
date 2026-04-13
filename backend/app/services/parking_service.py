@@ -50,3 +50,43 @@ async def fetch_raw_parking_bays(max_records: int = 5000) -> list[dict]:
                 break
 
     return records
+
+
+# ---------------------------------------------------------------------------
+# Transformation helpers
+# ---------------------------------------------------------------------------
+
+_STATUS_MAP: dict[str, str] = {
+    "unoccupied": "free",
+    "present": "occupied",
+    "occupied": "occupied",
+}
+
+
+def _map_status(raw_status: str) -> str:
+    return _STATUS_MAP.get(raw_status.lower().strip(), "unknown")
+
+
+def _transform_bay(raw: dict) -> dict | None:
+    """Convert a raw CoM record to a frontend-friendly bay dict.
+
+    Returns None if the record has no usable lat/lng.
+    """
+    location = raw.get("location") or {}
+    lat = location.get("lat")
+    lon = location.get("lon")
+    if lat is None or lon is None:
+        return None
+    return {
+        "bay_id": raw.get("kerbsideid"),
+        "lat": lat,
+        "lng": lon,
+        "status": _map_status(raw.get("status_description", "")),
+        "last_updated": raw.get("lastupdated"),
+    }
+
+
+async def fetch_parking_bays() -> list[dict]:
+    """Fetch and transform parking bay records into a frontend-ready format."""
+    raw_records = await fetch_raw_parking_bays()
+    return [bay for r in raw_records if (bay := _transform_bay(r)) is not None]
