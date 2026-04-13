@@ -1,4 +1,4 @@
-import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Circle, Marker, Popup, useMap } from 'react-leaflet'
 import { useEffect } from 'react'
 import L from 'leaflet'
 
@@ -70,6 +70,21 @@ export default function ParkingMap({ sensors = [], destination, onBayClick }) {
       />
 
       {destination && <MapRecentre lat={destination.lat} lng={destination.lng} />}
+
+      {/* 400 m search radius ring */}
+      {destination && (
+        <Circle
+          center={[destination.lat, destination.lng]}
+          radius={400}
+          pathOptions={{
+            color: '#2563eb',
+            fillColor: '#2563eb',
+            fillOpacity: 0.06,
+            weight: 1.5,
+            dashArray: '6 4',
+          }}
+        />
+      )}
 
       {/* Destination pin */}
       {destination && (
