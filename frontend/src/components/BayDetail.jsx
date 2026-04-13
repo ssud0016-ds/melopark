@@ -19,15 +19,15 @@ export default function BayDetail({ sensor, translation, loading, error, onClose
           <div className="flex items-center gap-2 mt-1">
             <span
               className={`inline-block w-3 h-3 rounded-full ${
-                sensor.is_stale
-                  ? 'bg-gray-400'
-                  : sensor.status === 'Unoccupied'
-                    ? 'bg-green-500'
-                    : 'bg-red-500'
+                sensor.status === 'free'
+                  ? 'bg-green-500'
+                  : sensor.status === 'occupied'
+                    ? 'bg-red-500'
+                    : 'bg-gray-400'
               }`}
             />
             <span className="text-sm text-gray-600">
-              {sensor.is_stale ? 'Status uncertain' : sensor.status === 'Unoccupied' ? 'Available' : 'Occupied'}
+              {sensor.status === 'free' ? 'Available' : sensor.status === 'occupied' ? 'Occupied' : 'Unknown'}
             </span>
           </div>
         </div>
