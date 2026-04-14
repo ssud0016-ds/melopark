@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   MapContainer,
   TileLayer,
@@ -80,6 +80,17 @@ export default function ParkingMap({
   defaultZoom = DEFAULT_MAP_ZOOM,
   destZoom = DESTINATION_MAP_ZOOM,
 }) {
+  const [isDark, setIsDark] = useState(
+    () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  )
+  useEffect(() => {
+    const obs = new MutationObserver(() =>
+      setIsDark(document.documentElement.classList.contains('dark'))
+    )
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => obs.disconnect()
+  }, [])
+
   const destIcon = useMemo(
     () => (destination ? destinationDivIcon(destination.name) : null),
     [destination],
@@ -97,8 +108,15 @@ export default function ParkingMap({
         zoomControl={false}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          key={isDark ? 'dark' : 'light'}
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url={
+            isDark
+              ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+              : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+          }
+          subdomains="abcd"
+          maxZoom={20}
         />
 
         <FlyToController
@@ -133,17 +151,15 @@ export default function ParkingMap({
           else if (!inFilter) opacity = 0.22
           const cols = BAY_COLORS[bay.type] || BAY_COLORS.available
           const selected = bay.id === selectedBayId
-          const fill =
-            bay.type === 'occupied' ? '#fee2e2' : bay.type === 'trap' ? '#fff7ed' : '#ccfbef'
           return (
             <CircleMarker
               key={bay.id}
               center={[ll.lat, ll.lng]}
-              radius={selected ? 13 : 10}
+              radius={selected ? 11 : 7}
               pathOptions={{
-                color: cols.border,
-                fillColor: fill,
-                fillOpacity: Math.min(1, 0.92 * opacity),
+                color: '#ffffff',
+                fillColor: cols.border,
+                fillOpacity: opacity,
                 opacity,
                 weight: selected ? 3 : 2,
               }}
