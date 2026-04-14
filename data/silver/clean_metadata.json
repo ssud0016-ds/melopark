@@ -1,0 +1,71 @@
+{
+  "pipeline_stage": "silver",
+  "cleaned_at": "2026-04-14T01:07:44.212313+00:00",
+  "notes": [
+    "CoM sensors use kerbsideid (not bay_id) and status_description (not status).",
+    "CoM restrictions use bayid (not bay_id) and description1..8 (not typedesc1..8).",
+    "Duration values are in MINUTES. Do NOT multiply by 60.",
+    "location column is a dict \u2014 lat/lon extracted before coordinate validation.",
+    "Restrictions melted from wide (description1..8) to long (one row per slot).",
+    "Join: sensors.bay_id LEFT JOIN restrictions.bay_id.",
+    "No street name in restrictions \u2014 use GPS lat/lon \u2192 nearest sensor \u2192 bay_id."
+  ],
+  "datasets": {
+    "sensors_clean": {
+      "rows": 3309,
+      "columns": [
+        "lastupdated",
+        "status_timestamp",
+        "zone_number",
+        "status_description",
+        "kerbsideid",
+        "location",
+        "_fetched_at",
+        "bay_id",
+        "lat",
+        "lon",
+        "status"
+      ]
+    },
+    "restrictions_long": {
+      "rows": 8033,
+      "columns": [
+        "bay_id",
+        "slot_num",
+        "typedesc",
+        "fromday",
+        "today",
+        "starttime",
+        "endtime",
+        "duration_mins",
+        "disabilityext_mins"
+      ]
+    },
+    "merged": {
+      "rows": 3362,
+      "columns": [
+        "lastupdated",
+        "status_timestamp",
+        "zone_number",
+        "status_description",
+        "kerbsideid",
+        "location",
+        "_fetched_at",
+        "bay_id",
+        "lat",
+        "lon",
+        "status",
+        "slot_num",
+        "typedesc",
+        "fromday",
+        "today",
+        "starttime",
+        "endtime",
+        "duration_mins",
+        "disabilityext_mins",
+        "_silver_joined_at"
+      ],
+      "unique_bays": 3309
+    }
+  }
+}
