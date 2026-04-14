@@ -162,6 +162,7 @@ export const INITIAL_BAYS = [
   },
 ];
 
+<<<<<<< Updated upstream
 // Map geometry — streets and city blocks
 export const MAP_STREETS = [
   { x1:0, y1:0.20, x2:1, y2:0.20, w:20, c:'#e2e4e0', label:'Victoria St' },
@@ -200,6 +201,9 @@ export const FACT_CARDS = [
 ];
 
 // Colours by bay type
+=======
+// Colours by bay type — uses brand teal instead of green
+>>>>>>> Stashed changes
 export const BAY_COLORS = {
   available: { border: '#3fa73f', bg: '#edf7ed', count: '#16a34a', dot: '#3fa73f' },
   trap:      { border: '#f97316', bg: '#fff7ed', count: '#d97706', dot: '#f97316' },
