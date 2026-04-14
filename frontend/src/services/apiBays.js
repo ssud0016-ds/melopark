@@ -1,78 +1,69 @@
 /**
- * Fetches live parking bays from the MeloPark FastAPI backend (`GET /api/parking`).
- * In dev, use Vite proxy (empty VITE_API_URL) so requests go to the same origin.
+ * Frontend API layer for MeloPark parking data.
+ *
+ * Data-source policy (enforced here):
+ *   - Sensor occupancy (free/occupied/unknown) → CoM sensor API, cached by backend
+ *   - Bay type label (e.g. "Loading Zone", "Timed") → CoM restriction API, cached by backend
+ *   - Street name → CoM sensor API field `roadsegmentdescription`
+ *   - ALL rule decisions (verdict/reason/restriction) → GET /api/bays/{id}/evaluate
+ *
+ * This file MUST NOT contain any rule inference, regex guessing, or fake data.
+ * Fields that have no real source are left absent (undefined) so UI can show
+ * honest "not available" messages.
  */
 
-function inferLimitType(bayType) {
-  const t = (bayType || '').toLowerCase()
-  if (/\b4\s*p\b|4\s*hour|4h\b/i.test(t)) return '4p'
-  if (/\b3\s*p\b|3\s*hour|3h\b/i.test(t)) return '3p'
-  if (/\b2\s*p\b|2\s*hour|2h\b/i.test(t)) return '2p'
-  if (bayType === 'Timed') return '2p'
-  return '2p'
-}
-
-function buildTimeline(status, bayType) {
-  const free = status === 'free'
-  return [
-    {
-      time: 'Now',
-      desc: free
-        ? 'Sensor reports this bay is unoccupied'
-        : status === 'occupied'
-          ? 'Sensor reports a vehicle is present'
-          : 'Sensor status unclear — treat as occupied until verified',
-      on: free,
-    },
-    {
-      time: 'Rules',
-      desc: `${bayType}: always confirm times and fees on posted street signage.`,
-      on: false,
-    },
-  ]
-}
-
+/**
+ * Map a raw `/api/parking` record into the bay object used by the frontend.
+ *
+ * ONLY real, API-backed fields are set here.
+ * Rule decisions are NOT made here — they come from the evaluate endpoint.
+ *
+ * Fields:
+ *   id              – CoM kerbside sensor ID (real)
+ *   name            – Street name from CoM roadsegmentdescription, or null (real)
+ *   type            – Visual map-dot category: available / trap / occupied
+ *                     Derived from sensor status + bayType (both from real APIs).
+ *                     Used ONLY for map dot colour — not for rule decisions.
+ *   lat / lng       – GPS coordinates (real)
+ *   spots           – Always 1; each CoM sensor monitors a single kerbside bay
+ *   free            – 0 or 1 from sensor (real)
+ *   bayType         – Raw CoM type string, e.g. "Loading Zone", "Timed", "Other"
+ *   sensorLastUpdated – Timestamp from CoM sensor feed (real)
+ *   source          – "live" when from API, "demo" when from static fallback
+ */
 export function mapApiRecordToBay(record) {
   const id = String(record.bay_id ?? record.bayid ?? '')
   const status = (record.status || 'unknown').toLowerCase()
   const isFree = status === 'free'
   const bayType = record.bay_type || 'Other'
-  const isTrap = bayType === 'Loading Zone' || bayType === 'No Standing'
 
+  // Map dot colour category — derived from real API data (not rule inference).
+  // "trap" applies to absolute restrictions (Loading Zone, No Standing) which
+  // the CoM restriction API classifies directly; no time logic is applied here.
+  const isDefinitelyRestricted =
+    bayType === 'Loading Zone' || bayType === 'No Standing' || bayType === 'Disabled'
   let type = 'occupied'
-  if (isTrap) type = 'trap'
+  if (isDefinitelyRestricted) type = 'trap'
   else if (isFree) type = 'available'
-
-  const limitType = inferLimitType(bayType)
 
   return {
     id,
-    name: `CBD Bay ${id}`,
+    name: record.street_name || null,   // null → UI shows "Unnamed Bay"
     type,
-    limitType,
     lat: record.lat,
     lng: record.lng,
-    spots: 1,
+    spots: 1,                           // CoM model: 1 sensor = 1 kerbside bay
     free: isFree ? 1 : 0,
-    desc: `${bayType} — live sensor: ${status}.`,
-    tags: [bayType, isFree ? 'Unoccupied' : 'Occupied'],
-    safe: isTrap
-      ? 'Restricted category — read signs before parking'
-      : isFree
-        ? 'Sensor shows bay free now'
-        : 'Sensor shows bay in use',
-    limit: bayType,
-    cost: 'See meter / PayStay / signage',
-    applies: 'City of Melbourne on-street rules',
-    warn: isTrap
-      ? 'Loading or no-standing zones can incur heavy fines — check posted times.'
-      : null,
-    timeline: buildTimeline(status, bayType),
+    bayType,                            // raw CoM type string (real external API)
     sensorLastUpdated: record.last_updated ?? null,
     source: 'live',
   }
 }
 
+/**
+ * Fetch live parking bays from `GET /api/parking`.
+ * Returns an array of bay objects produced by mapApiRecordToBay.
+ */
 export async function fetchParkingBays() {
   const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
   const url = `${base}/api/parking`
@@ -99,4 +90,31 @@ export async function fetchParkingBays() {
   const records = await res.json()
   if (!Array.isArray(records)) throw new Error('Unexpected API response shape')
   return records.map(mapApiRecordToBay)
+}
+
+/**
+ * Fetch rule evaluation for a single bay from `GET /api/bays/{bayId}/evaluate`.
+ *
+ * Returns the BayEvaluation object, or null if the request fails.
+ *
+ * Response fields:
+ *   verdict          – "yes" | "no" | "unknown"
+ *   reason           – plain-English explanation (always present)
+ *   active_restriction – { typedesc, rule_category, plain_english,
+ *                          max_stay_mins, expires_at } | null
+ *   warning          – { description, ... } | null
+ *   data_source      – "db" | "api_fallback" | "unknown"
+ */
+export async function fetchBayEvaluation(bayId) {
+  if (!bayId) return null
+  const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+  const url = `${base}/api/bays/${encodeURIComponent(bayId)}/evaluate`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const data = await res.json()
+    return data ?? null
+  } catch {
+    return null
+  }
 }

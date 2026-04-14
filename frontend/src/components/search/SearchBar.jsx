@@ -91,8 +91,8 @@ export default function SearchBar({ destination, onPick, onClear }) {
           onKeyDown={handleKeyDown}
           onFocus={() => setShowDrop(true)}
           onBlur={() => setTimeout(() => setShowDrop(false), 150)}
-          placeholder="Search address or landmark..."
-          aria-label="Search for a destination"
+          placeholder="Search Melbourne CBD address or landmark..."
+          aria-label="Search for a destination in Melbourne CBD"
           aria-autocomplete="list"
           className="flex-1 border-none bg-transparent outline-none font-sans text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
         />
@@ -140,7 +140,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
             <span>🔍</span>
             <div>
               <div className="font-semibold">No matching places</div>
-              <div className="text-xs mt-0.5">Try "Flinders", "RMIT", or a street name</div>
+              <div className="text-xs mt-0.5">MeloPark covers Melbourne CBD only. Try "Flinders", "RMIT", or a CBD street name.</div>
             </div>
           </div>
         </div>
@@ -152,7 +152,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
           <div className="text-[40px] mb-3">🔍</div>
           <div className="text-base font-bold text-gray-900 dark:text-white mb-2">No results found</div>
           <div className="text-sm text-gray-500 leading-relaxed mb-4">
-            We couldn't find "{query}". Try a landmark like "Melbourne Central" or a street name.
+            We couldn't find "{query}". MeloPark covers <span className="font-semibold text-gray-700 dark:text-gray-300">Melbourne CBD only</span> — try a landmark like "Flinders Street" or "Melbourne Central".
           </div>
           <button
             onClick={() => { setNoResults(false); clear() }}
