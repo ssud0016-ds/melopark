@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import TopBar from './components/layout/TopBar'
-import HomePage from './components/home/HomePage'
+import AboutPage from './components/home/AboutPage'
 import MapPage from './components/map/MapPage'
 import { useBays } from './hooks/useBays'
 import { useDarkMode } from './hooks/useDarkMode'
 
 export default function App() {
-  const [page, setPage] = useState('home')
-  const { bays, lastUpdated, availableBayCount, totalFreeSpots, error, loading, refresh } = useBays()
+  const [page, setPage] = useState('map')
+  const { bays, lastUpdated, error, loading, refresh } = useBays()
   const [darkMode, toggleDark] = useDarkMode()
 
   return (
@@ -19,14 +19,6 @@ export default function App() {
         onToggleDark={toggleDark}
       />
 
-      {page === 'home' && (
-        <HomePage
-          availableBayCount={availableBayCount}
-          totalFreeSpots={totalFreeSpots}
-          onNavigate={setPage}
-        />
-      )}
-
       {page === 'map' && (
         <MapPage
           bays={bays}
@@ -35,6 +27,10 @@ export default function App() {
           apiLoading={loading}
           onRetry={refresh}
         />
+      )}
+
+      {page === 'about' && (
+        <AboutPage onNavigate={setPage} />
       )}
     </div>
   )
