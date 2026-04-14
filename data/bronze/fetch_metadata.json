@@ -1,0 +1,33 @@
+{
+  "pipeline_stage": "bronze",
+  "fetched_at": "2026-04-13T23:21:53.582817+00:00",
+  "api_base": "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets",
+  "api_licence": "CC BY - City of Melbourne Open Data",
+  "api_portal": "https://data.melbourne.vic.gov.au",
+  "datasets": {
+    "bays": {
+      "dataset_id": "on-street-parking-bays",
+      "description": "Spatial polygon boundaries for each physical bay",
+      "output_file": "/Users/mowlya/Downloads/Monash University/melopark/data/bronze/parking_bays.parquet",
+      "rows": 10000,
+      "columns": [
+        "roadsegmentid",
+        "kerbsideid",
+        "roadsegmentdescription",
+        "latitude",
+        "longitude",
+        "lastupdated",
+        "location",
+        "_fetched_at"
+      ],
+      "fetched_at": "2026-04-13T23:21:53.533285+00:00"
+    }
+  },
+  "notes": [
+    "Bronze data is raw - no transformations applied.",
+    "bay_id joins sensors <-> restrictions.",
+    "marker_id joins sensors <-> parking_bays.",
+    "Restrictions dataset has NO street name column.",
+    "Use GPS lat/lon -> nearest sensor -> bay_id to look up restrictions."
+  ]
+}
