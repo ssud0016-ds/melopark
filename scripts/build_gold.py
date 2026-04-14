@@ -345,41 +345,76 @@ def translate_sign(typedesc: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def classify_rule(typedesc: str) -> tuple[bool, str]:
-    """Derive ``(is_strict, rule_category)`` from a raw CoM typedesc value.
+    r"""Derive ``(is_strict, rule_category)`` from a raw CoM typedesc value.
 
-    Categories
-    ----------
-    clearway     NO STOPPING, CLEARWAY — vehicles towed
-    no_standing  NO PARKING — cannot leave vehicle unattended
-    loading      LOADING — commercial vehicles only
-    disabled     DIS / DISABILITY — permit required
-    timed        <N>P (with or without MTR/TKT) — time-limited parking
-    free         FREE — unrestricted parking
-    other        BUS, TAXI, PERMIT, anything unrecognised
+    Categories (checked in this order — strict before general)
+    ----------------------------------------------------------
+    clearway      CW, TOW, CLEARWAY
+    no_standing   NO STOP*, NO PARK*, NS prefix, section (621)
+    loading       LZ, L/ZONE, LOADING
+    disabled      DIS, DISAB*, DISABLE*
+    timed         \dP, 1/2P, 1/4P, P\d, MINS, MTR, METER, TKT, etc.
+    free          FREE
+    other         BUS, TAXI, PERMIT, broken data, anything unrecognised
 
-    ``is_strict`` is True for categories where *any* passenger vehicle would
-    be illegally parked: clearway, no_standing, loading.
+    ``is_strict`` is True for clearway, no_standing, loading — categories
+    where any passenger vehicle would be illegally parked.
+
+    The order matters: "LZ 30MINS" must hit *loading* before the generic
+    *timed* regex can match on "MINS".
     """
     if not typedesc or pd.isnull(typedesc):
         return False, "other"
 
     td = str(typedesc).strip().upper()
 
-    if "NO STOPPING" in td or "CLEARWAY" in td:
+    # ── 1. Clearway / tow-away ───────────────────────────────────────
+    # "CW TOW M-F 16:00-19:00", "CLEARWAY"
+    if re.search(r"\bCW\b|\bTOW\b|CLEARWAY", td):
         return True, "clearway"
 
-    if "NO PARKING" in td:
+    # ── 2. No Stopping / No Parking ──────────────────────────────────
+    # "No Stop M-F 7.00-09.30", "S/ No Stop", "NO STOPPING",
+    # "NO PARKING", "No Park", "P/10 ... No Park", "(621)" section
+    if re.search(r"NO\s*STOP|NO\s*PARK|\bNS\b|\(621\)", td):
         return True, "no_standing"
 
-    if "LOADING" in td:
+    # ── 3. Loading zone ──────────────────────────────────────────────
+    # "LZ 30M ...", "LZ 15MINS ...", "L/Zone 30MINS ...",
+    # "LZ30MINS", "Loading Zone 60mins"
+    if re.search(r"\bLZ\b|LZ\d|L/ZONE|LOADING", td):
         return True, "loading"
 
-    if re.search(r"\bDIS\b", td) or "DISABILITY" in td:
+    # ── 4. Disability permit ─────────────────────────────────────────
+    # "2P DIS M-SAT", "P DIS AOT", "2PDis AOT", "DISABILITY",
+    # "DISABLE", "Disabled Only"
+    if re.search(r"DIS(?:AB|\b)|DISABLE", td):
         return False, "disabled"
 
-    if "1/2P" in td or re.match(r"\d+(?:\.\d+)?P\b", td):
+    # ── 5. Timed parking (MUST come after strict categories) ─────────
+    # Standard hour:  "2P", "4P MTR", "1P SUN", "1.5P"
+    # Fractions:      "1/2P", "1/4P", "1/4 P"
+    # Minutes prefix: "P 05MINS", "P10", "P5", "P 10MINS"
+    # Minutes suffix: "15MINS P", "2Mins P"
+    # Hour metered:   "1PM" (= 1-hour Parking Metered), "1 PM Mon-Sat"
+    # Meter/ticket:   "P MTR", "METER", "TKT", "TICKET"
+    # Permit area:    "RPA", "RPE"
+    if re.search(
+        r"\d+(?:\.\d+)?\s*P\b"     # 2P, 1P, 4P, 1.5P
+        r"|1/[24]\s*P"              # 1/2P, 1/4P, 1/4 P
+        r"|\bP\s*\d"               # P5, P10, P 05MINS
+        r"|\d+\s*MINS?\b"          # 15MINS, 30MIN, 2Mins
+        r"|\d+\s*MINUTES"          # 10 MINUTES
+        r"|\d+\s*PM\b"             # 1PM (1-hour Parking Metered)
+        r"|\bMTR\b|\bMETER\b"      # meter keywords
+        r"|\bTKT\b|\bTICKET\b"     # ticket keywords
+        r"|\bHR\b|\bHRS\b"         # hour keywords
+        r"|\bRPA\b|\bRPE\b",       # residential parking area/exemption
+        td,
+    ):
         return False, "timed"
 
+    # ── 6. Free parking ──────────────────────────────────────────────
     if td in ("FREE", "P FREE", "FREE PARKING"):
         return False, "free"
 
