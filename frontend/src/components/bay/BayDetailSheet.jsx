@@ -29,7 +29,7 @@ export default function BayDetailSheet({
   }
 
   const spotDotColor =
-    bay.free === 0 ? 'bg-danger' : bay.free <= (bay.spots ?? 1) * 0.3 ? 'bg-trap' : 'bg-green-500'
+    bay.free === 0 ? 'bg-danger' : bay.free <= (bay.spots ?? 1) * 0.3 ? 'bg-trap' : 'bg-accent'
 
   const feedUpdatedStr = lastUpdated
     ? lastUpdated.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -100,12 +100,12 @@ export default function BayDetailSheet({
       {/* Body */}
       <div className="px-5 pt-4 pb-7 flex-1">
         {/* Spot count */}
-        <div className="flex items-center gap-2.5 bg-surface-secondary dark:bg-surface-dark-tertiary rounded-xl px-3.5 py-3 mb-4">
+        <div className="flex items-center gap-2.5 bg-surface-secondary rounded-xl px-3.5 py-3 mb-4">
           <div className={cn('w-3 h-3 rounded-full shrink-0', spotDotColor)} />
-          <span className="text-sm font-bold text-gray-900 dark:text-white">
+          <span className="text-sm font-bold text-gray-900">
             {free}/{spots} spots free
           </span>
-          <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto">
+          <span className="text-xs text-gray-500 ml-auto">
             {(bay.limitType || '').toUpperCase()}
           </span>
         </div>

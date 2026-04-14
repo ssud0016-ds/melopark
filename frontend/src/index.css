@@ -4,17 +4,17 @@
 
 @layer base {
   :root {
-    --brand: #1A7A6D;
-    --brand-light: #2AA396;
-    --trap: #f97316;
-    --danger: #ef4444;
+    --brand: #35338c;
+    --brand-light: #8388c6;
+    --trap: #8388c6;
+    --danger: #5a61a8;
   }
 
   .dark {
-    --brand: #2AA396;
-    --brand-light: #5ceaca;
-    --trap: #fb923c;
-    --danger: #f87171;
+    --brand: #8388c6;
+    --brand-light: #c2ff75;
+    --trap: #c2ff75;
+    --danger: #8388c6;
   }
 
   body {
@@ -32,7 +32,7 @@
   width: 100%;
   height: 100%;
   font-family: Inter, system-ui, sans-serif;
-  background: #F5F5F7;
+  background: #ffffff;
 }
 .dark .leaflet-container { background: #0E1116; }
 

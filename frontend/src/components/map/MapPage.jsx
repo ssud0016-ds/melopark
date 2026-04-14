@@ -161,7 +161,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {/* Destination proximity badge */}
         {destination && (
-          <div className="absolute top-[118px] left-1/2 -translate-x-1/2 z-[500] bg-surface-dark text-white rounded-full px-5 py-2 text-sm font-semibold whitespace-nowrap shadow-overlay flex items-center gap-2 max-w-[calc(100%-28px)]">
+          <div className="absolute top-[118px] left-1/2 -translate-x-1/2 z-[500] bg-surface-secondary text-gray-900 rounded-full px-5 py-2 text-sm font-semibold whitespace-nowrap shadow-overlay flex items-center gap-2 max-w-[calc(100%-28px)]">
             <span>{proxFreeSpots > 0 ? '🟢' : '🔴'}</span>
             <span>
               {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across&nbsp;
@@ -192,9 +192,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             Bay Status
           </div>
           {[
-            ['bg-brand', 'Available'],
+            ['bg-accent', 'Available'],
             ['bg-trap', 'Rule Trap'],
-            ['bg-danger', 'Occupied'],
+            ['bg-[#ed6868]', 'Occupied'],
           ].map(([bg, label]) => (
             <div key={label} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1 last:mb-0">
               <div className={cn('w-2.5 h-2.5 rounded-full shrink-0', bg)} />

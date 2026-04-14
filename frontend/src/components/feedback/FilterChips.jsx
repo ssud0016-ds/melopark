@@ -12,9 +12,9 @@ const FILTERS = [
 const COLOR_MAP = {
   brand:  { active: 'bg-brand text-white border-brand',               inactive: '' },
   trap:   { active: 'bg-trap text-white border-trap',                 inactive: '' },
-  violet: { active: 'bg-violet-600 text-white border-violet-600',     inactive: '' },
-  cyan:   { active: 'bg-cyan-600 text-white border-cyan-600',         inactive: '' },
-  amber:  { active: 'bg-amber-700 text-white border-amber-700',       inactive: '' },
+  violet: { active: 'bg-brand-light text-white border-brand-light',    inactive: '' },
+  cyan:   { active: 'bg-accent text-brand border-accent',             inactive: '' },
+  amber:  { active: 'bg-brand-dark text-white border-brand-dark',      inactive: '' },
 }
 
 export default function FilterChips({ activeFilter, onFilterChange }) {
