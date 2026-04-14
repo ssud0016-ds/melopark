@@ -1,17 +1,22 @@
 {
   "pipeline_stage": "gold",
-  "built_at": "2026-04-14T01:33:33.445540+00:00",
-  "evaluated_at": "Tuesday 2026-04-14 11:33:33",
+  "built_at": "2026-04-14T14:17:39.829715+00:00",
+  "evaluated_at": "Wednesday 2026-04-15 00:17:36",
   "notes": [
     "is_active_now reflects the restriction state at build time.",
-    "In production, is_active_now should be computed per-request in the Flask API.",
-    "plain_english is stable and can be cached.",
-    "Upload gold_bay_restrictions.csv to Supabase for API use."
+    "In production, verdicts are computed per-request by restriction_evaluator.py.",
+    "plain_english, is_strict, rule_category are stable and cached in Postgres."
   ],
   "stats": {
     "total_rows": 125,
     "unique_bays": 72,
     "active_restrictions": 0,
+    "strict_restrictions": 0,
+    "rule_categories": {
+      "timed": 121,
+      "other": 2,
+      "disabled": 2
+    },
     "columns": [
       "bay_id",
       "slot_num",
@@ -26,13 +31,14 @@
       "duration_mins",
       "disabilityext_mins",
       "plain_english",
-      "is_active_now"
+      "is_active_now",
+      "is_strict",
+      "rule_category"
     ]
   },
   "api_usage": {
-    "endpoint": "GET /api/sign?lat=-37.8136&lon=144.9631",
-    "flow": "GPS lat/lon \u2192 nearest sensor by Haversine \u2192 bay_id \u2192 gold table",
-    "query": "SELECT * FROM gold_bay_restrictions WHERE bay_id = :bay_id",
-    "no_street_name": "The restrictions dataset has NO street name \u2014 do not filter by street."
+    "evaluate_endpoint": "GET /api/bays/{bay_id}/evaluate?arrival_iso=...&duration_mins=...",
+    "bulk_endpoint": "GET /api/bays/evaluate-bulk?arrival_iso=...&bbox=...",
+    "flow": "bay_id \u2192 bays table (has_restriction_data) \u2192 bay_restrictions \u2192 evaluator"
   }
 }
