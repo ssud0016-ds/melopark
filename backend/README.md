@@ -19,8 +19,15 @@ Run the API locally:
 uvicorn app.main:app --reload --port 8000
 ```
 
-Health endpoint:
-- `GET http://localhost:8000/health`
+## Endpoints
+
+| Method | Endpoint | Description |
+| ------ | -------- | ----------- |
+| GET | `/health` | Health check |
+| GET | `/api/parking` | Live sensor data (bay occupancy) |
+| GET | `/api/parking/raw` | Raw upstream sensor data |
+| GET | `/api/bays/{bay_id}/evaluate` | Evaluate parking legality for a single bay |
+| GET | `/api/bays/evaluate-bulk` | Bulk-evaluate all bays in a bounding box |
 
 Interactive API docs:
 - `http://localhost:8000/docs`
@@ -30,6 +37,7 @@ Interactive API docs:
 
 ```bash
 pytest
+# 31 tests: health + restriction evaluator (day matching, verdicts, warnings, edge cases)
 ```
 
 ## Environment variables
