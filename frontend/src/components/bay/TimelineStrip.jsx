@@ -1,16 +1,90 @@
 import { cn } from '../../utils/cn'
 
-export default function TimelineStrip({ timeline }) {
-  if (!timeline?.length) return null
+/**
+ * Shows the current rule state and sensor status for a parking bay.
+ *
+ * Data-source policy:
+ *   - Rule entries come ONLY from backend `activeRestriction` (DB or API fallback).
+ *   - Sensor status (free/occupied) comes from `sensorFree` prop (real CoM data).
+ *   - NO fake time schedules are generated here.
+ *   - If no rule data is available, an honest "not available" message is shown.
+ *
+ * Props:
+ *   activeRestriction – ActiveRestriction from the evaluate API, or null
+ *   verdict           – "yes" | "no" | "unknown" | null
+ *   sensorFree        – 0 | 1 | undefined (from bay.free, CoM sensor)
+ */
+export default function TimelineStrip({ activeRestriction, verdict, sensorFree }) {
+  const items = []
+
+  // ── Sensor occupancy row (always real when present) ──────────────────────
+  if (sensorFree === 1) {
+    items.push({
+      time: 'Sensor: Now',
+      desc: 'This bay is currently unoccupied.',
+      on: true,
+    })
+  } else if (sensorFree === 0) {
+    items.push({
+      time: 'Sensor: Now',
+      desc: 'A vehicle is currently detected in this bay.',
+      on: false,
+    })
+  }
+  // sensorFree undefined → no sensor row (sensor data not available)
+
+  // ── Active restriction from backend ──────────────────────────────────────
+  if (activeRestriction) {
+    const ruleIsOk = verdict === 'yes'
+
+    items.push({
+      time: activeRestriction.typedesc ?? 'Current Rule',
+      desc: activeRestriction.plain_english,
+      on: ruleIsOk,
+    })
+
+    if (activeRestriction.max_stay_mins != null) {
+      items.push({
+        time: 'Max Stay',
+        desc: `${activeRestriction.max_stay_mins} min allowed`,
+        on: true,
+      })
+    }
+
+    if (activeRestriction.expires_at) {
+      items.push({
+        time: 'Restriction Expires',
+        desc: activeRestriction.expires_at,
+        on: true,
+      })
+    }
+  }
+
+  // ── Nothing to show ───────────────────────────────────────────────────────
+  if (!items.length) {
+    // Only render the "not available" note if evaluation has completed
+    // (verdict will be set even for unknown — null means still loading)
+    if (verdict === null) return null
+
+    return (
+      <div className="mt-4">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
+          Rule Schedule
+        </div>
+        <p className="text-xs text-gray-400 dark:text-gray-500 italic leading-relaxed">
+          Detailed schedule not available. Check posted street signage for hours and conditions.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="mt-4">
       <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
-        Rule timeline today
+        {activeRestriction ? 'Current rule & sensor' : 'Sensor status'}
       </div>
-      {timeline.map((t, i) => (
+      {items.map((t, i) => (
         <div key={i} className="flex gap-3 mb-3 items-start">
-          {/* Dot + connector */}
           <div className="flex flex-col items-center shrink-0">
             <div
               className={cn(
@@ -20,12 +94,10 @@ export default function TimelineStrip({ timeline }) {
                   : 'bg-transparent border-2 border-gray-200 dark:border-gray-600',
               )}
             />
-            {i < timeline.length - 1 && (
+            {i < items.length - 1 && (
               <div className="w-0.5 flex-1 bg-gray-100 dark:bg-gray-700 my-0.5 min-h-[16px]" />
             )}
           </div>
-
-          {/* Label */}
           <div>
             <div className="text-sm font-semibold text-gray-900 dark:text-white">{t.time}</div>
             <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{t.desc}</div>

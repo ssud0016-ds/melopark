@@ -38,6 +38,101 @@ _SIGNAGE_MESSAGE = (
     "Please check the physical signage on site before parking."
 )
 
+_NO_DATA_RESULT_TEMPLATE = {
+    "verdict": "unknown",
+    "reason": _SIGNAGE_MESSAGE,
+    "active_restriction": None,
+    "warning": None,
+    "data_source": "unknown",
+}
+
+
+# ── External-API fallback ────────────────────────────────────────────────────
+
+def _evaluate_from_bay_type(bay_id: str, bay_type: str) -> dict:
+    """Construct a BayEvaluation from the CoM restriction API's bay_type tag.
+
+    Called when the bay is not in the DB (or has no restriction rows) but the
+    external restriction API cache has a bay_type string.  The result is less
+    precise than a DB-backed evaluation (no time windows), but it is real data,
+    not frontend guesswork.
+
+    Marked ``data_source = "api_fallback"`` so the frontend can display a note.
+    """
+    base: dict = {
+        "bay_id": bay_id,
+        "warning": None,
+        "data_source": "api_fallback",
+    }
+
+    if bay_type == "Loading Zone":
+        return {
+            **base,
+            "verdict": "no",
+            "reason": (
+                "Loading zone — passenger vehicles cannot stop here during posted hours. "
+                "Check on-site signage for exact times."
+            ),
+            "active_restriction": {
+                "typedesc": "Loading Zone",
+                "rule_category": "loading",
+                "plain_english": "Loading zone restriction. Verify hours on posted street signage.",
+                "max_stay_mins": None,
+                "expires_at": None,
+            },
+        }
+
+    if bay_type == "No Standing":
+        return {
+            **base,
+            "verdict": "no",
+            "reason": (
+                "No standing — vehicles may not stop or wait here during posted hours. "
+                "Check on-site signage for exact times."
+            ),
+            "active_restriction": {
+                "typedesc": "No Standing",
+                "rule_category": "no_standing",
+                "plain_english": "No standing restriction. Verify hours on posted street signage.",
+                "max_stay_mins": None,
+                "expires_at": None,
+            },
+        }
+
+    if bay_type == "Disabled":
+        return {
+            **base,
+            "verdict": "no",
+            "reason": "Disability permit required — this bay is reserved for vehicles displaying a valid permit.",
+            "active_restriction": {
+                "typedesc": "Disabled Parking",
+                "rule_category": "disabled",
+                "plain_english": "Disability permit required. Verify hours on posted street signage.",
+                "max_stay_mins": None,
+                "expires_at": None,
+            },
+        }
+
+    if bay_type == "Timed":
+        return {
+            **base,
+            "verdict": "unknown",
+            "reason": (
+                "Timed parking bay — we know a time limit applies but we don't have the "
+                "exact hours or duration in our database yet. Check posted signage."
+            ),
+            "active_restriction": {
+                "typedesc": "Timed Parking",
+                "rule_category": "timed",
+                "plain_english": "Timed parking applies. Check posted signage for exact hours and duration.",
+                "max_stay_mins": None,
+                "expires_at": None,
+            },
+        }
+
+    # "Other" or anything unrecognised
+    return {**base, **_NO_DATA_RESULT_TEMPLATE, "bay_id": bay_id}
+
 
 # ── Day / time helpers ──────────────────────────────────────────────────────
 
@@ -222,60 +317,59 @@ def evaluate_bay_at(
 ) -> dict:
     """Evaluate whether parking at *bay_id* is legal at *arrival* for *duration_mins*.
 
-    Returns a dict matching the ``BayEvaluation`` Pydantic schema::
+    Returns a dict matching the ``BayEvaluation`` Pydantic schema.
 
-        {
-            "bay_id":              str,
-            "verdict":             "yes" | "no" | "unknown",
-            "reason":              str,
-            "active_restriction":  {...} | None,
-            "warning":             {...} | None,
-        }
+    Evaluation priority:
+      1. DB (RDS bays + bay_restrictions tables) — full time-window logic.
+      2. External CoM restriction API cache (bay_type string) — coarser fallback.
+      3. Neither source has data → verdict "unknown", instruct user to check signage.
 
-    The DB stores the rules; this function computes the answer per-request.
+    ``data_source`` in the response tells the frontend which tier answered:
+      "db"           – answered from the RDS restriction tables (most precise)
+      "api_fallback" – answered from the CoM API cache (real data, coarser)
+      "unknown"      – no usable data from either source
     """
+    from app.services.restriction_lookup_service import get_cached_bay_type
+
+    # ── Tier 1: DB lookup ────────────────────────────────────────────────
     bay = db.query(Bay).filter(Bay.bay_id == bay_id).first()
-    if bay is None:
-        return {
-            "bay_id": bay_id,
-            "verdict": "unknown",
-            "reason": "Bay not found in our database.",
-            "active_restriction": None,
-            "warning": None,
-        }
 
-    if not bay.has_restriction_data:
-        return {
-            "bay_id": bay_id,
-            "verdict": "unknown",
-            "reason": _SIGNAGE_MESSAGE,
-            "active_restriction": None,
-            "warning": None,
-        }
+    if bay is not None and bay.has_restriction_data:
+        restrictions = (
+            db.query(BayRestriction)
+            .filter(BayRestriction.bay_id == bay_id)
+            .all()
+        )
+        if restrictions:
+            return _evaluate_from_db(bay_id, restrictions, arrival, duration_mins)
 
-    restrictions = (
-        db.query(BayRestriction)
-        .filter(BayRestriction.bay_id == bay_id)
-        .all()
+    # ── Tier 2: external API cache fallback ──────────────────────────────
+    logger.debug(
+        "Bay %s not in DB or has no restriction rows — trying API cache fallback.",
+        bay_id,
     )
-    if not restrictions:
-        return {
-            "bay_id": bay_id,
-            "verdict": "unknown",
-            "reason": _SIGNAGE_MESSAGE,
-            "active_restriction": None,
-            "warning": None,
-        }
+    bay_type = get_cached_bay_type(bay_id)
+    if bay_type and bay_type != "Other":
+        logger.debug("Bay %s: API fallback using bay_type=%r", bay_id, bay_type)
+        return _evaluate_from_bay_type(bay_id, bay_type)
 
-    # ── Which restrictions are active right at arrival? ──────────────────
+    # ── Tier 3: no data ──────────────────────────────────────────────────
+    return {"bay_id": bay_id, **_NO_DATA_RESULT_TEMPLATE}
+
+
+def _evaluate_from_db(
+    bay_id: str,
+    restrictions: list[BayRestriction],
+    arrival: datetime,
+    duration_mins: int,
+) -> dict:
+    """Run the full time-window evaluation against DB restriction rows."""
     active = [r for r in restrictions if is_restriction_active_at(r, arrival)]
     governing = _pick_governing_restriction(active)
 
     if governing is None:
-        # No restriction active at arrival → outside restriction hours, free to park.
-        warning = _find_strict_starting_during_stay(
-            restrictions, arrival, duration_mins,
-        )
+        # Outside all restriction windows → free to park now.
+        warning = _find_strict_starting_during_stay(restrictions, arrival, duration_mins)
         return {
             "bay_id": bay_id,
             "verdict": "yes",
@@ -285,9 +379,9 @@ def evaluate_bay_at(
             ),
             "active_restriction": None,
             "warning": warning,
+            "data_source": "db",
         }
 
-    # ── Compute verdict from the governing restriction ───────────────────
     verdict, reason, max_stay, expires_at = _verdict_for_restriction(
         governing, arrival, duration_mins,
     )
@@ -302,9 +396,7 @@ def evaluate_bay_at(
 
     warning = None
     if verdict == "yes":
-        warning = _find_strict_starting_during_stay(
-            restrictions, arrival, duration_mins,
-        )
+        warning = _find_strict_starting_during_stay(restrictions, arrival, duration_mins)
 
     return {
         "bay_id": bay_id,
@@ -312,6 +404,7 @@ def evaluate_bay_at(
         "reason": reason,
         "active_restriction": active_restriction,
         "warning": warning,
+        "data_source": "db",
     }
 
 

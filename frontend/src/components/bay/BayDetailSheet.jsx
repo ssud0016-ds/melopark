@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react'
 import { BAY_COLORS } from '../../data/mapData'
 import { metersBetweenBayAndDestination, walkingMinutesFromMeters } from '../../utils/mapGeo'
 import { cn } from '../../utils/cn'
+import { fetchBayEvaluation } from '../../services/apiBays'
 import VerdictCard from './VerdictCard'
 import TimelineStrip from './TimelineStrip'
 
@@ -12,24 +14,51 @@ export default function BayDetailSheet({
   lastUpdated,
   reserveBottomPx = 280,
 }) {
+  const [evaluation, setEvaluation] = useState(null)
+  const [evalLoading, setEvalLoading] = useState(false)
+
+  // Fetch real evaluation from backend whenever the selected bay changes.
+  // The backend tries DB first, then external API cache, then returns "unknown".
+  useEffect(() => {
+    if (!bay?.id) {
+      setEvaluation(null)
+      return
+    }
+    let cancelled = false
+    setEvalLoading(true)
+    setEvaluation(null)
+    fetchBayEvaluation(bay.id).then((data) => {
+      if (!cancelled) {
+        setEvaluation(data)
+        setEvalLoading(false)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [bay?.id])
+
   if (!bay) return null
 
   const cols = BAY_COLORS[bay.type] || BAY_COLORS.available
 
+  // Header badge reflects sensor occupancy (real data from CoM sensor API)
   let badgeLabel = 'Occupied'
   if (bay.type === 'available') badgeLabel = 'Available'
-  else if (bay.type === 'trap') badgeLabel = 'Rule Trap'
+  else if (bay.type === 'trap') badgeLabel = 'Restricted'
 
-  let walkStr = bay.tags?.[2] || bay.tags?.[0] || ''
+  // Bay display name — real street name from CoM API, or honest fallback
+  const bayDisplayName = bay.name || 'Unnamed Bay'
+
+  // Walking distance (only shown when user has selected a destination)
+  let walkStr = null
   if (destination) {
     const m = Math.round(metersBetweenBayAndDestination(bay, destination))
     walkStr = `${m} m from ${destination.name} \u2013 ${walkingMinutesFromMeters(m)} min walk`
-  } else if (!walkStr) {
-    walkStr = 'Select a destination to see walking distance'
   }
 
-  const spotDotColor =
-    bay.free === 0 ? 'bg-danger' : bay.free <= (bay.spots ?? 1) * 0.3 ? 'bg-trap' : 'bg-accent'
+  // Spot dot colour based on live sensor data
+  const spotDotColor = bay.free === 0 ? 'bg-danger' : 'bg-accent'
 
   const feedUpdatedStr = lastUpdated
     ? lastUpdated.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -47,8 +76,19 @@ export default function BayDetailSheet({
       })()
     : null
 
-  const spots = bay.spots ?? 1
-  const free = bay.free ?? 0
+  // limitType label: prefer backend restriction typedesc, then raw bayType, then dash
+  const limitTypeLabel =
+    (evaluation?.active_restriction?.typedesc) ||
+    (bay.bayType !== 'Other' ? bay.bayType : null) ||
+    '\u2014'
+
+  // Backend warning description (only from real evaluation — no local guessing)
+  const backendWarn = evaluation?.warning?.description ?? null
+
+  // Data source transparency note
+  const dataSource = evaluation?.data_source ?? null
+  const showApiNote = dataSource === 'api_fallback'
+  const showUnknownNote = dataSource === 'unknown' || (evaluation && !evalLoading && evaluation.verdict === 'unknown' && !evaluation.active_restriction)
 
   return (
     <div
@@ -60,7 +100,7 @@ export default function BayDetailSheet({
       )}
       style={!isMobile ? { bottom: reserveBottomPx } : undefined}
       role="dialog"
-      aria-label={`Bay ${bay.name} details`}
+      aria-label={`Bay ${bayDisplayName} details`}
     >
       {/* Close button */}
       <button
@@ -83,10 +123,11 @@ export default function BayDetailSheet({
               {badgeLabel}
             </div>
             <div className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-white mb-1">
-              {bay.name}
+              {bayDisplayName}
             </div>
             <div className="text-xs text-gray-400 dark:text-gray-500">
-              Bay #{bay.id} \u2013 {walkStr}
+              Bay #{bay.id}
+              {walkStr && <span> \u2013 {walkStr}</span>}
             </div>
           </div>
           {feedUpdatedStr && (
@@ -99,43 +140,61 @@ export default function BayDetailSheet({
 
       {/* Body */}
       <div className="px-5 pt-4 pb-7 flex-1">
-        {/* Spot count */}
+        {/* Sensor occupancy row — 1 bay sensor, real data */}
         <div className="flex items-center gap-2.5 bg-surface-secondary rounded-xl px-3.5 py-3 mb-4">
           <div className={cn('w-3 h-3 rounded-full shrink-0', spotDotColor)} />
           <span className="text-sm font-bold text-gray-900">
-            {free}/{spots} spots free
+            {bay.free === 1 ? 'Bay unoccupied' : bay.free === 0 ? 'Bay occupied' : 'Occupancy unknown'}
           </span>
-          <span className="text-xs text-gray-500 ml-auto">
-            {(bay.limitType || '').toUpperCase()}
-          </span>
+          <span className="text-xs text-gray-500 ml-auto">{limitTypeLabel}</span>
         </div>
 
         {/* Sensor timestamp */}
-        {sensorStr && (
+        {sensorStr ? (
           <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-3.5 px-3 py-2 bg-surface-tertiary dark:bg-surface-dark-tertiary rounded-lg">
             Sensor last reported: {sensorStr}
           </div>
-        )}
-
-        {/* Verdict card */}
-        <VerdictCard bay={bay} />
-
-        {/* Warning */}
-        {bay.warn && (
-          <div className="mt-3.5 px-3.5 py-2.5 bg-trap-50 dark:bg-trap-500/10 border border-trap-200 dark:border-trap-400/30 rounded-xl text-xs text-orange-700 dark:text-orange-300 leading-relaxed">
-            &#9888; {bay.warn}
+        ) : (
+          <div className="text-[11px] text-gray-400 dark:text-gray-500 mb-3.5 px-3 py-2 bg-surface-tertiary dark:bg-surface-dark-tertiary rounded-lg italic">
+            Live occupancy data unavailable
           </div>
         )}
 
-        {/* Timeline */}
-        <TimelineStrip timeline={bay.timeline} />
-
-        {/* Description */}
-        {bay.desc && (
-          <p className="mt-4 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-            {bay.desc}
-          </p>
+        {/* Evaluation loading indicator */}
+        {evalLoading && (
+          <div className="text-[11px] text-gray-400 mb-3 px-1 animate-pulse">
+            Loading rule data\u2026
+          </div>
         )}
+
+        {/* Data source transparency note */}
+        {!evalLoading && showApiNote && (
+          <div className="mb-3 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/40 text-[11px] text-blue-700 dark:text-blue-300">
+            Rule data sourced from City of Melbourne external API (no detailed time schedule available).
+          </div>
+        )}
+        {!evalLoading && showUnknownNote && (
+          <div className="mb-3 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/40 text-[11px] text-gray-500 dark:text-gray-400">
+            Rule data not available for this bay. Always check posted street signage.
+          </div>
+        )}
+
+        {/* Verdict card — backed by DB or API; never local guessing */}
+        <VerdictCard bay={bay} evaluation={evalLoading ? null : evaluation} />
+
+        {/* Warning — only from backend evaluation, never locally inferred */}
+        {backendWarn && (
+          <div className="mt-3.5 px-3.5 py-2.5 bg-trap-50 dark:bg-trap-500/10 border border-trap-200 dark:border-trap-400/30 rounded-xl text-xs text-orange-700 dark:text-orange-300 leading-relaxed">
+            &#9888; {backendWarn}
+          </div>
+        )}
+
+        {/* Timeline — only backend restriction data; no fake schedules */}
+        <TimelineStrip
+          activeRestriction={evalLoading ? null : evaluation?.active_restriction ?? null}
+          verdict={evaluation?.verdict ?? null}
+          sensorFree={bay.free}
+        />
       </div>
     </div>
   )
