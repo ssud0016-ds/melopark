@@ -1,6 +1,6 @@
 {
   "pipeline_stage": "silver",
-  "cleaned_at": "2026-04-14T01:07:44.212313+00:00",
+  "cleaned_at": "2026-04-14T14:17:05.843479+00:00",
   "notes": [
     "CoM sensors use kerbsideid (not bay_id) and status_description (not status).",
     "CoM restrictions use bayid (not bay_id) and description1..8 (not typedesc1..8).",
