@@ -1,0 +1,38 @@
+{
+  "pipeline_stage": "gold",
+  "built_at": "2026-04-14T01:33:33.445540+00:00",
+  "evaluated_at": "Tuesday 2026-04-14 11:33:33",
+  "notes": [
+    "is_active_now reflects the restriction state at build time.",
+    "In production, is_active_now should be computed per-request in the Flask API.",
+    "plain_english is stable and can be cached.",
+    "Upload gold_bay_restrictions.csv to Supabase for API use."
+  ],
+  "stats": {
+    "total_rows": 125,
+    "unique_bays": 72,
+    "active_restrictions": 0,
+    "columns": [
+      "bay_id",
+      "slot_num",
+      "lat",
+      "lon",
+      "status",
+      "typedesc",
+      "fromday",
+      "today",
+      "starttime",
+      "endtime",
+      "duration_mins",
+      "disabilityext_mins",
+      "plain_english",
+      "is_active_now"
+    ]
+  },
+  "api_usage": {
+    "endpoint": "GET /api/sign?lat=-37.8136&lon=144.9631",
+    "flow": "GPS lat/lon \u2192 nearest sensor by Haversine \u2192 bay_id \u2192 gold table",
+    "query": "SELECT * FROM gold_bay_restrictions WHERE bay_id = :bay_id",
+    "no_street_name": "The restrictions dataset has NO street name \u2014 do not filter by street."
+  }
+}
