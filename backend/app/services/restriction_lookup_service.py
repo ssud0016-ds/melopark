@@ -224,3 +224,19 @@ async def fetch_restrictions_lookup() -> dict[int, str]:
     """
     async with _cache_lock:
         return dict(_cache)
+
+
+def get_cached_bay_type(bay_id_str: str) -> str | None:
+    """Synchronously return the cached bay_type string for a given bay_id.
+
+    Safe to call from synchronous code (e.g. SQLAlchemy route handlers)
+    because reading a Python dict is thread-safe.
+
+    Returns None if bay_id cannot be parsed or is not in the cache.
+    Returns "Other" if the bay is cached but has no meaningful type.
+    """
+    try:
+        bay_id_int = int(bay_id_str)
+    except (ValueError, TypeError):
+        return None
+    return _cache.get(bay_id_int)  # None if not found

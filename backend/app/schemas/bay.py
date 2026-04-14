@@ -27,6 +27,10 @@ class BayEvaluation(BaseModel):
     reason: str
     active_restriction: ActiveRestriction | None = None
     warning: StrictWarning | None = None
+    # "db" = answered from RDS restriction data
+    # "api_fallback" = DB had no data; answered from CoM restriction API cache
+    # "unknown" = no data source had useful information
+    data_source: str = "db"
 
 
 class BayVerdictBrief(BaseModel):
