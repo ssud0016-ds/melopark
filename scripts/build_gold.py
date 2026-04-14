@@ -6,10 +6,10 @@ FIT5120 TE31  MeloPark  Monash University
 
 PURPOSE
 -------
-Reads the silver merged Parquet, applies two enrichment functions,
-and writes the final gold layer that powers the Flask/FastAPI backend.
+Reads the silver merged Parquet, applies enrichment functions,
+and writes the final gold layer that powers the FastAPI backend.
 
-Two enrichment functions are applied to every row:
+Four enrichment functions are applied to every row:
 
 1. is_active_now(row, now)
    Determines whether a restriction slot is currently active
@@ -20,6 +20,14 @@ Two enrichment functions are applied to every row:
    Converts the raw CoM typedesc code (e.g. "2P MTR") into
    a plain English sentence a driver can understand.
    Returns a human-readable string.
+
+3. classify_rule(typedesc)        [Epic 2]
+   Derives (is_strict, rule_category) from a typedesc value.
+   Used by the restriction evaluator to compute per-request verdicts.
+
+4. parse_time_value(val)          [Epic 2]
+   Normalises silver starttime/endtime values into Python time objects
+   for Postgres TIME columns.
 
 GOLD LAYER SCHEMA (output columns)
 ------------------------------------
@@ -37,46 +45,37 @@ GOLD LAYER SCHEMA (output columns)
     disabilityext_mins  int     Extended time for disability permit (minutes)
     plain_english       str     Human-readable translation of the sign
     is_active_now       bool    True if restriction is active right now
+    is_strict           bool    True for clearway/tow/loading/no-stopping  [Epic 2]
+    rule_category       str     timed|clearway|loading|no_standing|disabled|free|other  [Epic 2]
 
-HOW IT IS USED
---------------
-The gold Parquet is uploaded to Supabase (or read by the Flask API directly).
-The Flask endpoint does:
-    1. Receive GPS lat/lon
-    2. Find nearest sensor by Haversine distance
-    3. SELECT * FROM gold WHERE bay_id = nearest.bay_id
-    4. Return plain_english + is_active_now to the React frontend
+POSTGRES TABLES (--write-db)
+-----------------------------
+    bays                One row per unique bay (bay_id, lat, lon, has_restriction_data)
+    bay_restrictions    One row per restriction slot with all gold columns
 
 HOW TO RUN
 ----------
     cd melopark/
-    python scripts/build_gold.py
-
-    # Rebuild and also export to CSV (for Supabase upload):
-    python scripts/build_gold.py --export-csv
-
-    # Preview without writing:
-    python scripts/build_gold.py --dry-run
-
-OUTPUT
-------
-    data/gold/gold_bay_restrictions.parquet   (primary output for Flask API)
-    data/gold/gold_bay_restrictions.csv       (optional, for Supabase upload)
-    data/gold/build_metadata.json             (build timestamp, stats)
+    python scripts/build_gold.py                      # build gold Parquet
+    python scripts/build_gold.py --export-csv         # also export CSV
+    python scripts/build_gold.py --write-db           # write to Postgres via DATABASE_URL
+    python scripts/build_gold.py --dry-run            # preview without writing
 
 DEPENDENCIES
 ------------
     pip install pandas pyarrow
+    pip install sqlalchemy psycopg2-binary python-dotenv   # for --write-db
 
 AUTHOR : FIT5120 TE31
-DATE   : 13th, April 2026
+DATE   : 14th, April 2026
 """
 
 import argparse
 import json
 import logging
+import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, time as dt_time, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -96,6 +95,8 @@ ROOT       = Path(__file__).resolve().parent.parent
 SILVER_DIR = ROOT / "data" / "silver"
 GOLD_DIR   = ROOT / "data" / "gold"
 GOLD_DIR.mkdir(parents=True, exist_ok=True)
+
+BACKEND_DIR = ROOT / "backend"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -340,12 +341,301 @@ def translate_sign(typedesc: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# ENRICHMENT FUNCTION 3 — classify_rule()  [Epic 2]
+# ═══════════════════════════════════════════════════════════════════════════
+
+def classify_rule(typedesc: str) -> tuple[bool, str]:
+    """Derive ``(is_strict, rule_category)`` from a raw CoM typedesc value.
+
+    Categories
+    ----------
+    clearway     NO STOPPING, CLEARWAY — vehicles towed
+    no_standing  NO PARKING — cannot leave vehicle unattended
+    loading      LOADING — commercial vehicles only
+    disabled     DIS / DISABILITY — permit required
+    timed        <N>P (with or without MTR/TKT) — time-limited parking
+    free         FREE — unrestricted parking
+    other        BUS, TAXI, PERMIT, anything unrecognised
+
+    ``is_strict`` is True for categories where *any* passenger vehicle would
+    be illegally parked: clearway, no_standing, loading.
+    """
+    if not typedesc or pd.isnull(typedesc):
+        return False, "other"
+
+    td = str(typedesc).strip().upper()
+
+    if "NO STOPPING" in td or "CLEARWAY" in td:
+        return True, "clearway"
+
+    if "NO PARKING" in td:
+        return True, "no_standing"
+
+    if "LOADING" in td:
+        return True, "loading"
+
+    if re.search(r"\bDIS\b", td) or "DISABILITY" in td:
+        return False, "disabled"
+
+    if "1/2P" in td or re.match(r"\d+(?:\.\d+)?P\b", td):
+        return False, "timed"
+
+    if td in ("FREE", "P FREE", "FREE PARKING"):
+        return False, "free"
+
+    return False, "other"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ENRICHMENT FUNCTION 4 — parse_time_value()  [Epic 2]
+# ═══════════════════════════════════════════════════════════════════════════
+
+def parse_time_value(val) -> dt_time | None:
+    """Normalise a silver starttime/endtime value into a Python ``time`` object.
+
+    Handles:
+      - Python ``time`` objects (returned as-is)
+      - Pandas ``Timestamp`` / ``datetime64`` (extract hour+minute)
+      - ``"HH:MM"`` strings
+      - ISO strings such as ``"0001-01-01T07:30:00+00:00"``
+    """
+    if val is None or (isinstance(val, float) and pd.isnull(val)):
+        return None
+    if isinstance(val, dt_time):
+        return val
+    if hasattr(val, "hour") and hasattr(val, "minute"):
+        return dt_time(val.hour, val.minute)
+    s = str(val).strip()
+    # "HH:MM" format
+    m = re.match(r"^(\d{1,2}):(\d{2})$", s)
+    if m:
+        return dt_time(int(m.group(1)), int(m.group(2)))
+    # ISO with T separator — extract time portion
+    if "T" in s:
+        time_part = s.split("T")[1]
+        parts = time_part.split(":")
+        return dt_time(int(parts[0]), int(parts[1]))
+    try:
+        ts = pd.Timestamp(val)
+        return dt_time(ts.hour, ts.minute)
+    except Exception:
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# POSTGRES WRITER  [Epic 2]
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _resolve_database_url(url: str) -> str:
+    """Resolve relative sslrootcert paths against the backend directory.
+
+    Mirrors the logic in ``backend/app/core/db.py`` so the pipeline script
+    works when invoked from the repo root (not from inside backend/).
+    """
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+    parsed = urlparse(url)
+    if not parsed.query:
+        return url
+    pairs: list[tuple[str, str]] = []
+    changed = False
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        if key == "sslrootcert" and value and not Path(value).is_absolute():
+            cert_path = (BACKEND_DIR / value.lstrip("./\\")).resolve()
+            pairs.append((key, cert_path.as_posix()))
+            changed = True
+        else:
+            pairs.append((key, value))
+    if not changed:
+        return url
+    new_query = urlencode(pairs)
+    return urlunparse((
+        parsed.scheme, parsed.netloc, parsed.path,
+        parsed.params, new_query, parsed.fragment,
+    ))
+
+
+def _get_database_url() -> str:
+    """Read DATABASE_URL from backend/.env (python-dotenv must be installed)."""
+    from dotenv import load_dotenv
+
+    env_path = BACKEND_DIR / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL not set. Create backend/.env (see backend/.env.example)."
+        )
+    return _resolve_database_url(url)
+
+
+def write_to_postgres(gold: pd.DataFrame) -> None:
+    """Write the ``bays`` and ``bay_restrictions`` tables to Postgres.
+
+    Unlike the gold Parquet (which only contains the sensor-joined subset),
+    the Postgres tables include **all** restrictions from the full silver
+    ``restrictions_long`` dataset.  This maximises restriction coverage
+    (the sensor LEFT JOIN typically matches only a small fraction of bays).
+
+    Geometry sources for the ``bays`` table (in priority order):
+      1. ``sensors_clean.parquet``  — live sensor bays with lat/lon
+      2. ``parking_bays.parquet``   — static bay geometry (kerbsideid → lat/lon)
+      3. Restriction-only bays      — no geometry, lat/lon = NULL
+    """
+    from sqlalchemy import create_engine, text
+
+    url = _get_database_url()
+    engine = create_engine(url, pool_pre_ping=True)
+
+    # ── Load the FULL restrictions from silver ───────────────────────────
+    rest_long_path = SILVER_DIR / "restrictions_long.parquet"
+    if not rest_long_path.exists():
+        log.warning(
+            "restrictions_long.parquet not found — falling back to gold-only "
+            "(sensor-joined subset).  Re-run clean_to_silver.py to get full coverage."
+        )
+        all_rest = gold.copy()
+    else:
+        all_rest = pd.read_parquet(rest_long_path)
+        log.info("Loaded restrictions_long.parquet → %d rows", len(all_rest))
+
+    # Normalise dtypes
+    all_rest["bay_id"] = all_rest["bay_id"].astype(str)
+    for col in ("fromday", "today"):
+        all_rest[col] = pd.to_numeric(all_rest[col], errors="coerce").astype("Int64")
+    if "duration_mins" in all_rest.columns:
+        all_rest["duration_mins"] = pd.to_numeric(all_rest["duration_mins"], errors="coerce").astype("Int64")
+    if "disabilityext_mins" in all_rest.columns:
+        all_rest["disabilityext_mins"] = pd.to_numeric(all_rest["disabilityext_mins"], errors="coerce").astype("Int64")
+
+    # Enrich: translate_sign, classify_rule (idempotent if already present)
+    if "plain_english" not in all_rest.columns:
+        all_rest["plain_english"] = all_rest["typedesc"].apply(translate_sign)
+    if "is_strict" not in all_rest.columns or "rule_category" not in all_rest.columns:
+        classified = all_rest["typedesc"].apply(classify_rule)
+        all_rest["is_strict"] = classified.apply(lambda t: t[0])
+        all_rest["rule_category"] = classified.apply(lambda t: t[1])
+
+    restriction_bay_ids = set(all_rest["bay_id"].unique())
+    log.info(
+        "Full restrictions: %d rows across %d unique bays",
+        len(all_rest), len(restriction_bay_ids),
+    )
+
+    # ── Build bays table from ALL geometry sources ───────────────────────
+    geo_frames: list[pd.DataFrame] = []
+
+    # Source 1: sensor bays (highest priority — live lat/lon)
+    sensors_path = SILVER_DIR / "sensors_clean.parquet"
+    if sensors_path.exists():
+        sensors = pd.read_parquet(sensors_path)
+        sensors["bay_id"] = sensors["bay_id"].astype(str)
+        sensors["lat"] = pd.to_numeric(sensors["lat"], errors="coerce")
+        sensors["lon"] = pd.to_numeric(sensors["lon"], errors="coerce")
+        geo_frames.append(sensors[["bay_id", "lat", "lon"]].drop_duplicates("bay_id"))
+        log.info("  Geometry source: sensors_clean → %d bays", len(geo_frames[-1]))
+
+    # Source 2: parking_bays bronze (static bay geometry via kerbsideid)
+    bronze_dir = ROOT / "data" / "bronze"
+    bays_path = bronze_dir / "parking_bays.parquet"
+    if bays_path.exists():
+        pbays = pd.read_parquet(bays_path)
+        if "kerbsideid" in pbays.columns:
+            pbays["bay_id"] = pbays["kerbsideid"].astype(str).str.strip()
+            lat_col = "latitude" if "latitude" in pbays.columns else "lat"
+            lon_col = "longitude" if "longitude" in pbays.columns else "lon"
+            if lat_col in pbays.columns and lon_col in pbays.columns:
+                pbays["lat"] = pd.to_numeric(pbays[lat_col], errors="coerce")
+                pbays["lon"] = pd.to_numeric(pbays[lon_col], errors="coerce")
+                geo_frames.append(pbays[["bay_id", "lat", "lon"]].drop_duplicates("bay_id"))
+                log.info("  Geometry source: parking_bays → %d bays", len(geo_frames[-1]))
+
+    # Merge geometry: sensors first, then parking_bays for any gaps
+    if geo_frames:
+        all_geo = pd.concat(geo_frames, ignore_index=True).drop_duplicates("bay_id", keep="first")
+    else:
+        all_geo = pd.DataFrame(columns=["bay_id", "lat", "lon"])
+
+    # Add restriction-only bays that have no geometry (lat/lon = NaN)
+    rest_only_ids = restriction_bay_ids - set(all_geo["bay_id"])
+    if rest_only_ids:
+        rest_only = pd.DataFrame({
+            "bay_id": list(rest_only_ids),
+            "lat": pd.array([None] * len(rest_only_ids), dtype="Float64"),
+            "lon": pd.array([None] * len(rest_only_ids), dtype="Float64"),
+        })
+        all_geo = pd.concat([all_geo, rest_only], ignore_index=True)
+        log.info("  Restriction-only bays (no geometry): %d", len(rest_only_ids))
+
+    bays_df = all_geo.copy()
+    bays_df["has_restriction_data"] = bays_df["bay_id"].isin(restriction_bay_ids)
+
+    has_data = bays_df["has_restriction_data"].sum()
+    log.info(
+        "Bays table: %d total, %d with restriction data, %d without",
+        len(bays_df), has_data, len(bays_df) - has_data,
+    )
+
+    # ── Prepare bay_restrictions table ───────────────────────────────────
+    rest_cols = [
+        "bay_id", "slot_num", "typedesc", "fromday", "today",
+        "starttime", "endtime", "duration_mins", "disabilityext_mins",
+        "plain_english", "is_strict", "rule_category",
+    ]
+    rest_df = all_rest[[c for c in rest_cols if c in all_rest.columns]].copy()
+
+    # Drop rows missing required day/time fields
+    rest_df = rest_df.dropna(subset=["fromday", "today"])
+
+    # Parse times to Python time objects for Postgres TIME columns
+    for col in ("starttime", "endtime"):
+        rest_df[col] = rest_df[col].apply(parse_time_value)
+        null_count = rest_df[col].isnull().sum()
+        if null_count > 0:
+            log.warning("  %d rows with unparseable %s (will be dropped)", null_count, col)
+    rest_df = rest_df.dropna(subset=["starttime", "endtime"])
+
+    log.info("bay_restrictions prepared: %d rows", len(rest_df))
+
+    # ── Write tables ─────────────────────────────────────────────────────
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS bay_restrictions CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS bays CASCADE"))
+
+    bays_df.to_sql("bays", engine, if_exists="append", index=False, method="multi")
+    log.info("Wrote %d rows to `bays` table", len(bays_df))
+
+    rest_df.to_sql("bay_restrictions", engine, if_exists="append", index=False, method="multi")
+    log.info("Wrote %d rows to `bay_restrictions` table", len(rest_df))
+
+    # ── Create indexes + constraints + missing optional columns ─────────
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE bays ADD PRIMARY KEY (bay_id)"))
+        conn.execute(text(
+            "ALTER TABLE bay_restrictions "
+            "ADD COLUMN IF NOT EXISTS id SERIAL PRIMARY KEY"
+        ))
+        conn.execute(text(
+            "ALTER TABLE bay_restrictions "
+            "ADD COLUMN IF NOT EXISTS exemption TEXT"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_bay_restrictions_bay_id "
+            "ON bay_restrictions(bay_id)"
+        ))
+
+    log.info("Postgres write complete — tables: bays, bay_restrictions")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # GOLD BUILD PIPELINE
 # ═══════════════════════════════════════════════════════════════════════════
 
 def build_gold(
     dry_run: bool = False,
     export_csv: bool = False,
+    write_db: bool = False,
     verbose: bool = False,
 ) -> pd.DataFrame:
     """
@@ -353,16 +643,19 @@ def build_gold(
 
     Steps:
     1. Load silver merged Parquet
-    2. Apply is_active_now() → column 'is_active_now'
-    3. Apply translate_sign() → column 'plain_english'
-    4. Select and order final gold columns
-    5. Save to Parquet (and optionally CSV)
-    6. Write metadata
+    2. Apply translate_sign() → column 'plain_english'
+    3. Apply classify_rule() → columns 'is_strict', 'rule_category'
+    4. Apply is_active_now() → column 'is_active_now'
+    5. Select and order final gold columns
+    6. Save to Parquet (and optionally CSV)
+    7. Optionally write to Postgres (--write-db)
+    8. Write metadata
 
     Parameters
     ----------
     dry_run : bool     Run without writing output files
     export_csv : bool  Also export gold data as CSV (for Supabase upload)
+    write_db : bool    Write bays + bay_restrictions tables to Postgres
     verbose : bool     Print per-typedesc translation samples
 
     Returns
@@ -400,7 +693,19 @@ def build_gold(
         samples = df[["typedesc", "plain_english"]].drop_duplicates("typedesc").head(20)
         log.info("Translation samples:\n%s", samples.to_string(index=False))
 
-    # ── Enrichment 2: is_active_now() ───────────────────────────────────
+    # ── Enrichment 2: classify_rule()  [Epic 2] ─────────────────────────
+    log.info("Applying classify_rule() …")
+    classified = df["typedesc"].apply(classify_rule)
+    df["is_strict"]      = classified.apply(lambda t: t[0])
+    df["rule_category"]  = classified.apply(lambda t: t[1])
+
+    log.info(
+        "  Rule categories: %s",
+        df["rule_category"].value_counts().to_dict(),
+    )
+    log.info("  Strict restrictions: %d", df["is_strict"].sum())
+
+    # ── Enrichment 3: is_active_now() ───────────────────────────────────
     log.info("Applying is_active_now() at current time…")
     now = datetime.now()
     log.info("  Evaluating at: %s", now.strftime("%A %Y-%m-%d %H:%M"))
@@ -431,6 +736,8 @@ def build_gold(
         "exemption",
         "plain_english",
         "is_active_now",
+        "is_strict",
+        "rule_category",
     ]
 
     # Keep only columns that exist (some may be absent if silver was minimal)
@@ -478,12 +785,10 @@ def build_gold(
         csv_path = GOLD_DIR / "gold_bay_restrictions.csv"
         gold.to_csv(csv_path, index=False)
         log.info("Saved gold_bay_restrictions.csv  (%d rows)", len(gold))
-        log.info("")
-        log.info("To upload to Supabase:")
-        log.info("  1. Go to your Supabase project → Table Editor")
-        log.info("  2. Create table 'gold_bay_restrictions'")
-        log.info("  3. Import CSV → choose gold_bay_restrictions.csv")
-        log.info("  4. Set bay_id as text, is_active_now as boolean")
+
+    # ── Write to Postgres (optional — for FastAPI backend) ───────────────
+    if write_db:
+        write_to_postgres(gold)
 
     # ── Write metadata ───────────────────────────────────────────────────
     meta = {
@@ -492,21 +797,21 @@ def build_gold(
         "evaluated_at":     now.strftime("%A %Y-%m-%d %H:%M:%S"),
         "notes": [
             "is_active_now reflects the restriction state at build time.",
-            "In production, is_active_now should be computed per-request in the Flask API.",
-            "plain_english is stable and can be cached.",
-            "Upload gold_bay_restrictions.csv to Supabase for API use.",
+            "In production, verdicts are computed per-request by restriction_evaluator.py.",
+            "plain_english, is_strict, rule_category are stable and cached in Postgres.",
         ],
         "stats": {
             "total_rows":          len(gold),
             "unique_bays":         int(gold["bay_id"].nunique()),
             "active_restrictions": int(gold["is_active_now"].sum()),
+            "strict_restrictions": int(gold["is_strict"].sum()),
+            "rule_categories":     gold["rule_category"].value_counts().to_dict(),
             "columns":             list(gold.columns),
         },
         "api_usage": {
-            "endpoint":     "GET /api/sign?lat=-37.8136&lon=144.9631",
-            "flow":         "GPS lat/lon → nearest sensor by Haversine → bay_id → gold table",
-            "query":        "SELECT * FROM gold_bay_restrictions WHERE bay_id = :bay_id",
-            "no_street_name": "The restrictions dataset has NO street name — do not filter by street.",
+            "evaluate_endpoint": "GET /api/bays/{bay_id}/evaluate?arrival_iso=...&duration_mins=...",
+            "bulk_endpoint":     "GET /api/bays/evaluate-bulk?arrival_iso=...&bbox=...",
+            "flow":              "bay_id → bays table (has_restriction_data) → bay_restrictions → evaluator",
         },
     }
 
@@ -532,6 +837,7 @@ if __name__ == "__main__":
 Examples:
   python scripts/build_gold.py                      # build gold Parquet
   python scripts/build_gold.py --export-csv         # also export CSV for Supabase
+  python scripts/build_gold.py --write-db           # write bays + bay_restrictions to Postgres
   python scripts/build_gold.py --dry-run            # preview without writing
   python scripts/build_gold.py --verbose            # show translation samples
 
@@ -542,7 +848,13 @@ Test translate_sign() directly:
 
     parser.add_argument("--dry-run",    action="store_true", help="Run without writing output files")
     parser.add_argument("--export-csv", action="store_true", help="Also export CSV for Supabase upload")
+    parser.add_argument("--write-db",   action="store_true", help="Write bays + bay_restrictions to Postgres via DATABASE_URL")
     parser.add_argument("--verbose",    action="store_true", help="Show detailed stats and translation samples")
 
     args = parser.parse_args()
-    build_gold(dry_run=args.dry_run, export_csv=args.export_csv, verbose=args.verbose)
+    build_gold(
+        dry_run=args.dry_run,
+        export_csv=args.export_csv,
+        write_db=args.write_db,
+        verbose=args.verbose,
+    )

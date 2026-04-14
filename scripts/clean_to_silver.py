@@ -559,18 +559,23 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     if dry_run:
         log.info("DRY RUN — no files written.")
         log.info("Would write:")
-        log.info("  data/silver/sensors_clean.parquet  (%d rows)", len(sensors_clean))
-        log.info("  data/silver/merged.parquet         (%d rows)", len(merged))
+        log.info("  data/silver/sensors_clean.parquet      (%d rows)", len(sensors_clean))
+        log.info("  data/silver/restrictions_long.parquet   (%d rows)", len(restrictions_long))
+        log.info("  data/silver/merged.parquet              (%d rows)", len(merged))
         return
 
     # Save
     sensors_path = SILVER_DIR / "sensors_clean.parquet"
     sensors_clean.to_parquet(sensors_path, index=False, engine="pyarrow")
-    log.info("Saved sensors_clean.parquet  (%d rows)", len(sensors_clean))
+    log.info("Saved sensors_clean.parquet      (%d rows)", len(sensors_clean))
+
+    restrictions_path = SILVER_DIR / "restrictions_long.parquet"
+    restrictions_long.to_parquet(restrictions_path, index=False, engine="pyarrow")
+    log.info("Saved restrictions_long.parquet  (%d rows)", len(restrictions_long))
 
     merged_path = SILVER_DIR / "merged.parquet"
     merged.to_parquet(merged_path, index=False, engine="pyarrow")
-    log.info("Saved merged.parquet         (%d rows)", len(merged))
+    log.info("Saved merged.parquet             (%d rows)", len(merged))
 
     write_metadata(sensors_clean, restrictions_long, merged)
 

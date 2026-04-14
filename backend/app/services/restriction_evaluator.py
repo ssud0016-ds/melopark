@@ -1,0 +1,392 @@
+"""Evaluate whether a bay is legal to park in at an arbitrary future time.
+
+This module is the core of Epic 2 (US 2.1 / 2.2 / 2.3).  It queries the
+``bays`` and ``bay_restrictions`` tables that ``build_gold.py`` populates, and
+computes a per-request verdict — verdicts are never pre-computed because the
+arrival time is user input.
+
+Public API
+----------
+    evaluate_bay_at(bay_id, arrival, duration_mins, db) -> dict
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime, time, timedelta
+
+from sqlalchemy.orm import Session
+
+from app.models.bay import Bay, BayRestriction
+
+logger = logging.getLogger(__name__)
+
+# Priority order: lower number = stricter.  When multiple restrictions are
+# active simultaneously the most restrictive one governs the verdict.
+_CATEGORY_PRIORITY: dict[str, int] = {
+    "clearway": 0,
+    "no_standing": 1,
+    "loading": 2,
+    "disabled": 3,
+    "timed": 4,
+    "free": 5,
+    "other": 6,
+}
+
+_SIGNAGE_MESSAGE = (
+    "We don't have restriction data for this bay. "
+    "Please check the physical signage on site before parking."
+)
+
+
+# ── Day / time helpers ──────────────────────────────────────────────────────
+
+def _to_com_day(dt: datetime) -> int:
+    """Convert a Python datetime to CoM day convention (0=Sun 1=Mon … 6=Sat)."""
+    iso = dt.isoweekday()  # 1=Mon … 7=Sun
+    return 0 if iso == 7 else iso
+
+
+def _day_in_range(com_day: int, fromday: int, today: int) -> bool:
+    """True if *com_day* falls within [fromday, today], handling wrap-around.
+
+    The existing ``is_active_now()`` in build_gold.py does a naïve
+    ``from_d <= com_day <= to_d`` which silently fails for ranges like
+    SAT–SUN (6→0).  This version handles wrap-around correctly.
+    """
+    if fromday <= today:
+        return fromday <= com_day <= today
+    # wrap-around: e.g. SAT(6)–SUN(0)
+    return com_day >= fromday or com_day <= today
+
+
+def _time_to_minutes(t: time) -> int:
+    return t.hour * 60 + t.minute
+
+
+# ── Single-restriction helpers ──────────────────────────────────────────────
+
+def is_restriction_active_at(r: BayRestriction, dt: datetime) -> bool:
+    """Return True if restriction *r* is active at datetime *dt*."""
+    com_day = _to_com_day(dt)
+    if not _day_in_range(com_day, r.fromday, r.today):
+        return False
+    now_mins = dt.hour * 60 + dt.minute
+    start_mins = _time_to_minutes(r.starttime)
+    end_mins = _time_to_minutes(r.endtime)
+    return start_mins <= now_mins < end_mins
+
+
+def _find_strict_starting_during_stay(
+    restrictions: list[BayRestriction],
+    arrival: datetime,
+    duration_mins: int,
+) -> dict | None:
+    """Return the earliest strict restriction whose window *begins* during the stay.
+
+    "Begins during the stay" means the restriction's daily start time falls
+    strictly after *arrival* and on-or-before *arrival + duration_mins*, on a
+    day that is within the restriction's day range.
+
+    Handles stays that span midnight (up to ~24 h).
+    """
+    end_dt = arrival + timedelta(minutes=duration_mins)
+    earliest: tuple[datetime, BayRestriction] | None = None
+
+    for r in restrictions:
+        if not r.is_strict:
+            continue
+
+        # Walk each calendar day the stay covers.
+        day_cursor = arrival.replace(hour=0, minute=0, second=0, microsecond=0)
+        while day_cursor.date() <= end_dt.date():
+            com_day = _to_com_day(day_cursor)
+            if _day_in_range(com_day, r.fromday, r.today):
+                r_start_dt = day_cursor.replace(
+                    hour=r.starttime.hour,
+                    minute=r.starttime.minute,
+                    second=0,
+                    microsecond=0,
+                )
+                if arrival < r_start_dt <= end_dt:
+                    if earliest is None or r_start_dt < earliest[0]:
+                        earliest = (r_start_dt, r)
+            day_cursor += timedelta(days=1)
+
+    if earliest is None:
+        return None
+
+    starts_at, r = earliest
+    return {
+        "type": r.rule_category,
+        "typedesc": r.typedesc,
+        "starts_at": starts_at.isoformat(),
+        "minutes_into_stay": int((starts_at - arrival).total_seconds() / 60),
+        "description": r.plain_english,
+    }
+
+
+# ── Verdict logic ───────────────────────────────────────────────────────────
+
+def _pick_governing_restriction(
+    active: list[BayRestriction],
+) -> BayRestriction | None:
+    """From all restrictions active at the arrival moment, return the strictest."""
+    if not active:
+        return None
+    return min(active, key=lambda r: _CATEGORY_PRIORITY.get(r.rule_category, 99))
+
+
+def _verdict_for_restriction(
+    r: BayRestriction,
+    arrival: datetime,
+    duration_mins: int,
+) -> tuple[str, str, int | None, str | None]:
+    """Return (verdict, reason, max_stay_mins, expires_at_iso) for a single active rule."""
+    cat = r.rule_category
+
+    if cat in ("clearway", "no_standing"):
+        return (
+            "no",
+            f"No stopping allowed during these hours. {r.plain_english}",
+            None,
+            None,
+        )
+
+    if cat == "loading":
+        return (
+            "no",
+            f"Loading zone only — passenger vehicles cannot park here. {r.plain_english}",
+            None,
+            None,
+        )
+
+    if cat == "disabled":
+        return (
+            "no",
+            "This bay requires a valid disability parking permit. "
+            + r.plain_english,
+            None,
+            None,
+        )
+
+    if cat == "free":
+        return (
+            "yes",
+            f"Free parking — no time limit during these hours. {r.plain_english}",
+            None,
+            None,
+        )
+
+    if cat == "timed":
+        max_stay = r.duration_mins
+        if max_stay is None:
+            return (
+                "yes",
+                f"Timed parking with no stated limit. {r.plain_english}",
+                None,
+                None,
+            )
+        expires_at = (arrival + timedelta(minutes=max_stay)).isoformat()
+        if duration_mins <= max_stay:
+            return (
+                "yes",
+                r.plain_english,
+                max_stay,
+                expires_at,
+            )
+        return (
+            "no",
+            f"You plan to stay {duration_mins} min but the limit is {max_stay} min. "
+            + r.plain_english,
+            max_stay,
+            expires_at,
+        )
+
+    # "other" (bus, taxi, permit, etc.)
+    return (
+        "no",
+        f"Special restriction applies. {r.plain_english}",
+        None,
+        None,
+    )
+
+
+# ── Public API ──────────────────────────────────────────────────────────────
+
+def evaluate_bay_at(
+    bay_id: str,
+    arrival: datetime,
+    duration_mins: int,
+    db: Session,
+) -> dict:
+    """Evaluate whether parking at *bay_id* is legal at *arrival* for *duration_mins*.
+
+    Returns a dict matching the ``BayEvaluation`` Pydantic schema::
+
+        {
+            "bay_id":              str,
+            "verdict":             "yes" | "no" | "unknown",
+            "reason":              str,
+            "active_restriction":  {...} | None,
+            "warning":             {...} | None,
+        }
+
+    The DB stores the rules; this function computes the answer per-request.
+    """
+    bay = db.query(Bay).filter(Bay.bay_id == bay_id).first()
+    if bay is None:
+        return {
+            "bay_id": bay_id,
+            "verdict": "unknown",
+            "reason": "Bay not found in our database.",
+            "active_restriction": None,
+            "warning": None,
+        }
+
+    if not bay.has_restriction_data:
+        return {
+            "bay_id": bay_id,
+            "verdict": "unknown",
+            "reason": _SIGNAGE_MESSAGE,
+            "active_restriction": None,
+            "warning": None,
+        }
+
+    restrictions = (
+        db.query(BayRestriction)
+        .filter(BayRestriction.bay_id == bay_id)
+        .all()
+    )
+    if not restrictions:
+        return {
+            "bay_id": bay_id,
+            "verdict": "unknown",
+            "reason": _SIGNAGE_MESSAGE,
+            "active_restriction": None,
+            "warning": None,
+        }
+
+    # ── Which restrictions are active right at arrival? ──────────────────
+    active = [r for r in restrictions if is_restriction_active_at(r, arrival)]
+    governing = _pick_governing_restriction(active)
+
+    if governing is None:
+        # No restriction active at arrival → outside restriction hours, free to park.
+        warning = _find_strict_starting_during_stay(
+            restrictions, arrival, duration_mins,
+        )
+        return {
+            "bay_id": bay_id,
+            "verdict": "yes",
+            "reason": (
+                "No restrictions apply at your arrival time — "
+                "you may park here free of charge."
+            ),
+            "active_restriction": None,
+            "warning": warning,
+        }
+
+    # ── Compute verdict from the governing restriction ───────────────────
+    verdict, reason, max_stay, expires_at = _verdict_for_restriction(
+        governing, arrival, duration_mins,
+    )
+
+    active_restriction = {
+        "typedesc": governing.typedesc,
+        "rule_category": governing.rule_category,
+        "plain_english": governing.plain_english,
+        "max_stay_mins": max_stay,
+        "expires_at": expires_at,
+    }
+
+    warning = None
+    if verdict == "yes":
+        warning = _find_strict_starting_during_stay(
+            restrictions, arrival, duration_mins,
+        )
+
+    return {
+        "bay_id": bay_id,
+        "verdict": verdict,
+        "reason": reason,
+        "active_restriction": active_restriction,
+        "warning": warning,
+    }
+
+
+def evaluate_bays_bulk(
+    bay_ids: list[str],
+    arrival: datetime,
+    duration_mins: int,
+    db: Session,
+) -> list[dict]:
+    """Lightweight bulk evaluation — returns only bay_id + verdict + lat/lon.
+
+    Used by the frontend to recolour map dots in a single round-trip.
+    """
+    bays = db.query(Bay).filter(Bay.bay_id.in_(bay_ids)).all()
+    bay_map = {b.bay_id: b for b in bays}
+
+    restrictions = (
+        db.query(BayRestriction)
+        .filter(BayRestriction.bay_id.in_(bay_ids))
+        .all()
+    )
+    rest_by_bay: dict[str, list[BayRestriction]] = {}
+    for r in restrictions:
+        rest_by_bay.setdefault(r.bay_id, []).append(r)
+
+    results = []
+    for bid in bay_ids:
+        bay = bay_map.get(bid)
+        if bay is None:
+            continue
+
+        if not bay.has_restriction_data:
+            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "unknown"})
+            continue
+
+        bay_rest = rest_by_bay.get(bid, [])
+        if not bay_rest:
+            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "unknown"})
+            continue
+
+        active = [r for r in bay_rest if is_restriction_active_at(r, arrival)]
+        governing = _pick_governing_restriction(active)
+
+        if governing is None:
+            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "yes"})
+            continue
+
+        verdict, _, _, _ = _verdict_for_restriction(governing, arrival, duration_mins)
+        results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": verdict})
+
+    return results
+
+
+def evaluate_bays_in_bbox(
+    south: float,
+    west: float,
+    north: float,
+    east: float,
+    arrival: datetime,
+    duration_mins: int,
+    db: Session,
+) -> list[dict]:
+    """Evaluate all bays within a bounding box."""
+    bays = (
+        db.query(Bay)
+        .filter(
+            Bay.lat >= south,
+            Bay.lat <= north,
+            Bay.lon >= west,
+            Bay.lon <= east,
+        )
+        .all()
+    )
+    if not bays:
+        return []
+
+    bay_ids = [b.bay_id for b in bays]
+    return evaluate_bays_bulk(bay_ids, arrival, duration_mins, db)
