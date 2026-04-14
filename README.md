@@ -19,7 +19,7 @@ MelOPark joins three City of Melbourne open datasets (live bay sensors, parking 
 | Frontend          | React + Vite + Tailwind CSS + Leaflet.js | Fast dev server, mobile-first styling, free map tiles (no API key) |
 | Backend           | Python FastAPI + Mangum                  | API framework with Lambda-ready adapter                            |
 | Data pipeline     | Pandas (+ DuckDB in later iterations)    | Handles cleaning and transformation                                |
-| Database          | PostgreSQL (Supabase) (Gold layer)       | Static data store for restrictions + geometry/meter data           |
+| Database          | PostgreSQL (AWS RDS)                     | Static data store for restrictions + bay geometry                  |
 | Data architecture | Medallion (Bronze/Silver/Gold)           | Traceability from raw API to app-ready tables                      |
 
 
@@ -38,8 +38,11 @@ melopark/
 ├── backend/               # FastAPI REST API
 │   ├── app/
 │   │   ├── core/          # Settings + SQLAlchemy setup
-│   │   ├── routers/       # API routers (currently health)
-│   │   └── tests/         # Backend tests
+│   │   ├── models/        # SQLAlchemy models (Bay, BayRestriction)
+│   │   ├── routers/       # API routers (health, parking, bays)
+│   │   ├── schemas/       # Pydantic request/response schemas
+│   │   ├── services/      # Business logic (evaluator, parking, restrictions)
+│   │   └── tests/         # Backend tests (31 tests)
 │   ├── lambda_handler.py  # AWS Lambda entrypoint (Mangum)
 │   ├── requirements.txt
 │   └── README.md
@@ -53,6 +56,7 @@ melopark/
 │   ├── fetch_bronze.py    # Pull raw data from CoM APIs
 │   ├── clean_to_silver.py # Bronze -> Silver transforms
 │   ├── build_gold.py      # Silver -> Gold (Postgres via DATABASE_URL)
+│   ├── migrations/        # SQL migration scripts
 │   └── notebooks/         # Jupyter notebooks for exploration
 │
 ├── backend/.env.example
@@ -128,11 +132,11 @@ npm run dev
 
 The app should now be running at [http://localhost:5173](http://localhost:5173). Open it in your browser and you should see a map of Melbourne CBD with coloured dots for parking bays.
 
-### 4. Data pipeline (required for bay evaluation endpoints)
+### 4. Data pipeline (only needed to refresh restriction data)
 
-The live map works without this step (sensors are fetched from CoM APIs), but the **bay evaluation endpoints** (`/api/bays/...`) need the `bays` and `bay_restrictions` tables in Postgres.
+The `bays` and `bay_restrictions` tables are already populated in the shared RDS instance. You do **not** need to run the pipeline to use the bay evaluation endpoints — just make sure your `backend/.env` has the team's `DATABASE_URL`.
 
-Make sure `backend/.env` has a valid `DATABASE_URL` before running step 3.
+If you need to refresh the data (e.g. after a new CoM data release):
 
 ```bash
 cd scripts
