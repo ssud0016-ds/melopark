@@ -3,7 +3,7 @@ import { metersBetweenBayAndDestination, walkingMinutesFromMeters } from '../../
 import { cn } from '../../utils/cn'
 
 const STATUS_BADGE = {
-  available: { className: 'bg-brand-50 text-brand-dark dark:bg-brand-900/40 dark:text-brand-light', label: 'Available' },
+  available: { className: 'bg-accent text-gray-900 border border-accent', label: 'Available' },
   trap:      { className: 'bg-trap-50 text-amber-700 dark:bg-trap-500/10 dark:text-trap-400', label: '\u26a0 Trap' },
   occupied:  { className: 'bg-danger-50 text-danger-600 dark:bg-danger-500/10 dark:text-danger-400', label: 'Occupied' },
 }
@@ -26,8 +26,8 @@ export default function BayCard({ bay, selected, destination, onSelect }) {
       className={cn(
         'flex items-start gap-3 w-full text-left px-3.5 py-3 rounded-xl cursor-pointer border-[1.5px] mb-2 transition-all',
         selected
-          ? 'border-current bg-brand-50 dark:bg-brand-900/20'
-          : 'border-gray-200/60 dark:border-gray-700/60 bg-white dark:bg-surface-dark-secondary hover:border-brand/40 hover:bg-brand-50/40 dark:hover:bg-brand-900/10',
+          ? 'border-current bg-surface-secondary'
+          : 'border-gray-200/60 bg-surface-secondary hover:border-brand/40 hover:bg-surface-secondary',
       )}
       style={selected ? { borderColor: cols.border } : undefined}
       aria-selected={selected}
@@ -60,7 +60,7 @@ export default function BayCard({ bay, selected, destination, onSelect }) {
 
         {/* Tags */}
         <div className="flex gap-1 flex-wrap">
-          <span className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-surface-tertiary dark:bg-surface-dark-tertiary font-bold">
+          <span className="text-[10px] px-2 py-0.5 rounded-full border border-brand/50 text-white bg-brand font-bold">
             {(bay.limitType || '').toUpperCase()}
           </span>
           {bay.tags
@@ -68,7 +68,7 @@ export default function BayCard({ bay, selected, destination, onSelect }) {
             .map((t, i) => (
               <span
                 key={i}
-                className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 bg-surface-tertiary dark:bg-surface-dark-tertiary"
+                className="text-[10px] px-2 py-0.5 rounded-full border border-brand/50 text-white bg-brand"
               >
                 {t}
               </span>

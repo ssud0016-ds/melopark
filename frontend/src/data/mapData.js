@@ -199,9 +199,9 @@ export const FACT_CARDS = [
   { num:'31K+', unit:'',    desc:'parking bays across Melbourne\'s CBD already have sensor infrastructure — zero new hardware needed.',      source:'City of Melbourne Open Data',             color:'teal'  },
 ];
 
-// Colours by bay type — uses brand teal instead of green
+// Colours by bay type
 export const BAY_COLORS = {
-  available: { border: '#1A7A6D', bg: '#f0fdf9', count: '#14635A', dot: '#1A7A6D' },
-  trap:      { border: '#f97316', bg: '#fff7ed', count: '#d97706', dot: '#f97316' },
-  occupied:  { border: '#9ca3af', bg: '#f9fafb', count: '#6b7280', dot: '#ef4444' },
+  available: { border: '#a3ec48', bg: '#dce8ff', count: '#6d9d2f', dot: '#a3ec48' },
+  trap:      { border: '#8388c6', bg: '#f4f6ff', count: '#8388c6', dot: '#8388c6' },
+  occupied:  { border: '#ed6868', bg: '#f4f6ff', count: '#ed6868', dot: '#ed6868' },
 };

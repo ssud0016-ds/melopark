@@ -61,7 +61,7 @@ function destinationDivIcon(name) {
     className: 'mp-dest-marker',
     html: `<div style="display:flex;flex-direction:column;align-items:center;width:180px;margin-left:-90px;margin-top:-44px;text-align:center;pointer-events:none;">
       <span style="font-size:30px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2))">📍</span>
-      <span style="margin-top:2px;background:#1A7A6D;color:#fff;font:700 11px Inter,system-ui,sans-serif;padding:4px 10px;border-radius:8px;max-width:180px;overflow:hidden;text-overflow:ellipsis;">${esc}</span>
+      <span style="margin-top:2px;background:#35338c;color:#fff;font:700 11px Inter,system-ui,sans-serif;padding:4px 10px;border-radius:8px;max-width:180px;overflow:hidden;text-overflow:ellipsis;">${esc}</span>
     </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
@@ -133,8 +133,8 @@ export default function ParkingMap({
             center={[destLatLng.lat, destLatLng.lng]}
             radius={SEARCH_RADIUS_M}
             pathOptions={{
-              color: 'rgba(26,122,109,0.75)',
-              fillColor: '#1A7A6D',
+              color: 'rgba(53,51,140,0.75)',
+              fillColor: '#35338c',
               fillOpacity: 0.07,
               weight: 2,
               dashArray: '8 6',
