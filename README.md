@@ -13,13 +13,15 @@ MelOPark joins three City of Melbourne open datasets (live bay sensors, parking 
 
 ## Tech stack
 
-| Layer | Tech | Why |
-|-------|------|-----|
-| Frontend | React + Vite + Tailwind CSS + Leaflet.js | Fast dev server, mobile-first styling, free map tiles (no API key) |
-| Backend | Python FastAPI + Mangum | API framework with Lambda-ready adapter |
-| Data pipeline | Pandas (+ DuckDB in later iterations) | Handles cleaning and transformation |
-| Database | PostgreSQL (Supabase) (Gold layer) | Static data store for restrictions + geometry/meter data |
-| Data architecture | Medallion (Bronze/Silver/Gold) | Traceability from raw API to app-ready tables |
+
+| Layer             | Tech                                     | Why                                                                |
+| ----------------- | ---------------------------------------- | ------------------------------------------------------------------ |
+| Frontend          | React + Vite + Tailwind CSS + Leaflet.js | Fast dev server, mobile-first styling, free map tiles (no API key) |
+| Backend           | Python FastAPI + Mangum                  | API framework with Lambda-ready adapter                            |
+| Data pipeline     | Pandas (+ DuckDB in later iterations)    | Handles cleaning and transformation                                |
+| Database          | PostgreSQL (Supabase) (Gold layer)       | Static data store for restrictions + geometry/meter data           |
+| Data architecture | Medallion (Bronze/Silver/Gold)           | Traceability from raw API to app-ready tables                      |
+
 
 ## Project structure
 
@@ -96,20 +98,23 @@ cp ./.env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-The API should now be running at http://localhost:8000. Test it:
+The API should now be running at [http://localhost:8000](http://localhost:8000). Test it:
+
 ```bash
 curl http://localhost:8000/health
 # Should return: {"status":"ok","environment":"development"}
 ```
 
 Run backend tests:
+
 ```bash
 pytest
 ```
 
 API docs:
-- http://localhost:8000/docs
-- http://localhost:8000/redoc
+
+- [http://localhost:8000/docs](http://localhost:8000/docs)
+- [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ### 3. Frontend setup
 
@@ -121,7 +126,7 @@ npm install
 npm run dev
 ```
 
-The app should now be running at http://localhost:5173. Open it in your browser and you should see a map of Melbourne CBD with coloured dots for parking bays.
+The app should now be running at [http://localhost:5173](http://localhost:5173). Open it in your browser and you should see a map of Melbourne CBD with coloured dots for parking bays.
 
 ### 4. Data pipeline (optional, to populate Gold tables in Postgres)
 
@@ -144,9 +149,11 @@ python build_gold.py
 
 ## API endpoints (scaffold)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
+
+| Method | Endpoint  | Description  |
+| ------ | --------- | ------------ |
+| GET    | `/health` | Health check |
+
 
 For deployment on AWS Lambda, use `backend/lambda_handler.py` as the function entrypoint.
 
@@ -154,12 +161,14 @@ For deployment on AWS Lambda, use `backend/lambda_handler.py` as the function en
 
 All data from [City of Melbourne Open Data Portal](https://data.melbourne.vic.gov.au/) under CC BY licence.
 
-| Dataset | Type | Use |
-|---------|------|-----|
-| On-street Parking Bay Sensors | Real-time | Live occupancy |
-| On-street Parking Bays | Static | Bay geometry |
-| On-street Car Park Bay Restrictions | Static | Restriction rules |
-| On-street Car Parking Meters with Location | Static | Pricing + payment |
+
+| Dataset                                    | Type      | Use               |
+| ------------------------------------------ | --------- | ----------------- |
+| On-street Parking Bay Sensors              | Real-time | Live occupancy    |
+| On-street Parking Bays                     | Static    | Bay geometry      |
+| On-street Car Park Bay Restrictions        | Static    | Restriction rules |
+| On-street Car Parking Meters with Location | Static    | Pricing + payment |
+
 
 ## How datasets join
 
