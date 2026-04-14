@@ -1,0 +1,183 @@
+import { useEffect, useRef, useMemo } from 'react'
+import {
+  MapContainer,
+  TileLayer,
+  Circle,
+  CircleMarker,
+  Marker,
+  Popup,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet'
+import L from 'leaflet'
+import { BAY_COLORS } from '../data/mapData'
+import {
+  normToLatLng,
+  bayLatLng,
+  SEARCH_RADIUS_M,
+  DEFAULT_MAP_CENTER,
+  DEFAULT_MAP_ZOOM,
+  DESTINATION_MAP_ZOOM,
+} from '../utils/mapGeo'
+
+function FlyToController({ destination, defaultCenter, defaultZoom, destZoom }) {
+  const map = useMap()
+  const prev = useRef(null)
+  useEffect(() => {
+    if (destination) {
+      const ll = normToLatLng(destination.x, destination.y)
+      map.flyTo([ll.lat, ll.lng], destZoom, { duration: 0.75 })
+    } else if (prev.current) {
+      map.flyTo(defaultCenter, defaultZoom, { duration: 0.75 })
+    }
+    prev.current = destination
+  }, [destination, defaultCenter, defaultZoom, destZoom, map])
+  return null
+}
+
+function MapReadyNotifier({ onReady }) {
+  const map = useMap()
+  useEffect(() => {
+    onReady?.(map)
+    return () => onReady?.(null)
+  }, [map, onReady])
+  return null
+}
+
+function MapEmptyClick({ onEmptyClick }) {
+  useMapEvents({
+    click(e) {
+      if (e.originalEvent?.target?.closest?.('.leaflet-marker-icon')) return
+      if (e.originalEvent?.target?.closest?.('.leaflet-interactive')) return
+      onEmptyClick?.()
+    },
+  })
+  return null
+}
+
+function destinationDivIcon(name) {
+  const esc = String(name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
+  return L.divIcon({
+    className: 'mp-dest-marker',
+    html: `<div style="display:flex;flex-direction:column;align-items:center;width:180px;margin-left:-90px;margin-top:-44px;text-align:center;pointer-events:none;">
+      <span style="font-size:30px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2))">📍</span>
+      <span style="margin-top:2px;background:#1a3353;color:#fff;font:700 11px Inter,system-ui,sans-serif;padding:4px 10px;border-radius:8px;max-width:180px;overflow:hidden;text-overflow:ellipsis;">${esc}</span>
+    </div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  })
+}
+
+export default function MapLeaflet({
+  bays,
+  visibleBays,
+  proximityBays,
+  selectedBayId,
+  destination,
+  onBayClick,
+  onMapReady,
+  defaultCenter = DEFAULT_MAP_CENTER,
+  defaultZoom = DEFAULT_MAP_ZOOM,
+  destZoom = DESTINATION_MAP_ZOOM,
+}) {
+  const destIcon = useMemo(
+    () => (destination ? destinationDivIcon(destination.name) : null),
+    [destination],
+  )
+
+  const destLatLng = destination
+    ? normToLatLng(destination.x, destination.y)
+    : null
+
+  return (
+    <div className="mp-leaflet-root" style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
+      <style>{`
+        .mp-leaflet-root .leaflet-container { font-family: Inter, system-ui, sans-serif; background: #f8f9fa; }
+        .mp-leaflet-root .leaflet-control-attribution { font-size: 10px; max-width: 50%; }
+        .mp-dest-marker { background: none !important; border: none !important; }
+      `}</style>
+      <MapContainer
+        center={defaultCenter}
+        zoom={defaultZoom}
+        style={{ width: '100%', height: '100%' }}
+        scrollWheelZoom
+        zoomControl={false}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+
+        <FlyToController
+          destination={destination}
+          defaultCenter={defaultCenter}
+          defaultZoom={defaultZoom}
+          destZoom={destZoom}
+        />
+        <MapReadyNotifier onReady={onMapReady} />
+        <MapEmptyClick onEmptyClick={() => onBayClick(null)} />
+
+        {destination && destLatLng && (
+          <Circle
+            center={[destLatLng.lat, destLatLng.lng]}
+            radius={SEARCH_RADIUS_M}
+            pathOptions={{
+              color: 'rgba(63,167,63,0.75)',
+              fillColor: '#3fa73f',
+              fillOpacity: 0.07,
+              weight: 2,
+              dashArray: '8 6',
+            }}
+          />
+        )}
+
+        {bays.map((bay) => {
+          const ll = bayLatLng(bay)
+          const inFilter = visibleBays.some((v) => v.id === bay.id)
+          const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)
+          let opacity = 1
+          if (!inRadius) opacity = 0.12
+          else if (!inFilter) opacity = 0.22
+          const cols = BAY_COLORS[bay.type] || BAY_COLORS.available
+          const selected = bay.id === selectedBayId
+          const fill =
+            bay.type === 'occupied' ? '#fee2e2' : bay.type === 'trap' ? '#fff7ed' : '#edf7ed'
+          return (
+            <CircleMarker
+              key={bay.id}
+              center={[ll.lat, ll.lng]}
+              radius={selected ? 13 : 10}
+              pathOptions={{
+                color: cols.border,
+                fillColor: fill,
+                fillOpacity: Math.min(1, 0.92 * opacity),
+                opacity,
+                weight: selected ? 3 : 2,
+              }}
+              eventHandlers={{
+                click: (e) => {
+                  L.DomEvent.stopPropagation(e)
+                  onBayClick(bay)
+                },
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: 120 }}>
+                  <strong>#{bay.id}</strong> {bay.name}
+                  <br />
+                  <span style={{ color: '#374151' }}>
+                    {bay.free}/{bay.spots} spots free
+                  </span>
+                </div>
+              </Popup>
+            </CircleMarker>
+          )
+        })}
+
+        {destination && destLatLng && destIcon && (
+          <Marker position={[destLatLng.lat, destLatLng.lng]} icon={destIcon} interactive={false} />
+        )}
+      </MapContainer>
+    </div>
+  )
+}
