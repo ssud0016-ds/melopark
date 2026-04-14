@@ -10,7 +10,7 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
-import { BAY_COLORS } from '../data/mapData'
+import { BAY_COLORS } from '../../data/mapData'
 import {
   normToLatLng,
   bayLatLng,
@@ -18,7 +18,7 @@ import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   DESTINATION_MAP_ZOOM,
-} from '../utils/mapGeo'
+} from '../../utils/mapGeo'
 
 function FlyToController({ destination, defaultCenter, defaultZoom, destZoom }) {
   const map = useMap()
@@ -61,14 +61,14 @@ function destinationDivIcon(name) {
     className: 'mp-dest-marker',
     html: `<div style="display:flex;flex-direction:column;align-items:center;width:180px;margin-left:-90px;margin-top:-44px;text-align:center;pointer-events:none;">
       <span style="font-size:30px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2))">📍</span>
-      <span style="margin-top:2px;background:#1a3353;color:#fff;font:700 11px Inter,system-ui,sans-serif;padding:4px 10px;border-radius:8px;max-width:180px;overflow:hidden;text-overflow:ellipsis;">${esc}</span>
+      <span style="margin-top:2px;background:#1A7A6D;color:#fff;font:700 11px Inter,system-ui,sans-serif;padding:4px 10px;border-radius:8px;max-width:180px;overflow:hidden;text-overflow:ellipsis;">${esc}</span>
     </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
   })
 }
 
-export default function MapLeaflet({
+export default function ParkingMap({
   bays,
   visibleBays,
   proximityBays,
@@ -85,17 +85,10 @@ export default function MapLeaflet({
     [destination],
   )
 
-  const destLatLng = destination
-    ? normToLatLng(destination.x, destination.y)
-    : null
+  const destLatLng = destination ? normToLatLng(destination.x, destination.y) : null
 
   return (
-    <div className="mp-leaflet-root" style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
-      <style>{`
-        .mp-leaflet-root .leaflet-container { font-family: Inter, system-ui, sans-serif; background: #f8f9fa; }
-        .mp-leaflet-root .leaflet-control-attribution { font-size: 10px; max-width: 50%; }
-        .mp-dest-marker { background: none !important; border: none !important; }
-      `}</style>
+    <div className="absolute inset-0 z-[1]">
       <MapContainer
         center={defaultCenter}
         zoom={defaultZoom}
@@ -122,8 +115,8 @@ export default function MapLeaflet({
             center={[destLatLng.lat, destLatLng.lng]}
             radius={SEARCH_RADIUS_M}
             pathOptions={{
-              color: 'rgba(63,167,63,0.75)',
-              fillColor: '#3fa73f',
+              color: 'rgba(26,122,109,0.75)',
+              fillColor: '#1A7A6D',
               fillOpacity: 0.07,
               weight: 2,
               dashArray: '8 6',
@@ -141,7 +134,7 @@ export default function MapLeaflet({
           const cols = BAY_COLORS[bay.type] || BAY_COLORS.available
           const selected = bay.id === selectedBayId
           const fill =
-            bay.type === 'occupied' ? '#fee2e2' : bay.type === 'trap' ? '#fff7ed' : '#edf7ed'
+            bay.type === 'occupied' ? '#fee2e2' : bay.type === 'trap' ? '#fff7ed' : '#ccfbef'
           return (
             <CircleMarker
               key={bay.id}
@@ -162,10 +155,10 @@ export default function MapLeaflet({
               }}
             >
               <Popup>
-                <div style={{ minWidth: 120 }}>
+                <div className="min-w-[120px]">
                   <strong>#{bay.id}</strong> {bay.name}
                   <br />
-                  <span style={{ color: '#374151' }}>
+                  <span className="text-gray-700 dark:text-gray-300">
                     {bay.free}/{bay.spots} spots free
                   </span>
                 </div>
