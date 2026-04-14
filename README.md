@@ -128,11 +128,11 @@ npm run dev
 
 The app should now be running at [http://localhost:5173](http://localhost:5173). Open it in your browser and you should see a map of Melbourne CBD with coloured dots for parking bays.
 
-### 4. Data pipeline (optional, to populate Gold tables in Postgres)
+### 4. Data pipeline (required for bay evaluation endpoints)
 
-The app works without this step because sensors are fetched live from the City of Melbourne (CoM) APIs. If you want to run the full medallion pipeline and store static data in Postgres:
+The live map works without this step (sensors are fetched from CoM APIs), but the **bay evaluation endpoints** (`/api/bays/...`) need the `bays` and `bay_restrictions` tables in Postgres.
 
-Make sure `backend/.env` has a valid `DATABASE_URL` before running this.
+Make sure `backend/.env` has a valid `DATABASE_URL` before running step 3.
 
 ```bash
 cd scripts
@@ -143,17 +143,53 @@ python fetch_bronze.py
 # Step 2: Clean into silver/
 python clean_to_silver.py
 
-# Step 3: Build Gold tables in Postgres
-python build_gold.py
+# Step 3: Build Gold layer + write to Postgres
+python build_gold.py --write-db
+
+# Or just build local Parquet/CSV (no DB required):
+python build_gold.py --export-csv
 ```
 
-## API endpoints (scaffold)
+## API endpoints
 
 
-| Method | Endpoint  | Description  |
-| ------ | --------- | ------------ |
-| GET    | `/health` | Health check |
+| Method | Endpoint | Description |
+| ------ | -------- | ----------- |
+| GET | `/health` | Health check |
+| GET | `/api/parking` | Live sensor data (bay occupancy) |
+| GET | `/api/parking/raw` | Raw upstream sensor data |
+| GET | `/api/bays/{bay_id}/evaluate` | Evaluate parking legality for a single bay |
+| GET | `/api/bays/evaluate-bulk` | Bulk-evaluate all bays in a bounding box |
 
+### Bay evaluation (Epic 2)
+
+**Single bay** — `GET /api/bays/{bay_id}/evaluate`
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| `arrival_iso` | string (ISO-8601) | now | When you plan to arrive |
+| `duration_mins` | int (1–1440) | 60 | How long you plan to stay |
+
+Returns `{ bay_id, verdict, reason, active_restriction, warning }` where `verdict` is `"yes"`, `"no"`, or `"unknown"`.
+
+```bash
+# Is bay 6754 legal next Tuesday at 10:30 for 90 minutes?
+curl "http://localhost:8000/api/bays/6754/evaluate?arrival_iso=2026-04-14T10:30:00&duration_mins=90"
+```
+
+**Bulk (map recolour)** — `GET /api/bays/evaluate-bulk`
+
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| `bbox` | string | required | `south,west,north,east` |
+| `arrival_iso` | string (ISO-8601) | now | Arrival time |
+| `duration_mins` | int | 60 | Planned stay |
+
+Returns `[{ bay_id, lat, lon, verdict }]` for all bays in the viewport.
+
+```bash
+curl "http://localhost:8000/api/bays/evaluate-bulk?bbox=-37.82,144.95,-37.80,144.97&arrival_iso=2026-04-14T10:30:00"
+```
 
 For deployment on AWS Lambda, use `backend/lambda_handler.py` as the function entrypoint.
 

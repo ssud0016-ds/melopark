@@ -1,1 +1,5 @@
-# Models package - database models go here once Gold DB is set up
+"""Database models package."""
+
+from app.models.bay import Bay, BayRestriction
+
+__all__ = ["Bay", "BayRestriction"]
