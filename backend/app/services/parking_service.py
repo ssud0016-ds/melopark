@@ -210,6 +210,9 @@ def _transform_bay(raw: dict) -> dict | None:
     """Convert a raw CoM record to a frontend-friendly bay dict.
 
     Returns None if the record has no usable lat/lng.
+
+    ``street_name`` is sourced from the ``roadsegmentdescription`` field in the
+    CoM sensor dataset — it is the authoritative street name for this bay.
     """
     location = raw.get("location") or {}
     lat = location.get("lat")
@@ -222,6 +225,8 @@ def _transform_bay(raw: dict) -> dict | None:
         "lng": lon,
         "status": _map_status(raw.get("status_description", "")),
         "last_updated": raw.get("lastupdated"),
+        # Real street name from CoM sensor data — use as-is or fall back to None.
+        "street_name": raw.get("roadsegmentdescription") or None,
     }
 
 

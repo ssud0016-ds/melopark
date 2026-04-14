@@ -4,13 +4,29 @@ import { cn } from '../../utils/cn'
 
 const STATUS_BADGE = {
   available: { className: 'bg-accent text-gray-900 border border-accent', label: 'Available' },
-  trap:      { className: 'bg-trap-50 text-amber-700 dark:bg-trap-500/10 dark:text-trap-400', label: '\u26a0 Trap' },
+  trap:      { className: 'bg-trap-50 text-amber-700 dark:bg-trap-500/10 dark:text-trap-400', label: '\u26a0 Restricted' },
   occupied:  { className: 'bg-danger-50 text-danger-600 dark:bg-danger-500/10 dark:text-danger-400', label: 'Occupied' },
 }
 
+/**
+ * Compact bay card shown in the bay list.
+ *
+ * Displays only fields that come from real data sources:
+ *   - bay.name        – street name from CoM sensor API (or "Unnamed Bay")
+ *   - bay.id          – kerbside sensor ID (real)
+ *   - bay.free        – sensor occupancy (real)
+ *   - bay.type        – visual category derived from sensor + restriction API (real)
+ *   - bay.bayType     – raw CoM restriction type string (real)
+ *   - distance/walk   – computed from GPS coords (real, requires destination)
+ *
+ * Fields intentionally absent (no real source):
+ *   - cost: no meter rate data in current data pipeline
+ *   - limitType tag: only available after calling /evaluate; not fetched at list level
+ *   - warn: only available from /evaluate; not fetched at list level
+ */
 export default function BayCard({ bay, selected, destination, onSelect }) {
   const cols = BAY_COLORS[bay.type] || BAY_COLORS.available
-  const avDot = bay.free === 0 ? '🔴' : bay.free <= bay.spots * 0.3 ? '🟠' : '🟢'
+  const occupancyDot = bay.free === 0 ? '🔴' : '🟢'
   const badge = STATUS_BADGE[bay.type] || STATUS_BADGE.occupied
 
   let distLabel = null
@@ -19,6 +35,11 @@ export default function BayCard({ bay, selected, destination, onSelect }) {
     const mn = walkingMinutesFromMeters(m)
     distLabel = `${m} m \u00b7 ~${mn} min walk`
   }
+
+  const displayName = bay.name || 'Unnamed Bay'
+
+  // Bay type label from CoM restriction API (real external data)
+  const typeLabel = bay.bayType && bay.bayType !== 'Other' ? bay.bayType : null
 
   return (
     <button
@@ -40,45 +61,34 @@ export default function BayCard({ bay, selected, destination, onSelect }) {
       />
 
       <div className="flex-1 min-w-0">
-        {/* Name + status */}
+        {/* Name + status badge */}
         <div className="flex items-center justify-between gap-2 mb-0.5">
           <div className="text-sm font-bold text-gray-900 dark:text-white truncate">
-            {bay.name}
+            {displayName}
           </div>
           <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0', badge.className)}>
             {badge.label}
           </span>
         </div>
 
-        {/* Sub info */}
+        {/* Sub info — only real data */}
         <div className="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-2 flex-wrap mb-1.5">
           <span>#{bay.id}</span>
-          <span>{avDot} <strong className="text-gray-600 dark:text-gray-300">{bay.free}/{bay.spots}</strong> spots free</span>
-          {bay.cost && <span>{bay.cost}</span>}
+          <span>
+            {occupancyDot}{' '}
+            <strong className="text-gray-600 dark:text-gray-300">
+              {bay.free === 1 ? 'Free' : bay.free === 0 ? 'Occupied' : 'Unknown'}
+            </strong>
+          </span>
           {distLabel && <span>{distLabel}</span>}
         </div>
 
-        {/* Tags */}
-        <div className="flex gap-1 flex-wrap">
-          <span className="text-[10px] px-2 py-0.5 rounded-full border border-brand/50 text-white bg-brand font-bold">
-            {(bay.limitType || '').toUpperCase()}
-          </span>
-          {bay.tags
-            .filter((t) => !t.match(/^[234]P$/i))
-            .map((t, i) => (
-              <span
-                key={i}
-                className="text-[10px] px-2 py-0.5 rounded-full border border-brand/50 text-white bg-brand"
-              >
-                {t}
-              </span>
-            ))}
-        </div>
-
-        {/* Warning */}
-        {bay.warn && (
-          <div className="bg-trap-50 dark:bg-trap-500/10 border border-trap-200 dark:border-trap-400/30 rounded-lg px-2.5 py-1.5 text-[10px] text-orange-700 dark:text-orange-300 mt-1.5">
-            &#9888; {bay.warn}
+        {/* Bay type tag — from CoM restriction API */}
+        {typeLabel && (
+          <div className="flex gap-1 flex-wrap">
+            <span className="text-[10px] px-2 py-0.5 rounded-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800">
+              {typeLabel}
+            </span>
           </div>
         )}
       </div>
