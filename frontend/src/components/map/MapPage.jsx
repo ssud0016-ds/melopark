@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react'
+import { useState } from 'react'
 import ParkingMap from './ParkingMap'
 import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
@@ -33,7 +34,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const visibleBays = getVisibleBays(bays)
   const proximityBays = getProximityBays(bays)
   const selectedBay = bays.find((b) => b.id === selectedBayId) || null
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 900
+
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 900,
+  )
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 900)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const proxFreeSpots = proximityBays.reduce(
     (a, b) => a + (b.type === 'available' ? b.free : 0),
