@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { LANDMARKS } from '../../data/mapData'
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const SEARCH_LIMIT = 8
+const SEARCH_DEBOUNCE_MS = 300
+
 function Highlight({ text, query }) {
   const i = text.toLowerCase().indexOf(query.toLowerCase())
   if (i < 0) return text
@@ -15,28 +19,65 @@ function Highlight({ text, query }) {
 
 export default function SearchBar({ destination, onPick, onClear }) {
   const [query, setQuery] = useState('')
+  const [matches, setMatches] = useState([])
   const [showDrop, setShowDrop] = useState(false)
   const [noResults, setNoResults] = useState(false)
+  const [loading, setLoading] = useState(false)
   const inputRef = useRef(null)
   const noResTimerRef = useRef(null)
+  const debounceRef = useRef(null)
 
   useEffect(() => {
     if (!destination) setQuery('')
   }, [destination])
 
-  const matches = query && !destination
-    ? LANDMARKS.filter(
-        (l) =>
-          l.name.toLowerCase().includes(query.toLowerCase()) ||
-          l.sub.toLowerCase().includes(query.toLowerCase()),
-      ).slice(0, 6)
-    : []
+  useEffect(() => {
+    if (!query || query.trim().length < 2 || destination) {
+      setMatches([])
+      return
+    }
 
-  const pick = (lm) => {
-    setQuery(lm.name)
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      const q = query.trim()
+      setLoading(true)
+      try {
+        const res = await fetch(
+          `${API_BASE}/api/search?q=${encodeURIComponent(q)}&limit=${SEARCH_LIMIT}`,
+        )
+        if (!res.ok) throw new Error(`Search request failed with status ${res.status}`)
+        const data = await res.json()
+        setMatches(Array.isArray(data) ? data : [])
+      } catch (_err) {
+        // Fallback keeps UX usable while DB/search_index setup is in progress.
+        const fallback = LANDMARKS.filter(
+          (l) =>
+            l.name.toLowerCase().includes(q.toLowerCase()) ||
+            l.sub.toLowerCase().includes(q.toLowerCase()),
+        )
+          .slice(0, 6)
+          .map((l) => ({
+            name: l.name,
+            sub: l.sub,
+            category: 'landmark',
+            lat: l.lat,
+            lng: l.lng,
+            icon: l.icon,
+          }))
+        setMatches(fallback)
+      } finally {
+        setLoading(false)
+      }
+    }, SEARCH_DEBOUNCE_MS)
+
+    return () => clearTimeout(debounceRef.current)
+  }, [query, destination])
+
+  const pick = (item) => {
+    setQuery(item.name)
     setShowDrop(false)
     setNoResults(false)
-    onPick(lm)
+    onPick(item)
   }
 
   const handleChange = (e) => {
@@ -49,12 +90,11 @@ export default function SearchBar({ destination, onPick, onClear }) {
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
-      const q = query.trim().toLowerCase()
-      const m = LANDMARKS.find(
-        (l) => l.name.toLowerCase().includes(q) || l.sub.toLowerCase().includes(q),
-      )
-      if (m) { pick(m); return }
-      if (q) {
+      if (matches.length > 0) {
+        pick(matches[0])
+        return
+      }
+      if (query.trim()) {
         setShowDrop(false)
         setNoResults(true)
         clearTimeout(noResTimerRef.current)
@@ -72,6 +112,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
     setQuery('')
     setShowDrop(false)
     setNoResults(false)
+    setMatches([])
     onClear()
     inputRef.current?.focus()
   }
@@ -96,6 +137,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
           aria-autocomplete="list"
           className="flex-1 border-none bg-transparent outline-none focus-visible:outline-none font-sans text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
         />
+        {loading && <span className="text-xs text-gray-400">...</span>}
         {query && (
           <button
             onMouseDown={(e) => { e.preventDefault(); clear() }}
@@ -113,20 +155,23 @@ export default function SearchBar({ destination, onPick, onClear }) {
           className="absolute top-[calc(100%+6px)] inset-x-0 bg-white dark:bg-surface-dark-secondary rounded-xl overflow-hidden z-50 shadow-card-lg border border-gray-200/60 dark:border-gray-700/60"
           role="listbox"
         >
-          {matches.map((lm, i) => (
+          {matches.map((item, i) => (
             <div
               key={i}
               role="option"
               aria-selected={false}
-              onMouseDown={(e) => { e.preventDefault(); pick(lm) }}
+              onMouseDown={(e) => { e.preventDefault(); pick(item) }}
               className="flex items-center gap-3 px-4 py-2.5 cursor-pointer text-sm border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors"
             >
-              <span className="text-lg shrink-0">{lm.icon}</span>
+              <span className="text-lg shrink-0">{item.icon || '📍'}</span>
               <div>
                 <div className="font-semibold text-gray-900 dark:text-white">
-                  <Highlight text={lm.name} query={query} />
+                  <Highlight text={item.name} query={query} />
                 </div>
-                <div className="text-xs text-gray-400 mt-0.5">{lm.sub}</div>
+                <div className="text-xs text-gray-400 mt-0.5">
+                  {item.sub}
+                  {item.category ? ` · ${item.category}` : ''}
+                </div>
               </div>
             </div>
           ))}
@@ -134,7 +179,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
       )}
 
       {/* No results in dropdown */}
-      {showDrop && query && !destination && matches.length === 0 && (
+      {showDrop && query && !destination && matches.length === 0 && !loading && (
         <div className="absolute top-[calc(100%+6px)] inset-x-0 bg-white dark:bg-surface-dark-secondary rounded-xl z-50 shadow-card-lg border border-gray-200/60 dark:border-gray-700/60 px-4 py-3.5">
           <div className="flex items-center gap-2.5 text-gray-400 text-sm">
             <span>🔍</span>
