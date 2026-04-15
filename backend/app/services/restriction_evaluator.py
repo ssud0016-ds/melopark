@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, time, timedelta
+from typing import Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -176,7 +177,7 @@ def _find_strict_starting_during_stay(
     restrictions: list[BayRestriction],
     arrival: datetime,
     duration_mins: int,
-) -> dict | None:
+) -> Optional[dict]:
     """Return the earliest strict restriction whose window *begins* during the stay.
 
     "Begins during the stay" means the restriction's daily start time falls
@@ -186,7 +187,7 @@ def _find_strict_starting_during_stay(
     Handles stays that span midnight (up to ~24 h).
     """
     end_dt = arrival + timedelta(minutes=duration_mins)
-    earliest: tuple[datetime, BayRestriction] | None = None
+    earliest: Optional[Tuple[datetime, BayRestriction]] = None
 
     for r in restrictions:
         if not r.is_strict:
@@ -225,7 +226,7 @@ def _find_strict_starting_during_stay(
 
 def _pick_governing_restriction(
     active: list[BayRestriction],
-) -> BayRestriction | None:
+) -> Optional[BayRestriction]:
     """From all restrictions active at the arrival moment, return the strictest."""
     if not active:
         return None
@@ -236,7 +237,7 @@ def _verdict_for_restriction(
     r: BayRestriction,
     arrival: datetime,
     duration_mins: int,
-) -> tuple[str, str, int | None, str | None]:
+) -> Tuple[str, str, Optional[int], Optional[str]]:
     """Return (verdict, reason, max_stay_mins, expires_at_iso) for a single active rule."""
     cat = r.rule_category
 
@@ -344,6 +345,16 @@ def evaluate_bay_at(
             return _evaluate_from_db(bay_id, restrictions, arrival, duration_mins)
 
     # ── Tier 2: external API cache fallback ──────────────────────────────
+    if bay is None:
+        return {
+            "bay_id": bay_id,
+            "verdict": "unknown",
+            "reason": "Bay not found in our database. Check signage on site before parking.",
+            "active_restriction": None,
+            "warning": None,
+            "data_source": "unknown",
+        }
+
     logger.debug(
         "Bay %s not in DB or has no restriction rows — trying API cache fallback.",
         bay_id,
