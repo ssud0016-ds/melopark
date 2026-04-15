@@ -513,6 +513,11 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
     ``restrictions_long`` dataset.  This maximises restriction coverage
     (the sensor LEFT JOIN typically matches only a small fraction of bays).
 
+    All datasets now share the **kerbsideid** namespace as ``bay_id``:
+      - sensors:       kerbsideid → bay_id
+      - restrictions:  deviceid   → bay_id  (deviceid = kerbsideid)
+      - parking_bays:  kerbsideid → bay_id
+
     Geometry sources for the ``bays`` table (in priority order):
       1. ``sensors_clean.parquet``  — live sensor bays with lat/lon
       2. ``parking_bays.parquet``   — static bay geometry (kerbsideid → lat/lon)
