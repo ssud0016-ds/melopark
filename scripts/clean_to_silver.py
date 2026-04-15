@@ -21,7 +21,8 @@ sensors.parquet:
   lastupdated        -> ISO timestamp of last sensor reading
 
 restrictions.parquet:
-  bayid              -> renamed to bay_id (our join key)
+  bayid              -> kept as restriction_bayid (internal CoM bay key)
+  deviceid           -> renamed to bay_id (= kerbsideid — the correct join key)
   description1..8    -> restriction sign code e.g. '2P MTR' (what we call typedesc)
   fromday1..8        -> start day of week (0=Sunday … 6=Saturday)
   today1..8          -> end day of week
@@ -35,8 +36,10 @@ WHY SILVER MATTERS
 The bronze data has several known quality issues this script fixes:
 
 1. COLUMN NAME MISMATCH
-   - Sensors use kerbsideid, restrictions use bayid
-   - Both are renamed to bay_id for the join
+   - Sensors use kerbsideid, restrictions use bayid + deviceid
+   - kerbsideid and deviceid share the same ID space (device/sensor IDs)
+   - bayid is a DIFFERENT namespace — joining on it produces zero matches
+   - We join on deviceid = kerbsideid (both renamed to bay_id)
 
 2. DURATION PARSING BUG (critical — do not reintroduce)
    - Values like 120, 240 are ALREADY in minutes
@@ -327,7 +330,8 @@ def melt_restrictions(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFra
     Clean and melt the wide restrictions DataFrame into long format.
 
     The CoM restrictions API uses different column names than expected:
-      - bayid        -> our standard bay_id (join key)
+      - bayid        -> kept as restriction_bayid (CoM internal key, different namespace)
+      - deviceid     -> renamed to bay_id (= kerbsideid — our join key to sensors)
       - description1..8 -> restriction sign code (we store as typedesc)
       - fromday1..8  -> start day of week (0=Sunday … 6=Saturday)
       - today1..8    -> end day of week
@@ -350,22 +354,36 @@ def melt_restrictions(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFra
     -------
     pd.DataFrame
         Long-format restrictions with columns:
-        bay_id, slot_num, typedesc, fromday, today,
+        bay_id, restriction_bayid, slot_num, typedesc, fromday, today,
         starttime, endtime, duration_mins, disabilityext_mins
     """
     log.info("--- Cleaning restrictions ---")
     df = df_raw.copy()
     initial_rows = len(df)
 
-    # Extract bay_id from bayid (CoM restrictions use 'bayid' not 'bay_id')
-    df["bay_id"] = df["bayid"].astype(str).str.strip()
+    # deviceid is the correct join key (= kerbsideid in the sensor namespace).
+    # bayid is a DIFFERENT CoM-internal namespace that does NOT match sensors.
+    if "deviceid" not in df.columns:
+        log.error(
+            "  'deviceid' column missing from restrictions bronze data. "
+            "Re-fetch bronze data with the latest fetch_bronze.py."
+        )
+        raise KeyError("deviceid column required in restrictions data")
 
-    # Drop null bay_id
+    df["bay_id"] = df["deviceid"].astype(str).str.strip()
+    df["restriction_bayid"] = df["bayid"].astype(str).str.strip()
+
+    # Drop null bay_id (missing deviceid)
     null_bay = df["bay_id"].isnull() | (df["bay_id"] == "nan") | (df["bay_id"] == "")
     dropped_null = null_bay.sum()
     df = df[~null_bay]
     if dropped_null > 0:
-        log.warning("  Dropped %d null bay_id rows", dropped_null)
+        log.warning("  Dropped %d rows with null deviceid", dropped_null)
+
+    log.info(
+        "  Restrictions: %d rows, %d unique deviceids (bay_id), %d unique bayids",
+        len(df), df["bay_id"].nunique(), df["restriction_bayid"].nunique(),
+    )
 
     # Melt wide → long (one row per restriction slot)
     # CoM uses description1..8 for the sign code (not typedesc1..8)
@@ -381,6 +399,7 @@ def melt_restrictions(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFra
 
             slot_records.append({
                 "bay_id":             row["bay_id"],
+                "restriction_bayid":  row["restriction_bayid"],
                 "slot_num":           slot_num,
                 "typedesc":           str(typedesc).strip(),
                 "fromday":            int(row.get(f"fromday{slot_num}")) if pd.notna(row.get(f"fromday{slot_num}")) else None,
@@ -494,11 +513,12 @@ def write_metadata(
         "cleaned_at":     datetime.now(timezone.utc).isoformat(),
         "notes": [
             "CoM sensors use kerbsideid (not bay_id) and status_description (not status).",
-            "CoM restrictions use bayid (not bay_id) and description1..8 (not typedesc1..8).",
+            "CoM restrictions use bayid (internal key) + deviceid (= kerbsideid).",
+            "Join key: restrictions.deviceid = sensors.kerbsideid (both → bay_id).",
+            "bayid is a DIFFERENT namespace — do NOT join on it (produces false matches).",
             "Duration values are in MINUTES. Do NOT multiply by 60.",
             "location column is a dict — lat/lon extracted before coordinate validation.",
             "Restrictions melted from wide (description1..8) to long (one row per slot).",
-            "Join: sensors.bay_id LEFT JOIN restrictions.bay_id.",
             "No street name in restrictions — use GPS lat/lon → nearest sensor → bay_id.",
         ],
         "datasets": {

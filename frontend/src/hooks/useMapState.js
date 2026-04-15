@@ -8,12 +8,13 @@ import {
   DESTINATION_MAP_ZOOM,
   bayLatLng,
 } from '../utils/mapGeo'
+import { SNAP_PEEK } from '../components/layout/BottomSheet'
 
 export function useMapState() {
   const [selectedBayId, setSelectedBayId] = useState(null)
   const [activeFilter, setActiveFilter] = useState('all')
   const [destination, setDestination] = useState(null)
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [sheetSnap, setSheetSnap] = useState(SNAP_PEEK)
 
   const pickDestination = useCallback((lm) => {
     setDestination(lm)
@@ -38,8 +39,11 @@ export function useMapState() {
       return pool.filter((b) => {
         if (activeFilter === 'all') return true
         if (activeFilter === 'available') return b.type === 'available'
+        if (activeFilter === 'hasRules') return b.hasRules === true
         if (activeFilter === 'trap') return b.type === 'trap'
-        return b.limitType === activeFilter
+        if (activeFilter === 'timed') return b.bayType === 'Timed'
+        if (activeFilter === 'occupied') return b.type === 'occupied'
+        return true
       })
     },
     [destination, activeFilter],
@@ -65,8 +69,8 @@ export function useMapState() {
     destination,
     pickDestination,
     clearDestination,
-    sheetOpen,
-    setSheetOpen,
+    sheetSnap,
+    setSheetSnap,
     getVisibleBays,
     getProximityBays,
     defaultMapCenter: DEFAULT_MAP_CENTER,
