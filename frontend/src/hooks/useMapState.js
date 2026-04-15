@@ -1,12 +1,12 @@
 import { useState, useCallback, useRef } from 'react'
 import {
-  normToLatLng,
   haversineMeters,
   SEARCH_RADIUS_M,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   DESTINATION_MAP_ZOOM,
   bayLatLng,
+  destinationLatLng,
 } from '../utils/mapGeo'
 import { SNAP_PEEK } from '../components/layout/BottomSheet'
 
@@ -48,7 +48,7 @@ export function useMapState() {
       const pool = destination
         ? bays.filter((b) => {
             const bl = bayLatLng(b)
-            const dl = normToLatLng(destination.x, destination.y)
+            const dl = destinationLatLng(destination)
             return haversineMeters(bl.lat, bl.lng, dl.lat, dl.lng) < SEARCH_RADIUS_M
           })
         : bays
@@ -71,7 +71,7 @@ export function useMapState() {
       if (!destination) return bays
       return bays.filter((b) => {
         const bl = bayLatLng(b)
-        const dl = normToLatLng(destination.x, destination.y)
+        const dl = destinationLatLng(destination)
         return haversineMeters(bl.lat, bl.lng, dl.lat, dl.lng) < SEARCH_RADIUS_M
       })
     },

@@ -46,8 +46,17 @@ export function bayLatLng(bay) {
 
 export function metersBetweenBayAndDestination(bay, destination) {
   const b = bayLatLng(bay)
-  const d = normToLatLng(destination.x, destination.y)
+  const d = destinationLatLng(destination)
   return haversineMeters(b.lat, b.lng, d.lat, d.lng)
+}
+
+/** Lat/lng from destination (supports either real lat/lng or legacy x/y). */
+export function destinationLatLng(destination) {
+  if (!destination) return null
+  if (typeof destination.lat === 'number' && typeof destination.lng === 'number') {
+    return { lat: destination.lat, lng: destination.lng }
+  }
+  return normToLatLng(destination.x ?? 0.5, destination.y ?? 0.5)
 }
 
 /** Rough CBD bounds plus padding — filters live markers for map performance. */
