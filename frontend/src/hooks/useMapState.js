@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   normToLatLng,
   haversineMeters,
@@ -11,19 +11,36 @@ import {
 import { SNAP_PEEK } from '../components/layout/BottomSheet'
 
 export function useMapState() {
-  const [selectedBayId, setSelectedBayId] = useState(null)
+  const [selectedBayId, _setSelectedBayId] = useState(null)
   const [activeFilter, setActiveFilter] = useState('all')
   const [destination, setDestination] = useState(null)
   const [sheetSnap, setSheetSnap] = useState(SNAP_PEEK)
+  const [showLimitedBays, setShowLimitedBays] = useState(false)
+
+  const baysRef = useRef([])
+
+  const setSelectedBayId = useCallback(
+    (id) => {
+      if (id == null) return _setSelectedBayId(null)
+      const bay = baysRef.current.find((b) => b.id === id)
+      if (bay && !bay.hasRules) return
+      _setSelectedBayId(id)
+    },
+    [],
+  )
+
+  const setBaysRef = useCallback((bays) => {
+    baysRef.current = bays
+  }, [])
 
   const pickDestination = useCallback((lm) => {
     setDestination(lm)
-    setSelectedBayId(null)
+    _setSelectedBayId(null)
   }, [])
 
   const clearDestination = useCallback(() => {
     setDestination(null)
-    setSelectedBayId(null)
+    _setSelectedBayId(null)
   }, [])
 
   const getVisibleBays = useCallback(
@@ -71,6 +88,9 @@ export function useMapState() {
     clearDestination,
     sheetSnap,
     setSheetSnap,
+    showLimitedBays,
+    setShowLimitedBays,
+    setBaysRef,
     getVisibleBays,
     getProximityBays,
     defaultMapCenter: DEFAULT_MAP_CENTER,
