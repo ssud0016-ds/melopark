@@ -92,6 +92,7 @@ export default function ParkingMap({
   destination,
   onBayClick,
   onMapReady,
+  showLimitedBays = false,
   defaultCenter = DEFAULT_MAP_CENTER,
   defaultZoom = DEFAULT_MAP_ZOOM,
   destZoom = DESTINATION_MAP_ZOOM,
@@ -115,16 +116,21 @@ export default function ParkingMap({
 
   const destLatLng = destination ? normToLatLng(destination.x, destination.y) : null
 
-  const renderedBays = useMemo(() => {
+  const { verifiedBays, limitedBays } = useMemo(() => {
     const byType = activeFilter === 'all' ? bays : visibleBays
-    if (!destination) return byType
-    return byType.filter((b) => proximityBays.some((p) => p.id === b.id))
+    const inRange = destination
+      ? byType.filter((b) => proximityBays.some((p) => p.id === b.id))
+      : byType
+    return {
+      verifiedBays: inRange.filter((b) => b.hasRules),
+      limitedBays: inRange.filter((b) => !b.hasRules),
+    }
   }, [activeFilter, bays, visibleBays, destination, proximityBays])
 
   const baysForClustering = useMemo(() => {
-    const live = renderedBays.filter((b) => b.source === 'live')
-    return live.length ? live : renderedBays
-  }, [renderedBays])
+    const live = verifiedBays.filter((b) => b.source === 'live')
+    return live.length ? live : verifiedBays
+  }, [verifiedBays])
 
   const clustered = useMemo(() => {
     if (zoomLevel >= CLUSTER_ZOOM_CUTOFF) return []
@@ -266,7 +272,26 @@ export default function ParkingMap({
             </Marker>
           ))}
 
-        {zoomLevel >= CLUSTER_ZOOM_CUTOFF && renderedBays.map((bay) => {
+        {showLimitedBays && limitedBays.map((bay) => {
+          const ll = bayLatLng(bay)
+          const lowZoomFade = zoomLevel < CLUSTER_ZOOM_CUTOFF ? 0.15 : 0.35
+          return (
+            <CircleMarker
+              key={`ltd-${bay.id}`}
+              center={[ll.lat, ll.lng]}
+              radius={3}
+              interactive={false}
+              pathOptions={{
+                color: 'transparent',
+                fillColor: isDark ? '#9ca3af' : '#9ca3af',
+                fillOpacity: lowZoomFade,
+                weight: 0,
+              }}
+            />
+          )
+        })}
+
+        {zoomLevel >= CLUSTER_ZOOM_CUTOFF && verifiedBays.map((bay) => {
           const ll = bayLatLng(bay)
           const inFilter = visibleBays.some((v) => v.id === bay.id)
           const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)
@@ -275,19 +300,17 @@ export default function ParkingMap({
           else if (!inFilter) opacity = 0.22
           const cols = BAY_COLORS[bay.type] || BAY_COLORS.available
           const selected = bay.id === selectedBayId
-          const hasRules = bay.hasRules
-          const baseRadius = hasRules ? 9 : 6
           return (
             <CircleMarker
               key={bay.id}
               center={[ll.lat, ll.lng]}
-              radius={selected ? 13 : baseRadius}
+              radius={selected ? 13 : 9}
               pathOptions={{
-                color: hasRules ? '#FFD700' : '#ffffff',
+                color: '#FFD700',
                 fillColor: cols.border,
                 fillOpacity: opacity,
                 opacity,
-                weight: selected ? 3 : hasRules ? 2.5 : 1.5,
+                weight: selected ? 3 : 2.5,
               }}
               eventHandlers={{
                 click: (e) => {
@@ -303,14 +326,10 @@ export default function ParkingMap({
                   <span className="text-gray-700 dark:text-gray-300">
                     {bay.free}/{bay.spots} spots free
                   </span>
-                  {hasRules && (
-                    <>
-                      <br />
-                      <span style={{ color: '#35338c', fontWeight: 600, fontSize: '11px' }}>
-                        ✓ Restriction rules available
-                      </span>
-                    </>
-                  )}
+                  <br />
+                  <span style={{ color: '#35338c', fontWeight: 600, fontSize: '11px' }}>
+                    ✓ Verified — restriction rules available
+                  </span>
                 </div>
               </Popup>
             </CircleMarker>
