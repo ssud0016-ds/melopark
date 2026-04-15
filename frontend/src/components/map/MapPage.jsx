@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from 'react'
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import ParkingMap from './ParkingMap'
 import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
@@ -16,6 +16,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     destination,
     pickDestination,
     clearDestination,
+    showLimitedBays,
+    setShowLimitedBays,
+    setBaysRef,
     getVisibleBays,
     getProximityBays,
     defaultMapCenter,
@@ -23,9 +26,25 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     destinationMapZoom,
   } = useMapState()
 
+  useEffect(() => { setBaysRef(bays) }, [bays, setBaysRef])
+
   const visibleBays = getVisibleBays(bays)
   const proximityBays = getProximityBays(bays)
   const selectedBay = bays.find((b) => b.id === selectedBayId) || null
+
+  const { verifiedCount, limitedCount, proxVerifiedFree, proxVerifiedFreeBays, proxLimitedCount } = useMemo(() => {
+    const verified = visibleBays.filter((b) => b.hasRules)
+    const limited = visibleBays.filter((b) => !b.hasRules)
+    const proxVerified = proximityBays.filter((b) => b.hasRules)
+    const proxLimited = proximityBays.filter((b) => !b.hasRules)
+    return {
+      verifiedCount: verified.length,
+      limitedCount: limited.length,
+      proxVerifiedFree: proxVerified.reduce((a, b) => a + (b.type === 'available' ? b.free : 0), 0),
+      proxVerifiedFreeBays: proxVerified.filter((b) => b.type === 'available').length,
+      proxLimitedCount: proxLimited.length,
+    }
+  }, [visibleBays, proximityBays])
 
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 900,
@@ -36,9 +55,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
-
-  const proxFreeSpots = proximityBays.reduce((a, b) => a + (b.type === 'available' ? b.free : 0), 0)
-  const proxFreeBays = proximityBays.filter((b) => b.type === 'available').length
 
   const tsStr = lastUpdated
     ? lastUpdated.toLocaleTimeString('en-AU', {
@@ -82,6 +98,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           destination={destination}
           onBayClick={handleBayClick}
           onMapReady={handleMapReady}
+          showLimitedBays={showLimitedBays}
           defaultCenter={defaultMapCenter}
           defaultZoom={defaultMapZoom}
           destZoom={destinationMapZoom}
@@ -141,7 +158,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </div>
 
           <div className="w-full pointer-events-auto">
-            <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+            <FilterChips
+              activeFilter={activeFilter}
+              onFilterChange={setActiveFilter}
+              showLimitedBays={showLimitedBays}
+              onToggleLimitedBays={setShowLimitedBays}
+            />
           </div>
         </div>
 
@@ -157,18 +179,30 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {destination && (
           <div
-            className="absolute bottom-3.5 z-[500] bg-surface-secondary text-gray-900 rounded-full px-5 py-2 text-sm font-semibold whitespace-nowrap shadow-overlay flex items-center gap-2 max-w-[calc(100%-120px)] border-2 border-brand"
+            className="absolute bottom-3.5 z-[500] bg-surface-secondary text-gray-900 rounded-2xl px-5 py-2.5 text-sm font-semibold shadow-overlay flex flex-col items-center gap-0.5 max-w-[calc(100%-120px)] border-2 border-brand"
             style={{ left: '50%', transform: 'translateX(-50%)' }}
           >
             <span>
-              {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across&nbsp;
-              {proxFreeBays} bay{proxFreeBays !== 1 ? 's' : ''} within 400 m of {destination.name}
+              {proxVerifiedFree} free spot{proxVerifiedFree !== 1 ? 's' : ''} across&nbsp;
+              {proxVerifiedFreeBays} verified bay{proxVerifiedFreeBays !== 1 ? 's' : ''} within 400 m of {destination.name}
             </span>
+            {proxLimitedCount > 0 && (
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                +{proxLimitedCount} sensor-only bay{proxLimitedCount !== 1 ? 's' : ''} nearby (limited info)
+              </span>
+            )}
           </div>
         )}
 
-        <div className="absolute bottom-3.5 left-3.5 z-[500] rounded-full border border-brand bg-brand px-3.5 py-1.5 text-sm font-semibold text-white shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 dark:text-brand-900">
-          <span className="text-white dark:text-brand-900">{visibleBays.length}</span> bays shown
+        <div className="absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-3.5 py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col">
+          <span className="text-sm font-semibold text-white dark:text-brand-900">
+            {verifiedCount} verified bay{verifiedCount !== 1 ? 's' : ''}
+          </span>
+          {showLimitedBays && limitedCount > 0 && (
+            <span className="text-[11px] font-medium text-white/65 dark:text-brand-900/55">
+              +{limitedCount} sensor-only nearby
+            </span>
+          )}
         </div>
 
         <div
@@ -176,22 +210,28 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           style={{ right: rightInsetPx }}
         >
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
-            Bay Status
+            Verified Bays
           </div>
           {[
             ['bg-accent', 'Available'],
             ['bg-[#FFB382]', 'Rule Trap'],
             ['bg-[#ed6868]', 'Occupied'],
           ].map(([bg, label]) => (
-            <div key={label} className="mb-1 flex items-center gap-1.5 text-xs text-white/95 last:mb-0 dark:text-brand-900">
-              <div className={`${bg} w-2.5 h-2.5 rounded-full shrink-0`} />
+            <div key={label} className="mb-1 flex items-center gap-1.5 text-xs text-white/95 dark:text-brand-900">
+              <div className="relative flex items-center justify-center w-3.5 h-3.5 shrink-0">
+                <div className={`${bg} w-2.5 h-2.5 rounded-full`} />
+                <div className="absolute inset-0 rounded-full border-[1.5px] border-[#FFD700]" />
+              </div>
               {label}
             </div>
           ))}
-          <div className="mt-0.5">
-            <div className="flex items-center gap-1.5 text-xs text-white/95 dark:text-brand-900">
-              <div className="h-3 w-3 shrink-0 rounded-full border-2 border-[#FFD700] bg-transparent" />
-              <span>Has rule info</span>
+          <div className="mt-2 pt-1.5 border-t border-white/20 dark:border-brand-800/20">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
+              Limited Info
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-white/75 dark:text-brand-900/70">
+              <div className="w-2 h-2 rounded-full bg-gray-400/60 shrink-0" />
+              Sensor only — check signage
             </div>
           </div>
         </div>
