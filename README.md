@@ -7,7 +7,7 @@ MelOPark joins three City of Melbourne open datasets (live bay sensors, parking 
 ## What it does
 
 - **Live Parking Map** - real-time bay availability from ~5,000 in-ground sensors
-- **Restriction Translator** - tap any bay for plain English parking rules personalised to your arrival time
+- **Restriction Translator** — raw signage-style codes (for example, 2P Meter 8–18 Mon–Fri) are turned into plain language (for example, 2-hour parking, Mon–Fri 8 am–6 pm, pay by meter). Tap any bay for rules aligned to your arrival time. Kerbside signs are easy to misread; MeloPark decodes them so drivers do not have to.
 - **Trap Detector** - warns if a clearway or tow zone kicks in during your stay
 - **Accessibility Mode** (Iteration 2) - live disability bay status with extended time calculations
 

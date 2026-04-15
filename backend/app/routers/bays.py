@@ -1,6 +1,7 @@
 """Bay evaluation endpoints (Epic 2 — US 2.1, 2.2, 2.3)."""
 
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -21,7 +22,7 @@ _DEFAULT_DURATION = 60  # minutes
 )
 def evaluate_bay(
     bay_id: str,
-    arrival_iso: str | None = Query(
+    arrival_iso: Optional[str] = Query(
         default=None,
         description="ISO-8601 arrival time (e.g. 2026-04-14T10:30:00). Defaults to now.",
     ),
@@ -57,7 +58,7 @@ def evaluate_bulk(
         ...,
         description="Bounding box as south,west,north,east (e.g. -37.82,144.95,-37.80,144.97).",
     ),
-    arrival_iso: str | None = Query(
+    arrival_iso: Optional[str] = Query(
         default=None,
         description="ISO-8601 arrival time. Defaults to now.",
     ),

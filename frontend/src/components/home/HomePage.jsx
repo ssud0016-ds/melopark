@@ -14,6 +14,7 @@ const WHY_CARDS = [
   { icon: '🌱', title: 'Lower Emissions',         body: "Every minute a car cruises for parking releases unnecessary CO\u2082. By reducing search time, MeloPark directly cuts vehicle emissions \u2014 supporting Melbourne's net-zero targets by 2040." },
   { icon: '📡', title: 'Predictive Intelligence',  body: "We don't just show you what's available now \u2014 our models predict which bays will free up in the next 30 minutes, so you can plan your journey before leaving home." },
   { icon: '🏙️', title: 'Better City Utilisation',  body: "Melbourne already has the infrastructure. MeloPark makes it smarter \u2014 no new construction required. Existing sensors, existing bays, better outcomes for everyone." },
+  { icon: '🅿️', title: 'Plain-English restrictions', body: "Raw codes such as 2P Meter 8\u201318 Mon\u2013Fri become clear wording: 2-hour parking, Mon\u2013Fri 8 am\u20136 pm, pay by meter. Parking signage is notoriously confusing; MeloPark decodes it so you do not have to." },
 ]
 
 function SectionLabel({ children }) {

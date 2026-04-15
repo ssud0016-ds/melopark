@@ -14,6 +14,7 @@ Architecture: same background-refresh, read-cache-only model as parking_service.
 
 import asyncio
 import logging
+from typing import Optional
 
 import httpx
 
@@ -44,7 +45,7 @@ _cache: dict[int, str] = {}
 _cache_lock = asyncio.Lock()
 
 
-def _map_type_desc(raw: str | None) -> str:
+def _map_type_desc(raw: Optional[str]) -> str:
     """Map a raw TypeDesc value to a frontend-friendly bay_type category."""
     if not raw:
         return "Other"
@@ -60,7 +61,7 @@ def _map_type_desc(raw: str | None) -> str:
     return "Other"
 
 
-def _extract_type_desc(record: dict) -> str | None:
+def _extract_type_desc(record: dict) -> Optional[str]:
     """Extract TypeDesc from a record regardless of exact field name casing."""
     for key in ("typedesc", "type_desc", "TypeDesc", "TYPEDESC"):
         if key in record:
@@ -68,7 +69,7 @@ def _extract_type_desc(record: dict) -> str | None:
     return None
 
 
-def _extract_bay_id(record: dict) -> int | None:
+def _extract_bay_id(record: dict) -> Optional[int]:
     """Extract the bay identifier used to join with sensor data."""
     for key in ("bay_id", "bayid", "BayId", "BAY_ID"):
         if key in record and record[key] is not None:
@@ -226,7 +227,7 @@ async def fetch_restrictions_lookup() -> dict[int, str]:
         return dict(_cache)
 
 
-def get_cached_bay_type(bay_id_str: str) -> str | None:
+def get_cached_bay_type(bay_id_str: str) -> Optional[str]:
     """Synchronously return the cached bay_type string for a given bay_id.
 
     Safe to call from synchronous code (e.g. SQLAlchemy route handlers)
