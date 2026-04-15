@@ -19,7 +19,9 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
   const hasRealVerdict = verdict === 'yes' || verdict === 'no'
   const isUnknown = verdict === 'unknown'
   const restriction = evaluation?.active_restriction ?? null
-  const noRestrictionData = !evaluationPending && !restriction
+  const dataSource = evaluation?.data_source ?? null
+  const hasRealData = dataSource === 'db' || dataSource === 'api_fallback'
+  const noRestrictionData = !evaluationPending && !restriction && !hasRealData
   const NO_DATA_FALLBACK = 'Restriction data not available — check signage on site'
 
   // ── Visual type (colour) ────────────────────────────────────────────────
@@ -70,11 +72,12 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
 
   const limitVal = restriction?.typedesc
     ?? (bay.bayType !== 'Other' ? bay.bayType : null)
-    ?? '\u2014'
+    ?? (hasRealData && verdict === 'yes' ? 'None active' : '\u2014')
 
   const costVal = 'Check street signage for pricing'  // no cost data in any source
 
-  const appliesVal = restriction?.plain_english ?? NO_DATA_FALLBACK
+  const appliesVal = restriction?.plain_english
+    ?? (hasRealData && verdict === 'yes' ? 'No restrictions active right now — free to park.' : NO_DATA_FALLBACK)
 
   let tone
   if (loading) tone = 'neutral'
