@@ -61,7 +61,7 @@ export default function BayDetailSheet({
   const spotDotColor = bay.free === 0 ? 'bg-danger' : 'bg-accent'
 
   const feedUpdatedStr = lastUpdated
-    ? lastUpdated.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+    ? lastUpdated.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : null
 
   const sensorStr = bay.sensorLastUpdated
