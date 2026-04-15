@@ -19,6 +19,8 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
   const hasRealVerdict = verdict === 'yes' || verdict === 'no'
   const isUnknown = verdict === 'unknown'
   const restriction = evaluation?.active_restriction ?? null
+  const noRestrictionData = !evaluationPending && !restriction
+  const NO_DATA_FALLBACK = 'Restriction data not available — check signage on site'
 
   // ── Visual type (colour) ────────────────────────────────────────────────
   let resolvedType = bay.type   // 'available' | 'trap' | 'occupied'
@@ -58,11 +60,13 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
 
   const reasonText = loading
     ? 'Loading rule evaluation\u2026'
-    : isUnknown
-      ? evaluation?.reason ?? 'Rule data not available for this bay. Check posted street signage.'
-      : hasRealVerdict
-        ? evaluation.reason
-        : 'Rule data unavailable — check posted signage.'
+    : noRestrictionData
+      ? NO_DATA_FALLBACK
+      : isUnknown
+        ? (evaluation?.reason ?? NO_DATA_FALLBACK)
+        : hasRealVerdict
+          ? evaluation.reason
+          : NO_DATA_FALLBACK
 
   const limitVal = restriction?.typedesc
     ?? (bay.bayType !== 'Other' ? bay.bayType : null)
@@ -70,7 +74,7 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
 
   const costVal = 'Check street signage for pricing'  // no cost data in any source
 
-  const appliesVal = restriction?.plain_english ?? 'Check posted street signage'
+  const appliesVal = restriction?.plain_english ?? NO_DATA_FALLBACK
 
   let tone
   if (loading) tone = 'neutral'
