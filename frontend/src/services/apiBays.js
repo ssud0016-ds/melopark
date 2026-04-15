@@ -55,6 +55,7 @@ export function mapApiRecordToBay(record) {
     spots: 1,                           // CoM model: 1 sensor = 1 kerbside bay
     free: isFree ? 1 : 0,
     bayType,                            // raw CoM type string (real external API)
+    hasRules: !!record.has_restriction_data,
     sensorLastUpdated: record.last_updated ?? null,
     source: 'live',
   }

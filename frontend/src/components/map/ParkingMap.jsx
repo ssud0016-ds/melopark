@@ -151,17 +151,19 @@ export default function ParkingMap({
           else if (!inFilter) opacity = 0.22
           const cols = BAY_COLORS[bay.type] || BAY_COLORS.available
           const selected = bay.id === selectedBayId
+          const hasRules = bay.hasRules
+          const baseRadius = hasRules ? 9 : 6
           return (
             <CircleMarker
               key={bay.id}
               center={[ll.lat, ll.lng]}
-              radius={selected ? 11 : 7}
+              radius={selected ? 13 : baseRadius}
               pathOptions={{
-                color: '#ffffff',
+                color: hasRules ? '#35338c' : '#ffffff',
                 fillColor: cols.border,
                 fillOpacity: opacity,
                 opacity,
-                weight: selected ? 3 : 2,
+                weight: selected ? 3 : hasRules ? 2.5 : 1.5,
               }}
               eventHandlers={{
                 click: (e) => {
@@ -177,6 +179,14 @@ export default function ParkingMap({
                   <span className="text-gray-700 dark:text-gray-300">
                     {bay.free}/{bay.spots} spots free
                   </span>
+                  {hasRules && (
+                    <>
+                      <br />
+                      <span style={{color:'#35338c',fontWeight:600,fontSize:'11px'}}>
+                        ✓ Restriction rules available
+                      </span>
+                    </>
+                  )}
                 </div>
               </Popup>
             </CircleMarker>

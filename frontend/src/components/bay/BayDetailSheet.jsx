@@ -164,6 +164,27 @@ export default function BayDetailSheet({
           </div>
         )}
 
+        {/* No restriction data notice */}
+        {!evalLoading && !bay.hasRules && (
+          <div className="mb-3.5 px-3.5 py-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-start gap-2.5">
+              <span className="text-lg leading-none mt-0.5">🔍</span>
+              <div>
+                <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">
+                  No restriction data for this bay
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-2">
+                  This bay has live sensor data (occupied/vacant) but the City of Melbourne
+                  restrictions dataset does not cover it. Always check the posted street signage.
+                </p>
+                <p className="text-[11px] text-[#35338c] dark:text-[#a3a1e6] font-semibold">
+                  Tip: Look for bays with a purple ring on the map — they have full rule info.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Data source transparency note */}
         {!evalLoading && showApiNote && (
           <div className="mb-3 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/40 text-[11px] text-blue-700 dark:text-blue-300">
