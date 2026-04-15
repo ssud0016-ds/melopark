@@ -79,7 +79,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
   return (
     <div className="relative flex-1">
       {/* Input pill */}
-      <div className="flex items-center gap-2.5 bg-white dark:bg-surface-dark-secondary rounded-xl px-4 py-2.5 shadow-overlay border border-gray-200/60 dark:border-gray-700/60">
+      <div className="flex items-center gap-2.5 bg-white dark:bg-surface-dark-secondary rounded-xl px-4 py-2.5 shadow-overlay border border-gray-200/60 dark:border-gray-700/60 focus-within:outline-none focus-within:ring-0">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className="shrink-0 text-gray-400">
           <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5" />
           <line x1="10" y1="10" x2="14" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -94,7 +94,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
           placeholder="Search Melbourne CBD address or landmark..."
           aria-label="Search for a destination in Melbourne CBD"
           aria-autocomplete="list"
-          className="flex-1 border-none bg-transparent outline-none font-sans text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+          className="flex-1 border-none bg-transparent outline-none focus-visible:outline-none font-sans text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
         />
         {query && (
           <button
