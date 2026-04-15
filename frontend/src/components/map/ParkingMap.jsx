@@ -12,8 +12,8 @@ import {
 import L from 'leaflet'
 import { BAY_COLORS } from '../../data/mapData'
 import {
-  normToLatLng,
   bayLatLng,
+  destinationLatLng,
   SEARCH_RADIUS_M,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
@@ -28,7 +28,7 @@ function FlyToController({ destination, defaultCenter, defaultZoom, destZoom }) 
   const prev = useRef(null)
   useEffect(() => {
     if (destination) {
-      const ll = normToLatLng(destination.x, destination.y)
+      const ll = destinationLatLng(destination)
       map.flyTo([ll.lat, ll.lng], destZoom, { duration: 0.75 })
     } else if (prev.current) {
       map.flyTo(defaultCenter, defaultZoom, { duration: 0.75 })
@@ -114,7 +114,7 @@ export default function ParkingMap({
     [destination],
   )
 
-  const destLatLng = destination ? normToLatLng(destination.x, destination.y) : null
+  const destLatLng = destination ? destinationLatLng(destination) : null
 
   const { verifiedBays, limitedBays } = useMemo(() => {
     const byType = activeFilter === 'all' ? bays : visibleBays
