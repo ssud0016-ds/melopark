@@ -116,10 +116,10 @@ export default function ParkingMap({
   const destLatLng = destination ? normToLatLng(destination.x, destination.y) : null
 
   const renderedBays = useMemo(() => {
-    // For any active filter other than "all", render only filtered bays.
-    // This keeps clustered and non-clustered views consistent.
-    return activeFilter === 'all' ? bays : visibleBays
-  }, [activeFilter, bays, visibleBays])
+    const byType = activeFilter === 'all' ? bays : visibleBays
+    if (!destination) return byType
+    return byType.filter((b) => proximityBays.some((p) => p.id === b.id))
+  }, [activeFilter, bays, visibleBays, destination, proximityBays])
 
   const baysForClustering = useMemo(() => {
     const live = renderedBays.filter((b) => b.source === 'live')
@@ -234,6 +234,7 @@ export default function ParkingMap({
           <Circle
             center={[destLatLng.lat, destLatLng.lng]}
             radius={SEARCH_RADIUS_M}
+            interactive={false}
             pathOptions={{
               color: 'rgba(53,51,140,0.75)',
               fillColor: '#35338c',

@@ -3,7 +3,7 @@ import { INITIAL_BAYS } from '../data/mapData'
 import { fetchParkingBays } from '../services/apiBays'
 import { isApproxCbd } from '../utils/mapGeo'
 
-const POLL_MS = 60_000
+const POLL_MS = 8_000
 
 const demoBays = () => INITIAL_BAYS.map((b) => ({ ...b, source: 'demo' }))
 
