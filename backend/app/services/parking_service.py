@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import Optional
 
 import httpx
 
@@ -206,7 +207,7 @@ def _map_status(raw_status: str) -> str:
     return _STATUS_MAP.get(raw_status.lower().strip(), "unknown")
 
 
-def _transform_bay(raw: dict) -> dict | None:
+def _transform_bay(raw: dict) -> Optional[dict]:
     """Convert a raw CoM record to a frontend-friendly bay dict.
 
     Returns None if the record has no usable lat/lng.
