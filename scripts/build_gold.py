@@ -56,10 +56,19 @@ POSTGRES TABLES (--write-db)
 HOW TO RUN
 ----------
     cd melopark/
-    python scripts/build_gold.py                      # build gold Parquet
+    python scripts/build_gold.py                      # build gold Parquet + search index
     python scripts/build_gold.py --export-csv         # also export CSV
     python scripts/build_gold.py --write-db           # write to Postgres via DATABASE_URL
-    python scripts/build_gold.py --dry-run            # preview without writing
+    python scripts/build_gold.py --dry-run            # preview gold output only (no files written)
+    python scripts/build_gold.py --search-only        # build search index only
+
+OUTPUT
+------
+    data/gold/gold_bay_restrictions.parquet   (primary output for FastAPI)
+    data/gold/gold_bay_restrictions.csv       (optional, for Supabase upload)
+    data/gold/search_index.parquet            (search autocomplete index)
+    data/gold/search_index.csv                (optional, for DB upload)
+    data/gold/build_metadata.json             (build timestamp, stats)
 
 DEPENDENCIES
 ------------
@@ -97,6 +106,27 @@ GOLD_DIR   = ROOT / "data" / "gold"
 GOLD_DIR.mkdir(parents=True, exist_ok=True)
 
 BACKEND_DIR = ROOT / "backend"
+
+LANDMARKS_REAL = [
+    {"name": "Melbourne Central", "sub": "Cnr La Trobe & Swanston St", "lat": -37.8102, "lng": 144.9628},
+    {"name": "State Library Victoria", "sub": "328 Swanston St, Melbourne", "lat": -37.8098, "lng": 144.9652},
+    {"name": "RMIT University", "sub": "124 La Trobe St, Melbourne", "lat": -37.8083, "lng": 144.9632},
+    {"name": "Flinders Street Station", "sub": "Flinders St & Swanston St", "lat": -37.8183, "lng": 144.9671},
+    {"name": "Federation Square", "sub": "Swanston St & Flinders St", "lat": -37.8180, "lng": 144.9691},
+    {"name": "Queen Victoria Market", "sub": "513 Elizabeth St, Melbourne", "lat": -37.8076, "lng": 144.9568},
+    {"name": "Melbourne Museum", "sub": "11 Nicholson St, Carlton", "lat": -37.8033, "lng": 144.9717},
+    {"name": "Crown Casino", "sub": "8 Whiteman St, Southbank", "lat": -37.8228, "lng": 144.9575},
+    {"name": "Old Melbourne Gaol", "sub": "377 Russell St, Melbourne", "lat": -37.8078, "lng": 144.9654},
+    {"name": "Collins Street", "sub": "Collins St, Melbourne CBD", "lat": -37.8153, "lng": 144.9634},
+    {"name": "Bourke Street Mall", "sub": "Bourke St, Melbourne CBD", "lat": -37.8136, "lng": 144.9653},
+    {"name": "Elizabeth Street", "sub": "Elizabeth St, Melbourne CBD", "lat": -37.8136, "lng": 144.9601},
+    {"name": "Swanston Street", "sub": "Swanston St, Melbourne CBD", "lat": -37.8136, "lng": 144.9663},
+    {"name": "Chinatown Melbourne", "sub": "Little Bourke St, Melbourne", "lat": -37.8118, "lng": 144.9688},
+    {"name": "Melbourne Town Hall", "sub": "90-120 Swanston St", "lat": -37.8148, "lng": 144.9665},
+    {"name": "Emporium Melbourne", "sub": "287 Lonsdale St", "lat": -37.8120, "lng": 144.9644},
+    {"name": "Docklands", "sub": "Harbour Esplanade, Docklands", "lat": -37.8157, "lng": 144.9397},
+    {"name": "GPO Melbourne", "sub": "350 Bourke St, Melbourne", "lat": -37.8131, "lng": 144.9636},
+]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -867,6 +897,88 @@ def build_gold(
     return gold
 
 
+def build_search_index(export_csv: bool = False, verbose: bool = False) -> pd.DataFrame:
+    """
+    Build a unified search index from landmarks + cleaned addresses + streets.
+
+    Output columns:
+        name, sub, category, lat, lng
+    """
+    log.info("=" * 60)
+    log.info("MeloPark — Search Index Build")
+    log.info("Input:  %s", SILVER_DIR)
+    log.info("Output: %s", GOLD_DIR)
+    log.info("=" * 60)
+
+    frames: list[pd.DataFrame] = []
+
+    landmarks = pd.DataFrame(LANDMARKS_REAL)
+    landmarks["category"] = "landmark"
+    frames.append(landmarks[["name", "sub", "category", "lat", "lng"]])
+
+    addresses_path = SILVER_DIR / "addresses_clean.parquet"
+    if addresses_path.exists():
+        addresses = pd.read_parquet(addresses_path)
+        frames.append(addresses[["name", "sub", "category", "lat", "lng"]])
+        log.info("Loaded addresses_clean.parquet -> %d rows", len(addresses))
+    else:
+        log.warning("addresses_clean.parquet not found. Address rows will be omitted.")
+
+    streets_path = SILVER_DIR / "streets_clean.parquet"
+    if streets_path.exists():
+        streets = pd.read_parquet(streets_path)
+        frames.append(streets[["name", "sub", "category", "lat", "lng"]])
+        log.info("Loaded streets_clean.parquet   -> %d rows", len(streets))
+    else:
+        log.warning("streets_clean.parquet not found. Street rows will be omitted.")
+
+    if not frames:
+        raise FileNotFoundError("No input frames available to build search_index.")
+
+    search_index = pd.concat(frames, ignore_index=True)
+    search_index["name"] = search_index["name"].astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
+    search_index["sub"] = search_index["sub"].fillna("").astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
+    search_index["category"] = search_index["category"].astype(str).str.lower().str.strip()
+    search_index["lat"] = pd.to_numeric(search_index["lat"], errors="coerce")
+    search_index["lng"] = pd.to_numeric(search_index["lng"], errors="coerce")
+    search_index = search_index.dropna(subset=["name", "category", "lat", "lng"])
+    search_index = search_index[search_index["name"] != ""]
+
+    category_order = {"landmark": 0, "street": 1, "address": 2}
+    search_index["_priority"] = search_index["category"].map(category_order).fillna(9)
+    search_index = search_index.sort_values(["_priority", "name", "sub"])
+    search_index = search_index.drop_duplicates(subset=["category", "name", "lat", "lng"], keep="first")
+    search_index = search_index.drop(columns=["_priority"]).reset_index(drop=True)
+
+    if verbose:
+        log.info("Rows by category:\n%s", search_index["category"].value_counts().to_string())
+
+    parquet_path = GOLD_DIR / "search_index.parquet"
+    search_index.to_parquet(parquet_path, index=False, engine="pyarrow")
+    log.info("Saved search_index.parquet      (%d rows)", len(search_index))
+
+    if export_csv:
+        csv_path = GOLD_DIR / "search_index.csv"
+        search_index.to_csv(csv_path, index=False)
+        log.info("Saved search_index.csv          (%d rows)", len(search_index))
+
+    meta = {
+        "pipeline_stage": "gold_search_index",
+        "built_at": datetime.now(timezone.utc).isoformat(),
+        "stats": {
+            "total_rows": len(search_index),
+            "by_category": search_index["category"].value_counts().to_dict(),
+            "columns": list(search_index.columns),
+        },
+    }
+    meta_path = GOLD_DIR / "search_index_metadata.json"
+    with open(meta_path, "w") as f:
+        json.dump(meta, f, indent=2)
+    log.info("Metadata -> %s", meta_path.name)
+
+    return search_index
+
+
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -875,11 +987,12 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python scripts/build_gold.py                      # build gold Parquet
+  python scripts/build_gold.py                      # build gold Parquet + search index
   python scripts/build_gold.py --export-csv         # also export CSV for Supabase
   python scripts/build_gold.py --write-db           # write bays + bay_restrictions to Postgres
-  python scripts/build_gold.py --dry-run            # preview without writing
+  python scripts/build_gold.py --dry-run            # preview gold output only
   python scripts/build_gold.py --verbose            # show translation samples
+  python scripts/build_gold.py --search-only        # build search index only
 
 Test translate_sign() directly:
   python -c "from scripts.build_gold import translate_sign; print(translate_sign('2P MTR'))"
@@ -890,11 +1003,17 @@ Test translate_sign() directly:
     parser.add_argument("--export-csv", action="store_true", help="Also export CSV for Supabase upload")
     parser.add_argument("--write-db",   action="store_true", help="Write bays + bay_restrictions to Postgres via DATABASE_URL")
     parser.add_argument("--verbose",    action="store_true", help="Show detailed stats and translation samples")
+    parser.add_argument("--search-only", action="store_true", help="Build only search_index outputs")
 
     args = parser.parse_args()
-    build_gold(
-        dry_run=args.dry_run,
-        export_csv=args.export_csv,
-        write_db=args.write_db,
-        verbose=args.verbose,
-    )
+    if args.search_only:
+        build_search_index(export_csv=args.export_csv, verbose=args.verbose)
+    else:
+        build_gold(
+            dry_run=args.dry_run,
+            export_csv=args.export_csv,
+            write_db=args.write_db,
+            verbose=args.verbose,
+        )
+        if not args.dry_run:
+            build_search_index(export_csv=args.export_csv, verbose=args.verbose)

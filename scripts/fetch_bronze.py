@@ -2,6 +2,18 @@
 fetch_bronze.py - Downloads raw data from City of Melbourne APIs
 and saves to data/bronze/ as Parquet files without any transformation.
 
+PURPOSE
+-------
+Fetches raw data from the City of Melbourne (CoM) Open Data API and saves
+it as-is to the data/bronze/ directory with no transformations.
+
+DATASETS FETCHED
+----------------
+1. on-street-parking-bay-sensors — live sensor readings per bay
+2. on-street-car-park-bay-restrictions — restriction rules per bay
+3. on-street-parking-bays — bay polygons (geometry)
+4. street-addresses — geocoded addresses (search index input)
+
 Usage:
     python scripts/fetch_bronze.py
 
@@ -9,17 +21,18 @@ This pulls:
     1. Live sensor data (snapshot)
     2. Parking bays (static, full export)
     3. Bay restrictions (static, full export)
+    4. Street addresses (static, full export, for search)
 
 Output:
     data/bronze/sensors.parquet
     data/bronze/restrictions.parquet
     data/bronze/parking_bays.parquet
+    data/bronze/addresses.parquet
     data/bronze/fetch_metadata.json
 """
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -53,6 +66,11 @@ DATASETS = {
         "dataset_id": "on-street-parking-bays",
         "description": "Spatial polygon boundaries for each physical bay",
         "output_file": "parking_bays.parquet",
+    },
+    "addresses": {
+        "dataset_id": "street-addresses",
+        "description": "City of Melbourne street/property addresses for search",
+        "output_file": "addresses.parquet",
     },
 }
 
