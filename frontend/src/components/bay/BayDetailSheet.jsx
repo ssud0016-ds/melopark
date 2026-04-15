@@ -84,6 +84,7 @@ export default function BayDetailSheet({
 
   // Backend warning description (only from real evaluation — no local guessing)
   const backendWarn = evaluation?.warning?.description ?? null
+  const hasRuleInfo = Boolean(bay.hasRules)
 
   // Data source transparency note
   const dataSource = evaluation?.data_source ?? null
@@ -132,6 +133,19 @@ export default function BayDetailSheet({
             <div className="text-xs text-gray-400 dark:text-gray-500">
               Bay #{bay.id}
               {walkStr && <span> \u2013 {walkStr}</span>}
+            </div>
+            <div className="mt-2">
+              {hasRuleInfo ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#35338c]/30 bg-[#35338c]/5 px-2 py-0.5 text-[10px] font-semibold text-[#35338c] dark:border-[#a3a1e6]/40 dark:bg-[#35338c]/20 dark:text-[#a3a1e6]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#35338c] dark:bg-[#a3a1e6]" />
+                  Has rule info
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-300" />
+                  No rule info
+                </span>
+              )}
             </div>
           </div>
           {feedUpdatedStr && (
