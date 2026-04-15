@@ -88,7 +88,6 @@ export default function BayDetailSheet({
   // Data source transparency note
   const dataSource = evaluation?.data_source ?? null
   const showApiNote = dataSource === 'api_fallback'
-  const showUnknownNote = dataSource === 'unknown' || (evaluation && !evalLoading && evaluation.verdict === 'unknown' && !evaluation.active_restriction)
 
   return (
     <div
@@ -112,8 +111,13 @@ export default function BayDetailSheet({
         &times;
       </button>
 
-      {/* Header */}
-      <div className="px-5 pb-4 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0 -mt-2">
+      {/* Primary answer first — "Can I park here?" */}
+      <div className="px-5 pb-4 shrink-0 -mt-2">
+        <VerdictCard bay={bay} evaluation={evaluation} evaluationPending={evalLoading} />
+      </div>
+
+      {/* Location & feed context */}
+      <div className="px-5 pb-4 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex-1 min-w-0">
             <div
@@ -160,27 +164,12 @@ export default function BayDetailSheet({
           </div>
         )}
 
-        {/* Evaluation loading indicator */}
-        {evalLoading && (
-          <div className="text-[11px] text-gray-400 mb-3 px-1 animate-pulse">
-            Loading rule data\u2026
-          </div>
-        )}
-
         {/* Data source transparency note */}
         {!evalLoading && showApiNote && (
           <div className="mb-3 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/40 text-[11px] text-blue-700 dark:text-blue-300">
             Rule data sourced from City of Melbourne external API (no detailed time schedule available).
           </div>
         )}
-        {!evalLoading && showUnknownNote && (
-          <div className="mb-3 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/40 text-[11px] text-gray-500 dark:text-gray-400">
-            Rule data not available for this bay. Always check posted street signage.
-          </div>
-        )}
-
-        {/* Verdict card — backed by DB or API; never local guessing */}
-        <VerdictCard bay={bay} evaluation={evalLoading ? null : evaluation} />
 
         {/* Warning — only from backend evaluation, never locally inferred */}
         {backendWarn && (
