@@ -1,15 +1,12 @@
-import { useRef, useCallback, useEffect } from 'react'
-import { useState } from 'react'
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import ParkingMap from './ParkingMap'
 import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import BayList from '../bay/BayList'
 import FilterChips from '../feedback/FilterChips'
-import BottomSheet from '../layout/BottomSheet'
+import BottomSheet, { SNAP_PEEK, SNAP_HALF, SNAP_FULL } from '../layout/BottomSheet'
 import { useMapState } from '../../hooks/useMapState'
 import { cn } from '../../utils/cn'
-
-const SHEET_PEEK_PX = 268
 
 export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry }) {
   const mapRef = useRef(null)
@@ -22,8 +19,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     destination,
     pickDestination,
     clearDestination,
-    sheetOpen,
-    setSheetOpen,
+    sheetSnap,
+    setSheetSnap,
     getVisibleBays,
     getProximityBays,
     defaultMapCenter,
@@ -78,9 +75,24 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     [setSelectedBayId],
   )
 
+  // Collapse sheet when a bay detail opens
   useEffect(() => {
-    if (selectedBay) setSheetOpen(false)
-  }, [selectedBay, setSheetOpen])
+    if (selectedBay) setSheetSnap(SNAP_PEEK)
+  }, [selectedBay, setSheetSnap])
+
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+  const sheetHeightPx = sheetSnap * vh
+
+  // Height available for the BayList inside the sheet (minus header ~72px)
+  const listHeight = Math.max(120, sheetHeightPx - 72)
+
+  // Don't render the heavy bay list on mobile when BayDetailSheet covers everything
+  const hideBayList = isMobile && !!selectedBay
+
+  // Bottom offset for floating UI elements that sit above the sheet
+  const floatingBottom = useMemo(() => {
+    return Math.round(sheetHeightPx + 14)
+  }, [sheetHeightPx])
 
   return (
     <div className="pt-16 h-screen overflow-hidden">
@@ -170,30 +182,26 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </div>
         )}
 
-        {/* Bay count pill (bottom-left) */}
+        {/* Bay count pill (bottom-left) — floats above sheet */}
         <div
-          className={cn(
-            'absolute left-3.5 z-[500] bg-white dark:bg-surface-dark-secondary rounded-full px-3.5 py-1.5 border border-gray-200/60 dark:border-gray-700/60 shadow-overlay text-sm font-semibold text-gray-900 dark:text-gray-100 transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]',
-            sheetOpen ? 'bottom-[calc(75vh+14px)]' : 'bottom-[290px]',
-          )}
+          className="absolute left-3.5 z-[500] bg-white dark:bg-surface-dark-secondary rounded-full px-3.5 py-1.5 border border-gray-200/60 dark:border-gray-700/60 shadow-overlay text-sm font-semibold text-gray-900 dark:text-gray-100 transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]"
+          style={{ bottom: floatingBottom }}
           aria-live="polite"
         >
           <span className="text-brand">{visibleBays.length}</span> bays shown
         </div>
 
-        {/* Legend (bottom-right) */}
+        {/* Legend (bottom-right) — floats above sheet */}
         <div
-          className={cn(
-            'absolute right-3.5 z-[500] bg-white dark:bg-surface-dark-secondary rounded-xl p-2.5 border border-gray-200/60 dark:border-gray-700/60 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]',
-            sheetOpen ? 'bottom-[calc(75vh+14px)]' : 'bottom-[290px]',
-          )}
+          className="absolute right-3.5 z-[500] bg-white dark:bg-surface-dark-secondary rounded-xl p-2.5 border border-gray-200/60 dark:border-gray-700/60 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]"
+          style={{ bottom: floatingBottom }}
         >
           <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wider">
             Bay Status
           </div>
           {[
             ['bg-accent', 'Available'],
-            ['bg-trap', 'Rule Trap'],
+            ['bg-trap', 'Restricted'],
             ['bg-[#ed6868]', 'Occupied'],
           ].map(([bg, label]) => (
             <div key={label} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1 last:mb-0">
@@ -201,24 +209,33 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
               {label}
             </div>
           ))}
+          <div className="mt-1.5 pt-1.5 border-t border-gray-100 dark:border-gray-700">
+            <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <div className="w-3 h-3 rounded-full shrink-0 border-2 border-[#35338c] bg-accent" />
+              <span>Has rule info</span>
+            </div>
+          </div>
         </div>
 
         {/* Bottom sheet with bay list */}
         <BottomSheet
-          open={sheetOpen}
-          onToggle={() => setSheetOpen((o) => !o)}
+          snap={sheetSnap}
+          onSnapChange={setSheetSnap}
           title={destination ? `Near ${destination.name}` : 'Nearby Bays'}
           subtitle={`${visibleBays.length} bay${visibleBays.length !== 1 ? 's' : ''} \u00b7 Data updated ${tsStr}`}
         >
-          <BayList
-            visibleBays={visibleBays}
-            selectedBayId={selectedBayId}
-            destination={destination}
-            onSelect={(id) => {
-              setSelectedBayId(id)
-              setSheetOpen(false)
-            }}
-          />
+          {!hideBayList && (
+            <BayList
+              visibleBays={visibleBays}
+              selectedBayId={selectedBayId}
+              destination={destination}
+              height={listHeight}
+              onSelect={(id) => {
+                setSelectedBayId(id)
+                setSheetSnap(SNAP_PEEK)
+              }}
+            />
+          )}
         </BottomSheet>
 
         {/* Bay detail panel */}
@@ -229,7 +246,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             onClose={() => setSelectedBayId(null)}
             isMobile={isMobile}
             lastUpdated={lastUpdated}
-            reserveBottomPx={isMobile ? 0 : SHEET_PEEK_PX}
+            reserveBottomPx={isMobile ? 0 : Math.round(SNAP_PEEK * vh)}
           />
         )}
       </div>

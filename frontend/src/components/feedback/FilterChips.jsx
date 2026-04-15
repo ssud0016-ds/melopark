@@ -1,20 +1,20 @@
 import { cn } from '../../utils/cn'
 
 const FILTERS = [
-  { id: 'all',       label: 'All bays',     color: 'brand' },
-  { id: 'available', label: '🟢 Available', color: 'brand' },
-  { id: 'trap',      label: '⚠️ Traps',     color: 'trap' },
-  { id: '2p',        label: '2P',           color: 'violet' },
-  { id: '3p',        label: '3P',           color: 'cyan' },
-  { id: '4p',        label: '4P',           color: 'amber' },
+  { id: 'all',       label: 'All Bays',      color: 'brand' },
+  { id: 'available', label: '🟢 Available',  color: 'brand' },
+  { id: 'hasRules',  label: '📋 Has Rules',  color: 'violet' },
+  { id: 'trap',      label: '⚠️ Restricted', color: 'trap' },
+  { id: 'timed',     label: '⏱ Timed',       color: 'cyan' },
+  { id: 'occupied',  label: '🔴 Occupied',   color: 'amber' },
 ]
 
 const COLOR_MAP = {
-  brand:  { active: 'bg-brand text-white border-brand',               inactive: '' },
-  trap:   { active: 'bg-trap text-white border-trap',                 inactive: '' },
-  violet: { active: 'bg-brand-light text-white border-brand-light',    inactive: '' },
-  cyan:   { active: 'bg-accent text-brand border-accent',             inactive: '' },
-  amber:  { active: 'bg-brand-dark text-white border-brand-dark',      inactive: '' },
+  brand:  { active: 'bg-brand text-white border-brand' },
+  trap:   { active: 'bg-trap text-white border-trap' },
+  violet: { active: 'bg-[#35338c] text-white border-[#35338c]' },
+  cyan:   { active: 'bg-accent text-brand border-accent' },
+  amber:  { active: 'bg-[#ed6868] text-white border-[#ed6868]' },
 }
 
 export default function FilterChips({ activeFilter, onFilterChange }) {
