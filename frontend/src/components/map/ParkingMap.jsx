@@ -20,6 +20,9 @@ import {
   DESTINATION_MAP_ZOOM,
 } from '../../utils/mapGeo'
 
+const CLUSTER_ZOOM_CUTOFF = 18
+const INTERSECTION_CELL_DEG = 0.0012
+
 function FlyToController({ destination, defaultCenter, defaultZoom, destZoom }) {
   const map = useMap()
   const prev = useRef(null)
@@ -55,8 +58,20 @@ function MapEmptyClick({ onEmptyClick }) {
   return null
 }
 
+function MapZoomTracker({ onZoomChange }) {
+  const map = useMapEvents({
+    zoomend() {
+      onZoomChange(map.getZoom())
+    },
+  })
+  useEffect(() => {
+    onZoomChange(map.getZoom())
+  }, [map, onZoomChange])
+  return null
+}
+
 function destinationDivIcon(name) {
-  const esc = String(name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
+  const esc = String(name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\"/g, '&quot;')
   return L.divIcon({
     className: 'mp-dest-marker',
     html: `<div style="display:flex;flex-direction:column;align-items:center;width:180px;margin-left:-90px;margin-top:-44px;text-align:center;pointer-events:none;">
@@ -72,6 +87,7 @@ export default function ParkingMap({
   bays,
   visibleBays,
   proximityBays,
+  activeFilter,
   selectedBayId,
   destination,
   onBayClick,
@@ -83,6 +99,7 @@ export default function ParkingMap({
   const [isDark, setIsDark] = useState(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   )
+  const [zoomLevel, setZoomLevel] = useState(defaultZoom)
   useEffect(() => {
     const obs = new MutationObserver(() =>
       setIsDark(document.documentElement.classList.contains('dark'))
@@ -97,6 +114,90 @@ export default function ParkingMap({
   )
 
   const destLatLng = destination ? normToLatLng(destination.x, destination.y) : null
+
+  const renderedBays = useMemo(() => {
+    // For any active filter other than "all", render only filtered bays.
+    // This keeps clustered and non-clustered views consistent.
+    return activeFilter === 'all' ? bays : visibleBays
+  }, [activeFilter, bays, visibleBays])
+
+  const baysForClustering = useMemo(() => {
+    const live = renderedBays.filter((b) => b.source === 'live')
+    return live.length ? live : renderedBays
+  }, [renderedBays])
+
+  const clustered = useMemo(() => {
+    if (zoomLevel >= CLUSTER_ZOOM_CUTOFF) return []
+    const cellSize = INTERSECTION_CELL_DEG * Math.pow(2, CLUSTER_ZOOM_CUTOFF - 1 - zoomLevel)
+    const groups = new Map()
+
+    baysForClustering.forEach((bay) => {
+      const ll = bayLatLng(bay)
+      const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)
+      if (!inRadius) return
+
+      const gx = Math.floor(ll.lat / cellSize)
+      const gy = Math.floor(ll.lng / cellSize)
+      const key = `${gx}:${gy}`
+      const prev = groups.get(key)
+      if (prev) {
+        prev.total += 1
+        if (bay.type === 'available') prev.available += 1
+        if (bay.type === 'occupied') prev.occupied += 1
+        if (bay.type === 'trap') prev.trap += 1
+      } else {
+        groups.set(key, {
+          key,
+          sampleLat: ll.lat,
+          sampleLng: ll.lng,
+          total: 1,
+          available: bay.type === 'available' ? 1 : 0,
+          occupied: bay.type === 'occupied' ? 1 : 0,
+          trap: bay.type === 'trap' ? 1 : 0,
+        })
+      }
+    })
+
+    return Array.from(groups.values()).map((g) => ({
+      key: g.key,
+      lat: g.sampleLat,
+      lng: g.sampleLng,
+      total: g.total,
+      available: g.available,
+      occupied: g.occupied,
+      trap: g.trap,
+    }))
+  }, [baysForClustering, zoomLevel, destination, proximityBays])
+
+  const clusterIcon = (available, occupied, trap, total) => {
+    const label = `${available}/${total}`
+    const labelLen = label.length
+    let bg = isDark ? '#35338c' : '#dce8ff'
+    let text = isDark ? '#f4f6ff' : '#35338c'
+    if (total > 0 && available === total) bg = '#a3ec48'
+    else if (total > 0 && occupied === total) bg = '#ed6868'
+    else if (total > 0 && trap === total) bg = '#FF7F50'
+
+    if (bg === '#a3ec48') text = '#3f5618'
+    else if (bg === '#FF7F50') text = '#8f3f22'
+    else if (bg === '#ed6868') text = '#611d1d'
+    const ring = activeFilter === 'timed' || activeFilter === 'hasRules' ? '#FFD700' : '#ffffff'
+
+    const fontSize = labelLen >= 10 ? 7 : labelLen >= 8 ? 8 : labelLen >= 6 ? 9 : 11
+    return L.divIcon({
+      className: 'mp-cluster-icon',
+      html: `<div style="
+        width:42px;height:42px;border-radius:999px;
+        background:${bg};border:2px solid ${ring};
+        display:flex;align-items:center;justify-content:center;
+        color:${text};font:700 ${fontSize}px/1 Inter,system-ui,sans-serif;
+        letter-spacing:-0.1px;white-space:nowrap;overflow:hidden;
+        box-shadow:0 2px 10px rgba(0,0,0,0.2);
+      ">${label}</div>`,
+      iconSize: [42, 42],
+      iconAnchor: [21, 21],
+    })
+  }
 
   return (
     <div className="absolute inset-0 z-[1]">
@@ -126,6 +227,7 @@ export default function ParkingMap({
           destZoom={destZoom}
         />
         <MapReadyNotifier onReady={onMapReady} />
+        <MapZoomTracker onZoomChange={setZoomLevel} />
         <MapEmptyClick onEmptyClick={() => onBayClick(null)} />
 
         {destination && destLatLng && (
@@ -142,7 +244,28 @@ export default function ParkingMap({
           />
         )}
 
-        {bays.map((bay) => {
+        {zoomLevel < CLUSTER_ZOOM_CUTOFF &&
+          clustered.map((c) => (
+            <Marker
+              key={`cluster-${c.key}`}
+              position={[c.lat, c.lng]}
+              icon={clusterIcon(c.available, c.occupied, c.trap, c.total)}
+              eventHandlers={{
+                click: (e) => {
+                  const m = e.target?._map
+                  if (m) m.setView([c.lat, c.lng], Math.min(19, zoomLevel + 2))
+                },
+              }}
+            >
+              <Popup>
+                <div className="min-w-[130px]">
+                  <strong>{c.available}/{c.total}</strong> bays available
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+        {zoomLevel >= CLUSTER_ZOOM_CUTOFF && renderedBays.map((bay) => {
           const ll = bayLatLng(bay)
           const inFilter = visibleBays.some((v) => v.id === bay.id)
           const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)
@@ -159,7 +282,7 @@ export default function ParkingMap({
               center={[ll.lat, ll.lng]}
               radius={selected ? 13 : baseRadius}
               pathOptions={{
-                color: hasRules ? '#35338c' : '#ffffff',
+                color: hasRules ? '#FFD700' : '#ffffff',
                 fillColor: cols.border,
                 fillOpacity: opacity,
                 opacity,
@@ -182,7 +305,7 @@ export default function ParkingMap({
                   {hasRules && (
                     <>
                       <br />
-                      <span style={{color:'#35338c',fontWeight:600,fontSize:'11px'}}>
+                      <span style={{ color: '#35338c', fontWeight: 600, fontSize: '11px' }}>
                         ✓ Restriction rules available
                       </span>
                     </>
