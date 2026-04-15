@@ -45,7 +45,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: false,
       })
     : '—'
 
@@ -157,9 +156,14 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {destination && (
           <div
-            className="absolute bottom-3.5 z-[500] bg-surface-secondary text-gray-900 rounded-full px-5 py-2 text-sm font-semibold whitespace-nowrap shadow-overlay flex items-center gap-2 max-w-[calc(100%-120px)] border-2 border-brand"
-            style={{ left: '50%', transform: 'translateX(-50%)' }}
+            className="absolute top-[118px] z-[500] bg-surface-secondary text-gray-900 rounded-full px-5 py-2 text-sm font-semibold whitespace-nowrap shadow-overlay flex items-center gap-2 max-w-[calc(100%-28px)]"
+            style={
+              desktopSheetReservePx
+                ? { left: 14, right: rightInsetPx, marginInline: 'auto' }
+                : { left: '50%', transform: 'translateX(-50%)' }
+            }
           >
+            <span>{proxFreeSpots > 0 ? '🟢' : '🔴'}</span>
             <span>
               {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across&nbsp;
               {proxFreeBays} bay{proxFreeBays !== 1 ? 's' : ''} within 400 m of {destination.name}
