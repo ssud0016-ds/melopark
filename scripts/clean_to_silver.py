@@ -440,6 +440,28 @@ def _pick_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
     return None
 
 
+def _as_mapping(val) -> dict | None:
+    """Parse API geo objects from dicts or JSON strings (after bronze Parquet round-trip)."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str) and val.strip().startswith("{"):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, dict) else None
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def _lat_lng_from_geo_cell(val) -> tuple:
+    m = _as_mapping(val)
+    if not m:
+        return (None, None)
+    return (m.get("lat"), m.get("lon"))
+
+
 def clean_addresses(df_raw: pd.DataFrame, verbose: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Clean raw address data into search-ready rows.
@@ -459,8 +481,9 @@ def clean_addresses(df_raw: pd.DataFrame, verbose: bool = False) -> tuple[pd.Dat
     lon_col = _pick_column(df, ["longitude", "lon", "lng", "x"])
 
     if (lat_col is None or lon_col is None) and geo_col:
-        df["lat"] = df[geo_col].apply(lambda g: g.get("lat") if isinstance(g, dict) else None)
-        df["lng"] = df[geo_col].apply(lambda g: g.get("lon") if isinstance(g, dict) else None)
+        latlng = df[geo_col].apply(_lat_lng_from_geo_cell)
+        df["lat"] = latlng.apply(lambda t: t[0])
+        df["lng"] = latlng.apply(lambda t: t[1])
     elif lat_col and lon_col:
         df["lat"] = pd.to_numeric(df[lat_col], errors="coerce")
         df["lng"] = pd.to_numeric(df[lon_col], errors="coerce")
@@ -485,9 +508,12 @@ def clean_addresses(df_raw: pd.DataFrame, verbose: bool = False) -> tuple[pd.Dat
         log.info("  Address columns: %s", list(df.columns))
     log.info("  CBD filter: %d -> %d rows", initial_rows, len(df))
 
-    addr_col = _pick_column(df, ["address", "street_address", "full_address", "streetaddress"])
-    house_col = _pick_column(df, ["housenumber", "house_number", "street_number"])
-    street_col = _pick_column(df, ["streetname", "street_name", "road_name"])
+    addr_col = _pick_column(
+        df,
+        ["add_comp", "address_pnt", "address", "street_address", "full_address", "streetaddress"],
+    )
+    house_col = _pick_column(df, ["street_no", "housenumber", "house_number", "street_number"])
+    street_col = _pick_column(df, ["str_name", "streetname", "street_name", "road_name"])
     street_type_col = _pick_column(df, ["streettype", "street_type", "road_type"])
     suburb_col = _pick_column(df, ["suburb", "locality", "city"])
     postcode_col = _pick_column(df, ["postcode", "post_code", "postal_code"])
