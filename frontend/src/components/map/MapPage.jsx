@@ -8,6 +8,7 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
 import { fetchEvaluateBulk } from '../../services/apiBays'
 import { formatAtDateTime, formatDurationLabel } from '../../utils/plannerTime'
+import { cn } from '../../utils/cn'
 
 function MapTimeBanner({ arrivalIso, durationMins, onDismiss }) {
   return (
@@ -28,6 +29,28 @@ function MapTimeBanner({ arrivalIso, durationMins, onDismiss }) {
 }
 
 export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry }) {
+  // #region agent log
+  fetch('http://127.0.0.1:7821/ingest/e1842ad7-9c21-486e-8c1a-76c861137f8d', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2e2407' },
+    body: JSON.stringify({
+      sessionId: '2e2407',
+      runId: 'post-fix-2',
+      hypothesisId: 'H1',
+      location: 'frontend/src/components/map/MapPage.jsx:MapPage',
+      message: 'MapPage render entry',
+      data: {
+        codeVersion: 'sheetOpen-removed-v2',
+        typeofCn: typeof cn,
+        hasCn: typeof cn === 'function',
+        hasBaysArray: Array.isArray(bays),
+        baysLen: Array.isArray(bays) ? bays.length : null,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {})
+  // #endregion agent log
+
   const mapRef = useRef(null)
 
   const {
@@ -292,12 +315,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {/* Bay count pill (bottom-left) */}
         <div
-          className={cn(
-            'absolute left-[max(0.875rem,env(safe-area-inset-left,0px))] z-[500] rounded-full border border-gray-200/60 bg-white px-3.5 py-1.5 text-sm font-semibold text-gray-900 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)] dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-100',
-            sheetOpen
-              ? 'bottom-[calc(75vh+14px+env(safe-area-inset-bottom,0px))]'
-              : 'bottom-[calc(290px+env(safe-area-inset-bottom,0px))]',
-          )}
+          className="absolute left-[max(0.875rem,env(safe-area-inset-left,0px))] z-[500] rounded-full border border-gray-200/60 bg-white px-3.5 py-1.5 text-sm font-semibold text-gray-900 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)] dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-100 bottom-[calc(290px+env(safe-area-inset-bottom,0px))]"
           aria-live="polite"
         >
           <span className="text-brand">{visibleBays.length}</span> bays shown
@@ -305,12 +323,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {/* Legend (bottom-right) */}
         <div
-          className={cn(
-            'absolute right-[max(0.875rem,env(safe-area-inset-right,0px))] z-[500] rounded-xl border border-gray-200/60 bg-white p-2.5 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)] dark:border-gray-700/60 dark:bg-surface-dark-secondary',
-            sheetOpen
-              ? 'bottom-[calc(75vh+14px+env(safe-area-inset-bottom,0px))]'
-              : 'bottom-[calc(290px+env(safe-area-inset-bottom,0px))]',
-          )}
+          className="absolute right-[max(0.875rem,env(safe-area-inset-right,0px))] z-[500] rounded-xl border border-gray-200/60 bg-white p-2.5 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)] dark:border-gray-700/60 dark:bg-surface-dark-secondary bottom-[calc(290px+env(safe-area-inset-bottom,0px))]"
         >
           <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wider">
             Bay Status
