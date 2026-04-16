@@ -174,6 +174,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   const desktopSheetReservePx = selectedBay && !isMobile ? 396 : 0
   const rightInsetPx = 14 + desktopSheetReservePx
+  /** Keep search + filters the same max width as the default map view (do not stretch when bay sheet opens). */
+  const TOOLBAR_MAX_PX = 560
 
   const showMapTimeBanner = mapBaysAtPlannedTime && plannerArrivalIso && plannerDurationMins != null
 
@@ -231,8 +233,19 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           className="absolute top-3.5 flex flex-col items-center gap-2.5 z-[500] pointer-events-none"
           style={
             desktopSheetReservePx
-              ? { left: 14, right: rightInsetPx, width: 'auto', maxWidth: 'none' }
-              : { left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 28px)', maxWidth: 560 }
+              ? {
+                  /* Centre within strip [14px, 100% − rightInset] so it matches “main” feel with sheet open */
+                  left: `calc(14px + (100% - 14px - ${rightInsetPx}px) / 2)`,
+                  transform: 'translateX(-50%)',
+                  width: `min(${TOOLBAR_MAX_PX}px, calc(100% - ${14 + rightInsetPx}px))`,
+                  maxWidth: TOOLBAR_MAX_PX,
+                }
+              : {
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 'calc(100% - 28px)',
+                  maxWidth: TOOLBAR_MAX_PX,
+                }
           }
         >
           <div className="flex items-center gap-2.5 w-full pointer-events-auto">
