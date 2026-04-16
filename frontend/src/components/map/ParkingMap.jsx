@@ -40,6 +40,12 @@ function verifiedBayFillColor(bay, plannerMapActive, verdictByBayId) {
   return VERIFIED_FILL[t] || VERIFIED_FILL.available
 }
 
+/** Sensor-only bays: colour from occupancy only (same palette as verified legend). */
+function sensorOccupancyFillColor(bay) {
+  const t = bay.type === 'trap' ? 'trap' : bay.type === 'occupied' ? 'occupied' : 'available'
+  return VERIFIED_FILL[t] || VERIFIED_FILL.available
+}
+
 function bayPopupStatusWord(bay) {
   return bay.free === 1 ? 'Free' : 'Occupied'
 }
@@ -333,24 +339,35 @@ export default function ParkingMap({
             </Marker>
           ))}
 
-        {showLimitedBays && limitedBays.map((bay) => {
-          const ll = bayLatLng(bay)
-          const lowZoomFade = zoomLevel < CLUSTER_ZOOM_CUTOFF ? 0.15 : 0.35
-          return (
-            <CircleMarker
-              key={`ltd-${bay.id}`}
-              center={[ll.lat, ll.lng]}
-              radius={3}
-              interactive={false}
-              pathOptions={{
-                color: 'transparent',
-                fillColor: isDark ? '#9ca3af' : '#9ca3af',
-                fillOpacity: lowZoomFade,
-                weight: 0,
-              }}
-            />
-          )
-        })}
+        {/* Sensor-only bays: same zoom threshold as verified dots — low zoom uses clusters only (fewer, larger); high zoom shows many smaller dots. */}
+        {showLimitedBays &&
+          zoomLevel >= CLUSTER_ZOOM_CUTOFF &&
+          limitedBays.map((bay) => {
+            const ll = bayLatLng(bay)
+            const inFilter = visibleBays.some((v) => v.id === bay.id)
+            const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)
+            let opacity = 1
+            if (!inRadius) opacity = 0.12
+            else if (!inFilter) opacity = 0.22
+            const fillColor = sensorOccupancyFillColor(bay)
+            /* Smaller than verified CircleMarkers (9/11) so the two tiers stay visually distinct */
+            const markerRadius = isMobile ? 7 : 5
+            return (
+              <CircleMarker
+                key={`ltd-${bay.id}`}
+                center={[ll.lat, ll.lng]}
+                radius={markerRadius}
+                interactive={false}
+                pathOptions={{
+                  color: fillColor,
+                  fillColor,
+                  fillOpacity: opacity,
+                  opacity,
+                  weight: 0,
+                }}
+              />
+            )
+          })}
 
         {zoomLevel >= CLUSTER_ZOOM_CUTOFF && verifiedBays.map((bay) => {
           const ll = bayLatLng(bay)
