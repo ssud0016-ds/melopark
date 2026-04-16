@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from typing import Optional
 
 import httpx
@@ -21,18 +22,30 @@ REQUEST_TIMEOUT = 60   # seconds — generous for a single large export response
 
 SENSOR_REFRESH_INTERVAL = 5 * 60  # 5 minutes — matches frontend poll interval
 
+# On-demand cache (Lambda-friendly): TTL + single in-flight refresh task.
+SENSOR_CACHE_TTL_SEC = 300  # 5 minutes
+WAIT_INFLIGHT_NO_STALE_SEC = 3.0  # concurrent waiters without stale data
+MIN_UPSTREAM_RETRY_AFTER_FAIL_SEC = 10.0
+
 # ---------------------------------------------------------------------------
 # Sensor data cache
 #
-# Design: system-driven refresh, user read-cache-only.
-#   - _background_refresh_loop() is the ONLY writer.
-#   - fetch_raw_parking_bays() is a pure reader — never touches upstream.
-#   - Cache is pre-filled at startup so the first user request always has data.
-#   - On refresh failure, stale cache is preserved (never cleared on error).
+# Design (hybrid):
+#   - Long-lived servers: optional _background_refresh_loop() keeps cache warm.
+#   - Lambda / cold starts: fetch_raw_parking_bays() triggers on-demand refresh
+#     when TTL expired or cache empty (single asyncio.Task per refresh wave).
+#   - On upstream failure, stale cache is preserved (never cleared on error).
 # ---------------------------------------------------------------------------
 
 _sensor_cache: list[dict] = []
 _sensor_cache_lock = asyncio.Lock()
+_sensor_cache_ts_mono: float = 0.0
+_last_upstream_fail_mono: Optional[float] = None
+
+_refresh_task: Optional[asyncio.Task] = None
+_refresh_task_lock = asyncio.Lock()
+# Ensures at most one upstream HTTP fetch at a time (background loop + on-demand).
+_upstream_fetch_lock = asyncio.Lock()
 
 
 async def _fetch_via_exports(client: httpx.AsyncClient) -> list[dict]:
@@ -86,7 +99,7 @@ async def _fetch_raw_from_upstream() -> list[dict]:
       2. If /exports/json returns 403/401 (API key required on this portal),
          fall back to paginated /records (100 records per page, ~50 requests).
 
-    This is a private function — only the background refresh task should call it.
+    Called from on-demand refresh and from the optional background refresh loop.
     """
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         try:
@@ -110,31 +123,48 @@ async def _fetch_raw_from_upstream() -> list[dict]:
             raise  # re-raise 5xx, etc.
 
 
-async def _refresh_sensor_cache() -> bool:
+async def _refresh_from_upstream_once() -> bool:
     """Fetch fresh data from upstream and atomically replace the cache.
 
     Returns True if the upstream responded with 429 (rate-limited),
     False otherwise (success or other error).
     On any failure, the existing cache is kept intact.
     """
-    global _sensor_cache
+    global _sensor_cache, _sensor_cache_ts_mono, _last_upstream_fail_mono
+    async with _upstream_fetch_lock:
+        try:
+            fresh = await _fetch_raw_from_upstream()
+            async with _sensor_cache_lock:
+                _sensor_cache = fresh
+                _sensor_cache_ts_mono = time.monotonic()
+                _last_upstream_fail_mono = None
+            logger.info("Sensor cache refreshed — %d records", len(fresh))
+            return False
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                logger.warning(
+                    "Sensor cache refresh rate-limited (429). Stale cache preserved."
+                )
+                async with _sensor_cache_lock:
+                    _last_upstream_fail_mono = time.monotonic()
+                return True  # signal backoff to caller
+            logger.warning("Sensor cache refresh failed, keeping stale data: %s", exc)
+            async with _sensor_cache_lock:
+                _last_upstream_fail_mono = time.monotonic()
+            return False
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Sensor cache refresh failed, keeping stale data: %s", exc)
+            async with _sensor_cache_lock:
+                _last_upstream_fail_mono = time.monotonic()
+            return False
+
+
+async def _refresh_task_wrapper() -> None:
+    """Runs inside asyncio.Task — never raises to callers awaiting the task."""
     try:
-        fresh = await _fetch_raw_from_upstream()
-        async with _sensor_cache_lock:
-            _sensor_cache = fresh
-        logger.info("Sensor cache refreshed — %d records", len(fresh))
-        return False
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code == 429:
-            logger.warning(
-                "Sensor cache refresh rate-limited (429). Stale cache preserved."
-            )
-            return True  # signal backoff to caller
-        logger.warning("Sensor cache refresh failed, keeping stale data: %s", exc)
-        return False
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Sensor cache refresh failed, keeping stale data: %s", exc)
-        return False
+        await _refresh_from_upstream_once()
+    except Exception:  # noqa: BLE001
+        logger.exception("Sensor refresh task crashed unexpectedly")
 
 
 async def _background_refresh_loop() -> None:
@@ -144,7 +174,7 @@ async def _background_refresh_loop() -> None:
     to avoid hammering an exhausted quota and extending the blackout window.
     """
     while True:
-        rate_limited = await _refresh_sensor_cache()
+        rate_limited = await _refresh_from_upstream_once()
         if rate_limited:
             backoff = 30 * 60  # 30 minutes — let quota recover
             logger.warning(
@@ -167,29 +197,80 @@ async def start_background_refresh() -> None:
 
 
 class SensorCacheEmptyError(RuntimeError):
-    """Raised when the sensor cache has not yet been populated.
-
-    This happens only in the brief window between server startup and the
-    completion of the first background refresh, or when all refresh attempts
-    have been failing (e.g. upstream 429).
-    """
+    """Raised when there is no sensor data to return (no cache and upstream failed)."""
 
 
 async def fetch_raw_parking_bays() -> list[dict]:
-    """Return a copy of the current cached sensor data.
+    """Return sensor rows: cache-first with TTL, then on-demand upstream fetch.
 
-    This function NEVER fetches from upstream — it only reads the cache.
-    Raises SensorCacheEmptyError if the cache has not yet been filled,
-    so callers can return a proper error response instead of silent empty data.
+    Suitable for AWS Lambda: does not require a persistent background loop.
+    Raises SensorCacheEmptyError only when there is no usable cache and upstream
+    cannot be fetched (or cooldown applies after repeated failures).
     """
+    global _refresh_task
+
+    now = time.monotonic()
+
     async with _sensor_cache_lock:
-        cached = list(_sensor_cache)
-    if not cached:
-        raise SensorCacheEmptyError(
-            "Parking sensor cache is empty — background refresh has not completed yet "
-            "or all upstream refresh attempts are currently failing (upstream may be rate-limiting)."
+        if _sensor_cache and (now - _sensor_cache_ts_mono) < SENSOR_CACHE_TTL_SEC:
+            return list(_sensor_cache)
+
+    async with _sensor_cache_lock:
+        stale_copy: Optional[list[dict]] = list(_sensor_cache) if _sensor_cache else None
+
+    if not stale_copy:
+        if _last_upstream_fail_mono is not None:
+            if now - _last_upstream_fail_mono < MIN_UPSTREAM_RETRY_AFTER_FAIL_SEC:
+                raise SensorCacheEmptyError(
+                    "Parking sensor cache is empty and upstream is in a short retry cooldown "
+                    f"after a recent failure (wait ~{MIN_UPSTREAM_RETRY_AFTER_FAIL_SEC:.0f}s)."
+                )
+
+    async with _sensor_cache_lock:
+        if _sensor_cache and (time.monotonic() - _sensor_cache_ts_mono) < SENSOR_CACHE_TTL_SEC:
+            return list(_sensor_cache)
+
+    # Stale data is still useful; during post-failure cooldown skip extra upstream work.
+    if (
+        stale_copy
+        and _last_upstream_fail_mono is not None
+        and (time.monotonic() - _last_upstream_fail_mono) < MIN_UPSTREAM_RETRY_AFTER_FAIL_SEC
+    ):
+        return stale_copy
+
+    async with _refresh_task_lock:
+        async with _sensor_cache_lock:
+            now2 = time.monotonic()
+            if _sensor_cache and (now2 - _sensor_cache_ts_mono) < SENSOR_CACHE_TTL_SEC:
+                return list(_sensor_cache)
+
+        was_done = _refresh_task is None or _refresh_task.done()
+        if was_done:
+            _refresh_task = asyncio.create_task(_refresh_task_wrapper())
+        t = _refresh_task
+
+    if stale_copy:
+        return stale_copy
+
+    try:
+        if was_done:
+            await t
+        else:
+            await asyncio.wait_for(asyncio.shield(t), timeout=WAIT_INFLIGHT_NO_STALE_SEC)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Sensor cache refresh not finished after %.1fs wait",
+            WAIT_INFLIGHT_NO_STALE_SEC,
         )
-    return cached
+
+    async with _sensor_cache_lock:
+        if _sensor_cache:
+            return list(_sensor_cache)
+
+    raise SensorCacheEmptyError(
+        "Parking sensor cache is empty and the upstream API could not be reached "
+        "or returned no usable data."
+    )
 
 
 # ---------------------------------------------------------------------------
