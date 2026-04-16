@@ -31,6 +31,7 @@ Output:
     data/bronze/fetch_metadata.json
 """
 
+import argparse
 import json
 import logging
 from datetime import datetime, timezone
@@ -78,6 +79,22 @@ MAX_API_OFFSET = 10_000
 PAGE_SIZE = 100
 
 
+def _sanitize_bronze_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Stringify dict/list cells so PyArrow can write API records with varying nested shapes."""
+    out = df.copy()
+    for col in out.columns:
+        if out[col].dtype != object:
+            continue
+        sample = out[col].dropna()
+        if sample.empty:
+            continue
+        if isinstance(sample.iloc[0], (dict, list)):
+            out[col] = out[col].apply(
+                lambda x: json.dumps(x, sort_keys=True) if isinstance(x, (dict, list)) else x
+            )
+    return out
+
+
 def fetch_dataset(name: str, config: dict) -> list[dict]:
     """Paginate through the CoM Explore v2.1 API and return all records."""
     url = f"{API_BASE}/{config['dataset_id']}/records"
@@ -99,7 +116,7 @@ def fetch_dataset(name: str, config: dict) -> list[dict]:
     return all_records
 
 
-def main():
+def main(datasets_filter: list[str] | None = None) -> None:
     BASE_DIR.mkdir(parents=True, exist_ok=True)
     fetched_at = datetime.now(timezone.utc)
     log.info("Fetching bronze data at %s", fetched_at.isoformat())
@@ -120,12 +137,19 @@ def main():
         ],
     }
 
-    for name, config in DATASETS.items():
+    items = DATASETS.items()
+    if datasets_filter is not None:
+        bad = [k for k in datasets_filter if k not in DATASETS]
+        if bad:
+            raise SystemExit(f"Unknown dataset(s): {bad}. Choose from: {list(DATASETS)}")
+        items = [(k, DATASETS[k]) for k in datasets_filter]
+
+    for name, config in items:
         try:
             log.info("Fetching %s (%s) …", name, config["description"])
             records = fetch_dataset(name, config)
 
-            df = pd.DataFrame(records)
+            df = _sanitize_bronze_df(pd.DataFrame(records))
             out_path = BASE_DIR / config["output_file"]
             df.to_parquet(out_path, index=False, engine="pyarrow")
 
@@ -150,4 +174,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Fetch CoM bronze datasets to data/bronze/")
+    parser.add_argument(
+        "--dataset",
+        action="append",
+        dest="datasets",
+        metavar="NAME",
+        choices=list(DATASETS.keys()),
+        help="Fetch only this dataset (can be repeated). Default: all.",
+    )
+    args = parser.parse_args()
+    main(datasets_filter=args.datasets)
