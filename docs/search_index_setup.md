@@ -4,14 +4,16 @@ This guide adds real address/street/landmark search without changing live parkin
 
 ## 1) Fetch bronze datasets
 
-```bash
-python scripts/fetch_bronze.py --dataset addresses
-```
-
-If you need a full refresh:
+Fetches sensors, restrictions, parking bays, and **street-addresses** (needed for search):
 
 ```bash
 python scripts/fetch_bronze.py
+```
+
+To refresh only addresses (faster):
+
+```bash
+python scripts/fetch_bronze.py --dataset addresses
 ```
 
 ## 2) Build silver outputs
@@ -51,18 +53,30 @@ Run SQL from:
 
 ## 5) Load data into DB
 
-Import:
+With `DATABASE_URL` set in `backend/.env` (same as the FastAPI app):
 
-- `data/gold/search_index.csv`
+```bash
+python scripts/load_search_index.py
+```
 
-into table:
+This applies `docs/search_index_schema.sql`, truncates `search_index`, and loads `data/gold/search_index.csv`.
 
-- `search_index`
+Alternatively, import `data/gold/search_index.csv` manually into table `search_index` (e.g. Supabase SQL editor or `psql \\copy`).
 
 ## 6) Backend + frontend
 
-- Backend now exposes `GET /api/search?q=...&limit=...`
-- Frontend search bar calls this API with debounce and falls back to local landmarks if DB is not ready.
+- Backend exposes `GET /api/search?q=...&limit=...`
+- Frontend search bar calls this API with debounce and falls back to local landmarks if the API fails.
+
+## 7) Verify search
+
+With the API running (`uvicorn` per `backend/README.md`):
+
+```bash
+curl -s "http://127.0.0.1:8000/api/search?q=swan&limit=5" | python -m json.tool
+```
+
+You should see JSON rows with `name`, `sub`, `category`, `lat`, `lng`. Queries must be at least 2 characters.
 
 ## Important
 
