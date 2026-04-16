@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import Optional
 
 import httpx
 
@@ -206,7 +207,7 @@ def _map_status(raw_status: str) -> str:
     return _STATUS_MAP.get(raw_status.lower().strip(), "unknown")
 
 
-def _transform_bay(raw: dict) -> dict | None:
+def _transform_bay(raw: dict) -> Optional[dict]:
     """Convert a raw CoM record to a frontend-friendly bay dict.
 
     Returns None if the record has no usable lat/lng.
@@ -248,6 +249,11 @@ async def fetch_parking_bays() -> list[dict]:
         bay = _transform_bay(r)
         if bay is None:
             continue
-        bay["bay_type"] = restrictions.get(bay["bay_id"], "Other")
+        bay_id = bay["bay_id"]
+        has_rules = bay_id in restrictions or (
+            isinstance(bay_id, str) and bay_id.isdigit() and int(bay_id) in restrictions
+        )
+        bay["bay_type"] = restrictions.get(bay_id, restrictions.get(int(bay_id) if isinstance(bay_id, str) and bay_id.isdigit() else bay_id, "Other"))
+        bay["has_restriction_data"] = has_rules
         result.append(bay)
     return result

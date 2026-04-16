@@ -1,28 +1,46 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
-  normToLatLng,
   haversineMeters,
   SEARCH_RADIUS_M,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   DESTINATION_MAP_ZOOM,
   bayLatLng,
+  destinationLatLng,
 } from '../utils/mapGeo'
+import { SNAP_PEEK } from '../components/layout/BottomSheet'
 
 export function useMapState() {
-  const [selectedBayId, setSelectedBayId] = useState(null)
+  const [selectedBayId, _setSelectedBayId] = useState(null)
   const [activeFilter, setActiveFilter] = useState('all')
   const [destination, setDestination] = useState(null)
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [sheetSnap, setSheetSnap] = useState(SNAP_PEEK)
+  const [showLimitedBays, setShowLimitedBays] = useState(false)
+
+  const baysRef = useRef([])
+
+  const setSelectedBayId = useCallback(
+    (id) => {
+      if (id == null) return _setSelectedBayId(null)
+      const bay = baysRef.current.find((b) => b.id === id)
+      if (bay && !bay.hasRules) return
+      _setSelectedBayId(id)
+    },
+    [],
+  )
+
+  const setBaysRef = useCallback((bays) => {
+    baysRef.current = bays
+  }, [])
 
   const pickDestination = useCallback((lm) => {
     setDestination(lm)
-    setSelectedBayId(null)
+    _setSelectedBayId(null)
   }, [])
 
   const clearDestination = useCallback(() => {
     setDestination(null)
-    setSelectedBayId(null)
+    _setSelectedBayId(null)
   }, [])
 
   const getVisibleBays = useCallback(
@@ -30,7 +48,7 @@ export function useMapState() {
       const pool = destination
         ? bays.filter((b) => {
             const bl = bayLatLng(b)
-            const dl = normToLatLng(destination.x, destination.y)
+            const dl = destinationLatLng(destination)
             return haversineMeters(bl.lat, bl.lng, dl.lat, dl.lng) < SEARCH_RADIUS_M
           })
         : bays
@@ -39,7 +57,7 @@ export function useMapState() {
         if (activeFilter === 'all') return true
         if (activeFilter === 'available') return b.type === 'available'
         if (activeFilter === 'trap') return b.type === 'trap'
-        return b.limitType === activeFilter
+        return true
       })
     },
     [destination, activeFilter],
@@ -50,7 +68,7 @@ export function useMapState() {
       if (!destination) return bays
       return bays.filter((b) => {
         const bl = bayLatLng(b)
-        const dl = normToLatLng(destination.x, destination.y)
+        const dl = destinationLatLng(destination)
         return haversineMeters(bl.lat, bl.lng, dl.lat, dl.lng) < SEARCH_RADIUS_M
       })
     },
@@ -65,8 +83,11 @@ export function useMapState() {
     destination,
     pickDestination,
     clearDestination,
-    sheetOpen,
-    setSheetOpen,
+    sheetSnap,
+    setSheetSnap,
+    showLimitedBays,
+    setShowLimitedBays,
+    setBaysRef,
     getVisibleBays,
     getProximityBays,
     defaultMapCenter: DEFAULT_MAP_CENTER,
