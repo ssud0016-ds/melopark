@@ -6,27 +6,27 @@
 
 // US2: Landmark database for autocomplete search
 export const LANDMARKS = [
-  { name: 'Melbourne Central',       sub: 'Cnr La Trobe & Swanston St',   icon: '🛍️', x: 0.63, y: 0.50 },
-  { name: 'State Library Victoria',  sub: '328 Swanston St, Melbourne',   icon: '📚', x: 0.63, y: 0.48 },
-  { name: 'RMIT University',         sub: '124 La Trobe St, Melbourne',   icon: '🎓', x: 0.55, y: 0.42 },
-  { name: 'Flinders Street Station', sub: 'Flinders St & Swanston St',    icon: '🚉', x: 0.63, y: 0.84 },
-  { name: 'Federation Square',       sub: 'Swanston St & Flinders St',    icon: '🏛️', x: 0.65, y: 0.83 },
-  { name: 'Queen Victoria Market',   sub: '513 Elizabeth St, Melbourne',  icon: '🛒', x: 0.50, y: 0.22 },
-  { name: 'Melbourne Museum',        sub: '11 Nicholson St, Carlton',     icon: '🏛️', x: 0.70, y: 0.12 },
-  { name: 'Crown Casino',            sub: '8 Whiteman St, Southbank',     icon: '🎰', x: 0.45, y: 0.94 },
-  { name: 'Old Melbourne Gaol',      sub: '377 Russell St, Melbourne',    icon: '🏚️', x: 0.78, y: 0.42 },
-  { name: 'Collins Street',          sub: 'Collins St, Melbourne CBD',    icon: '📍', x: 0.50, y: 0.62 },
-  { name: 'Bourke Street Mall',      sub: 'Bourke St, Melbourne CBD',     icon: '📍', x: 0.50, y: 0.55 },
-  { name: 'Elizabeth Street',        sub: 'Elizabeth St, Melbourne CBD',  icon: '📍', x: 0.50, y: 0.50 },
-  { name: 'Swanston Street',         sub: 'Swanston St, Melbourne CBD',   icon: '📍', x: 0.63, y: 0.50 },
-  { name: 'Chinatown Melbourne',     sub: 'Little Bourke St, Melbourne',  icon: '🏮', x: 0.72, y: 0.55 },
-  { name: 'Melbourne Town Hall',     sub: '90–120 Swanston St',           icon: '🏛️', x: 0.63, y: 0.60 },
-  { name: 'Emporium Melbourne',      sub: '287 Lonsdale St',              icon: '🛍️', x: 0.55, y: 0.50 },
-  { name: 'Docklands',               sub: 'Harbour Esplanade, Docklands', icon: '⛵', x: 0.10, y: 0.65 },
-  { name: 'GPO Melbourne',           sub: '350 Bourke St, Melbourne',     icon: '📮', x: 0.50, y: 0.55 },
+  { name: 'Melbourne Central',       sub: 'Cnr La Trobe & Swanston St',   icon: '🛍️', x: 0.63, y: 0.50, lat: -37.8102, lng: 144.9628 },
+  { name: 'State Library Victoria',  sub: '328 Swanston St, Melbourne',   icon: '📚', x: 0.63, y: 0.48, lat: -37.8098, lng: 144.9652 },
+  { name: 'RMIT University',         sub: '124 La Trobe St, Melbourne',   icon: '🎓', x: 0.55, y: 0.42, lat: -37.8083, lng: 144.9632 },
+  { name: 'Flinders Street Station', sub: 'Flinders St & Swanston St',    icon: '🚉', x: 0.63, y: 0.84, lat: -37.8183, lng: 144.9671 },
+  { name: 'Federation Square',       sub: 'Swanston St & Flinders St',    icon: '🏛️', x: 0.65, y: 0.83, lat: -37.8180, lng: 144.9691 },
+  { name: 'Queen Victoria Market',   sub: '513 Elizabeth St, Melbourne',  icon: '🛒', x: 0.50, y: 0.22, lat: -37.8076, lng: 144.9568 },
+  { name: 'Melbourne Museum',        sub: '11 Nicholson St, Carlton',     icon: '🏛️', x: 0.70, y: 0.12, lat: -37.8033, lng: 144.9717 },
+  { name: 'Crown Casino',            sub: '8 Whiteman St, Southbank',     icon: '🎰', x: 0.45, y: 0.94, lat: -37.8228, lng: 144.9575 },
+  { name: 'Old Melbourne Gaol',      sub: '377 Russell St, Melbourne',    icon: '🏚️', x: 0.78, y: 0.42, lat: -37.8078, lng: 144.9654 },
+  { name: 'Collins Street',          sub: 'Collins St, Melbourne CBD',    icon: '📍', x: 0.50, y: 0.62, lat: -37.8153, lng: 144.9634 },
+  { name: 'Bourke Street Mall',      sub: 'Bourke St, Melbourne CBD',     icon: '📍', x: 0.50, y: 0.55, lat: -37.8136, lng: 144.9653 },
+  { name: 'Elizabeth Street',        sub: 'Elizabeth St, Melbourne CBD',  icon: '📍', x: 0.50, y: 0.50, lat: -37.8136, lng: 144.9601 },
+  { name: 'Swanston Street',         sub: 'Swanston St, Melbourne CBD',   icon: '📍', x: 0.63, y: 0.50, lat: -37.8136, lng: 144.9663 },
+  { name: 'Chinatown Melbourne',     sub: 'Little Bourke St, Melbourne',  icon: '🏮', x: 0.72, y: 0.55, lat: -37.8118, lng: 144.9688 },
+  { name: 'Melbourne Town Hall',     sub: '90–120 Swanston St',           icon: '🏛️', x: 0.63, y: 0.60, lat: -37.8148, lng: 144.9665 },
+  { name: 'Emporium Melbourne',      sub: '287 Lonsdale St',              icon: '🛍️', x: 0.55, y: 0.50, lat: -37.8120, lng: 144.9644 },
+  { name: 'Docklands',               sub: 'Harbour Esplanade, Docklands', icon: '⛵', x: 0.10, y: 0.65, lat: -37.8157, lng: 144.9397 },
+  { name: 'GPO Melbourne',           sub: '350 Bourke St, Melbourne',     icon: '📮', x: 0.50, y: 0.55, lat: -37.8131, lng: 144.9636 },
 ];
 
-// US1 + US2: Bay data — all fields required by ACs
+// US1 + US2: Bay data – all fields required by ACs
 // type: 'available' | 'trap' | 'occupied'
 // limitType: '2p' | '3p' | '4p' (for filter chips)
 // spots / free: for the availability count marker
@@ -50,12 +50,12 @@ export const INITIAL_BAYS = [
   {
     id: '0934', name: 'Collins St (E)',
     type: 'trap', limitType: '2p',
-    desc: 'Available now but clearway starts 5:30 — only 1h 42m usable.',
+    desc: 'Available now but clearway starts 5:30 – only 1h 42m usable.',
     tags: ['$4.00/hr', '2P', '5 min walk'],
     safe: 'Until 5:30 PM', limit: '1h 42m usable', cost: '$4.00/hr',
     applies: 'Mon–Fri, all day',
     x: 0.38, y: 0.55, spots: 4, free: 2,
-    warn: 'Clearway begins at 5:30PM — move your car or risk a $350 fine.',
+    warn: 'Clearway begins at 5:30PM – move your car or risk a $350 fine.',
     timeline: [
       { time: 'Now – 3:48 PM',     desc: 'Safe to park',         on: true  },
       { time: '5:30 PM',           desc: 'Clearway begins',      on: false },
@@ -106,15 +106,15 @@ export const INITIAL_BAYS = [
   {
     id: '0781', name: 'La Trobe St',
     type: 'trap', limitType: '2p',
-    desc: 'Loading zone 7–10AM. Currently available — check signage.',
+    desc: 'Loading zone 7–10AM. Currently available – check signage.',
     tags: ['Free', '2P', '8 min walk'],
     safe: 'Now until 7AM', limit: 'Overnight only', cost: 'Free after 6PM',
-    applies: 'Complex — see sign',
+    applies: 'Complex – see sign',
     x: 0.55, y: 0.30, spots: 2, free: 1,
     warn: 'Loading zone applies 7–10AM weekdays. Do not park overnight.',
     timeline: [
       { time: 'Now – 7:00 AM',     desc: 'Overnight parking OK', on: true  },
-      { time: '7:00 – 10:00 AM',   desc: 'Loading zone — clear', on: false },
+      { time: '7:00 – 10:00 AM',   desc: 'Loading zone – clear', on: false },
       { time: '10:00 AM',          desc: 'Normal parking resumes',on: false },
     ],
   },
@@ -162,7 +162,7 @@ export const INITIAL_BAYS = [
   },
 ];
 
-// Map geometry — streets and city blocks
+// Map geometry – streets and city blocks
 export const MAP_STREETS = [
   { x1:0, y1:0.20, x2:1, y2:0.20, w:20, c:'#e2e4e0', label:'Victoria St' },
   { x1:0, y1:0.36, x2:1, y2:0.36, w:14, c:'#e8eae6', label:'Therry St'   },
@@ -191,12 +191,12 @@ export const RADIUS = 0.20;
 
 // Home page fact cards
 export const FACT_CARDS = [
-  { num:'30',   unit:'%',   desc:'of inner-city traffic is drivers searching for a parking spot — not actually going anywhere.',             source:'UITP Global Parking Study, 2023',        color:'green' },
+  { num:'30',   unit:'%',   desc:'of inner-city traffic is drivers searching for a parking spot – not actually going anywhere.',             source:'UITP Global Parking Study, 2023',        color:'green' },
   { num:'17',   unit:'min', desc:'average time Melbourne CBD commuters spend hunting for parking on a weekday morning.',                     source:'RACV Melbourne Parking Report',           color:'teal'  },
-  { num:'$350', unit:'',    desc:'fine for stopping in a clearway zone — easily avoided with MeloPark Trap alerts.',                         source:'VicRoads Infringement Schedule',          color:'amber' },
+  { num:'$350', unit:'',    desc:'fine for stopping in a clearway zone – easily avoided with MeloPark Trap alerts.',                         source:'VicRoads Infringement Schedule',          color:'amber' },
   { num:'900',  unit:'t',   desc:'of CO₂ emitted annually in Melbourne\'s CBD just from vehicles searching for parking.',                   source:'City of Melbourne Emissions Model',       color:'red'   },
   { num:'2x',   unit:'',    desc:'Drivers with parking info before departure find a spot twice as fast as those without guidance.',          source:'Deakin Smart Cities Lab',                 color:'green' },
-  { num:'31K+', unit:'',    desc:'parking bays across Melbourne\'s CBD already have sensor infrastructure — zero new hardware needed.',      source:'City of Melbourne Open Data',             color:'teal'  },
+  { num:'31K+', unit:'',    desc:'parking bays across Melbourne\'s CBD already have sensor infrastructure – zero new hardware needed.',      source:'City of Melbourne Open Data',             color:'teal'  },
 ];
 
 // Colours by bay type

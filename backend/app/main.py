@@ -10,6 +10,7 @@ from app.routers.bays import router as bays_router
 from app.routers.db_test import router as db_test_router
 from app.routers.health import router as health_router
 from app.routers.parking import router as parking_router
+from app.routers.search import router as search_router
 
 settings = get_settings()
 
@@ -49,3 +50,4 @@ app.include_router(health_router)
 app.include_router(db_test_router)
 app.include_router(parking_router)
 app.include_router(bays_router)
+app.include_router(search_router)

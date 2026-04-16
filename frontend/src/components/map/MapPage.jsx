@@ -1,9 +1,31 @@
-import { useRef, useCallback, useEffect, useState } from 'react'
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import ParkingMap from './ParkingMap'
 import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import FilterChips from '../feedback/FilterChips'
 import { useMapState } from '../../hooks/useMapState'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
+import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
+import { fetchEvaluateBulk } from '../../services/apiBays'
+import { formatAtDateTime, formatDurationLabel } from '../../utils/plannerTime'
+
+function MapTimeBanner({ arrivalIso, durationMins, onDismiss }) {
+  return (
+    <button
+      type="button"
+      onClick={onDismiss}
+      className="flex w-full min-w-0 items-center justify-center gap-2 rounded-full border border-amber-200/90 bg-amber-50 px-3 py-1.5 text-left text-xs font-semibold text-amber-800 shadow-card dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-100 cursor-pointer hover:bg-amber-100/90 dark:hover:bg-amber-900/40 transition-colors"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 text-amber-700 dark:text-amber-200" aria-hidden>
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
+        <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      </svg>
+      <span className="min-w-0 truncate">
+        Showing bays at {formatAtDateTime(arrivalIso)} · {formatDurationLabel(durationMins)} stay
+      </span>
+    </button>
+  )
+}
 
 export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry }) {
   const mapRef = useRef(null)
@@ -16,6 +38,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     destination,
     pickDestination,
     clearDestination,
+    showLimitedBays,
+    setShowLimitedBays,
+    setBaysRef,
     getVisibleBays,
     getProximityBays,
     defaultMapCenter,
@@ -23,9 +48,92 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     destinationMapZoom,
   } = useMapState()
 
+  /** Persisted across bay opens: last debounced plan from the detail sheet. */
+  const [plannerArrivalIso, setPlannerArrivalIso] = useState(null)
+  const [plannerDurationMins, setPlannerDurationMins] = useState(null)
+  /** True after "Show all bays at this time" in the panel. */
+  const [mapBaysAtPlannedTime, setMapBaysAtPlannedTime] = useState(false)
+  /** Bump to force sheet form reset when banner or Clear resets live mode. */
+  const [plannerResetNonce, setPlannerResetNonce] = useState(0)
+
+  const [mapBounds, setMapBounds] = useState(null)
+  const [bulkVerdictById, setBulkVerdictById] = useState({})
+
+  const debouncedBounds = useDebouncedValue(mapBounds, 300)
+
+  const plannerParams = useMemo(() => {
+    if (!plannerArrivalIso || plannerDurationMins == null) return null
+    return { arrivalIso: plannerArrivalIso, durationMins: plannerDurationMins }
+  }, [plannerArrivalIso, plannerDurationMins])
+
+  const debouncedPlannerForBulk = useDebouncedPlannerParams(
+    mapBaysAtPlannedTime ? plannerParams : null,
+    300,
+  )
+
+  const handleMapBounds = useCallback((b) => {
+    setMapBounds(b)
+  }, [])
+
+  const handleDebouncedPlannerFromSheet = useCallback((p) => {
+    if (!p) {
+      setPlannerArrivalIso(null)
+      setPlannerDurationMins(null)
+      return
+    }
+    setPlannerArrivalIso(p.arrivalIso)
+    setPlannerDurationMins(p.durationMins)
+  }, [])
+
+  const resetPlannerToLive = useCallback(() => {
+    setPlannerArrivalIso(null)
+    setPlannerDurationMins(null)
+    setMapBaysAtPlannedTime(false)
+    setPlannerResetNonce((n) => n + 1)
+  }, [])
+
+  useEffect(() => {
+    if (!mapBaysAtPlannedTime) setBulkVerdictById({})
+  }, [mapBaysAtPlannedTime])
+
+  useEffect(() => {
+    if (!debouncedPlannerForBulk || !debouncedBounds) return
+    let cancelled = false
+    const bbox = `${debouncedBounds.south},${debouncedBounds.west},${debouncedBounds.north},${debouncedBounds.east}`
+    fetchEvaluateBulk(bbox, debouncedPlannerForBulk).then((rows) => {
+      if (cancelled) return
+      const next = {}
+      for (const r of rows) {
+        if (r?.bay_id != null) next[String(r.bay_id)] = r.verdict
+      }
+      setBulkVerdictById(next)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedPlannerForBulk, debouncedBounds])
+
+  useEffect(() => {
+    setBaysRef(bays)
+  }, [bays, setBaysRef])
+
   const visibleBays = getVisibleBays(bays)
   const proximityBays = getProximityBays(bays)
   const selectedBay = bays.find((b) => b.id === selectedBayId) || null
+
+  const { verifiedCount, limitedCount, proxVerifiedFree, proxVerifiedFreeBays, proxLimitedCount } = useMemo(() => {
+    const verified = visibleBays.filter((b) => b.hasRules)
+    const limited = visibleBays.filter((b) => !b.hasRules)
+    const proxVerified = proximityBays.filter((b) => b.hasRules)
+    const proxLimited = proximityBays.filter((b) => !b.hasRules)
+    return {
+      verifiedCount: verified.length,
+      limitedCount: limited.length,
+      proxVerifiedFree: proxVerified.reduce((a, b) => a + (b.type === 'available' ? b.free : 0), 0),
+      proxVerifiedFreeBays: proxVerified.filter((b) => b.type === 'available').length,
+      proxLimitedCount: proxLimited.length,
+    }
+  }, [visibleBays, proximityBays])
 
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 900,
@@ -37,16 +145,14 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  const proxFreeSpots = proximityBays.reduce((a, b) => a + (b.type === 'available' ? b.free : 0), 0)
-  const proxFreeBays = proximityBays.filter((b) => b.type === 'available').length
-
   const tsStr = lastUpdated
     ? lastUpdated.toLocaleTimeString('en-AU', {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
+        hour12: false,
       })
-    : '—'
+    : '–'
 
   const handlePickLandmark = useCallback((lm) => pickDestination(lm), [pickDestination])
 
@@ -69,6 +175,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const desktopSheetReservePx = selectedBay && !isMobile ? 396 : 0
   const rightInsetPx = 14 + desktopSheetReservePx
 
+  const showMapTimeBanner = mapBaysAtPlannedTime && plannerArrivalIso && plannerDurationMins != null
+
   return (
     <div className="pt-16 h-screen overflow-hidden">
       <div className="relative w-full h-[calc(100vh-64px)] overflow-hidden">
@@ -81,6 +189,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           destination={destination}
           onBayClick={handleBayClick}
           onMapReady={handleMapReady}
+          onBoundsChange={handleMapBounds}
+          plannerMapActive={mapBaysAtPlannedTime && Boolean(plannerParams)}
+          verdictByBayId={bulkVerdictById}
+          showLimitedBays={showLimitedBays}
           defaultCenter={defaultMapCenter}
           defaultZoom={defaultMapZoom}
           destZoom={destinationMapZoom}
@@ -140,9 +252,24 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             </div>
           </div>
 
-          <div className="w-full pointer-events-auto">
-            <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+          <div className="w-full pointer-events-auto min-w-0">
+            <FilterChips
+              activeFilter={activeFilter}
+              onFilterChange={setActiveFilter}
+              showLimitedBays={showLimitedBays}
+              onToggleLimitedBays={setShowLimitedBays}
+            />
           </div>
+
+          {showMapTimeBanner && (
+            <div className="w-full pointer-events-auto min-w-0 mt-0.5">
+              <MapTimeBanner
+                arrivalIso={plannerArrivalIso}
+                durationMins={plannerDurationMins}
+                onDismiss={resetPlannerToLive}
+              />
+            </div>
+          )}
         </div>
 
         {!selectedBay && (
@@ -157,23 +284,30 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {destination && (
           <div
-            className="absolute top-[118px] z-[500] bg-surface-secondary text-gray-900 rounded-full px-5 py-2 text-sm font-semibold whitespace-nowrap shadow-overlay flex items-center gap-2 max-w-[calc(100%-28px)]"
-            style={
-              desktopSheetReservePx
-                ? { left: 14, right: rightInsetPx, marginInline: 'auto' }
-                : { left: '50%', transform: 'translateX(-50%)' }
-            }
+            className="absolute bottom-3.5 z-[500] bg-surface-secondary text-gray-900 rounded-2xl px-5 py-2.5 text-sm font-semibold shadow-overlay flex flex-col items-center gap-0.5 max-w-[calc(100%-120px)] border-2 border-brand"
+            style={{ left: '50%', transform: 'translateX(-50%)' }}
           >
-            <span>{proxFreeSpots > 0 ? '🟢' : '🔴'}</span>
             <span>
-              {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across&nbsp;
-              {proxFreeBays} bay{proxFreeBays !== 1 ? 's' : ''} within 400 m of {destination.name}
+              {proxVerifiedFree} free spot{proxVerifiedFree !== 1 ? 's' : ''} across&nbsp;
+              {proxVerifiedFreeBays} verified bay{proxVerifiedFreeBays !== 1 ? 's' : ''} within 400 m of {destination.name}
             </span>
+            {proxLimitedCount > 0 && (
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                +{proxLimitedCount} sensor-only nearby
+              </span>
+            )}
           </div>
         )}
 
-        <div className="absolute bottom-3.5 left-3.5 z-[500] rounded-full border border-brand bg-brand px-3.5 py-1.5 text-sm font-semibold text-white shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 dark:text-brand-900">
-          <span className="text-white dark:text-brand-900">{visibleBays.length}</span> bays shown
+        <div className="absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-3.5 py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col">
+          <span className="text-sm font-semibold text-white dark:text-brand-900">
+            {verifiedCount} verified bay{verifiedCount !== 1 ? 's' : ''}
+          </span>
+          {showLimitedBays && limitedCount > 0 && (
+            <span className="text-[11px] font-medium text-white/65 dark:text-brand-900/55">
+              +{limitedCount} sensor only
+            </span>
+          )}
         </div>
 
         <div
@@ -181,22 +315,25 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           style={{ right: rightInsetPx }}
         >
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
-            Bay Status
+            Verified bays
           </div>
           {[
-            ['bg-accent', 'Available'],
-            ['bg-[#FFB382]', 'Rule Trap'],
-            ['bg-[#ed6868]', 'Occupied'],
+            ['bg-[#a3ec48]', 'Available (green)'],
+            ['bg-[#FFB382]', 'Caution (orange)'],
+            ['bg-[#ed6868]', 'Occupied (red)'],
           ].map(([bg, label]) => (
-            <div key={label} className="mb-1 flex items-center gap-1.5 text-xs text-white/95 last:mb-0 dark:text-brand-900">
-              <div className={`${bg} w-2.5 h-2.5 rounded-full shrink-0`} />
+            <div key={label} className="mb-1 flex items-center gap-1.5 text-xs text-white/95 dark:text-brand-900">
+              <div className={`${bg} h-2.5 w-2.5 shrink-0 rounded-full`} />
               {label}
             </div>
           ))}
-          <div className="mt-0.5">
-            <div className="flex items-center gap-1.5 text-xs text-white/95 dark:text-brand-900">
-              <div className="h-3 w-3 shrink-0 rounded-full border-2 border-[#FFD700] bg-transparent" />
-              <span>Has rule info</span>
+          <div className="mt-2 border-t border-white/20 pt-1.5 dark:border-brand-800/20">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
+              Sensor only
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-white/75 dark:text-brand-900/70">
+              <div className="h-2 w-2 shrink-0 rounded-full bg-gray-400/60" />
+              Occupancy only, check signs
             </div>
           </div>
         </div>
@@ -209,6 +346,19 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             isMobile={isMobile}
             lastUpdated={lastUpdated}
             reserveBottomPx={0}
+            savedPlannerArrivalIso={plannerArrivalIso}
+            savedPlannerDurationMins={plannerDurationMins}
+            onDebouncedPlannerChange={handleDebouncedPlannerFromSheet}
+            mapBaysAtPlannedTime={mapBaysAtPlannedTime}
+            onShowAllBaysAtThisTime={(p) => {
+              if (p) {
+                setPlannerArrivalIso(p.arrivalIso)
+                setPlannerDurationMins(p.durationMins)
+              }
+              setMapBaysAtPlannedTime(true)
+            }}
+            onResetPlannerToLive={resetPlannerToLive}
+            plannerResetNonce={plannerResetNonce}
           />
         )}
       </div>
