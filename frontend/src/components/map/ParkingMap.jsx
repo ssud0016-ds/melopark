@@ -440,8 +440,8 @@ export default function ParkingMap({
             }
           >
             {showLimitedBays
-              ? 'Zoom in to see individual bays and tap a bay to see its rule info'
-              : 'Zoom in to see individual bays'}
+              ? 'Zoom in to see individual parking bays and tap a bay to see its rule info'
+              : 'Zoom in to see individual parking bays'}
           </div>
         )}
       </MapContainer>
