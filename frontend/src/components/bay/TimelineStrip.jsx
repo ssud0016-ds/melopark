@@ -20,29 +20,22 @@ export default function TimelineStrip({ activeRestriction, verdict, sensorFree }
   // ── Sensor occupancy row (always real when present) ──────────────────────
   if (sensorFree === 1) {
     items.push({
-      time: 'Sensor: Now',
-      desc: 'This bay is currently unoccupied.',
+      time: 'Now',
+      desc: 'Sensor reports this space is free.',
       on: true,
     })
   } else if (sensorFree === 0) {
     items.push({
-      time: 'Sensor: Now',
-      desc: 'A vehicle is currently detected in this bay.',
+      time: 'Now',
+      desc: 'Sensor reports a vehicle here.',
       on: false,
     })
   }
   // sensorFree undefined → no sensor row (sensor data not available)
 
   // ── Active restriction from backend ──────────────────────────────────────
+  // Rule wording (typedesc / plain_english) is shown in VerdictCard only – avoid repeating it here.
   if (activeRestriction) {
-    const ruleIsOk = verdict === 'yes'
-
-    items.push({
-      time: activeRestriction.typedesc ?? 'Current Rule',
-      desc: activeRestriction.plain_english,
-      on: ruleIsOk,
-    })
-
     if (activeRestriction.max_stay_mins != null) {
       items.push({
         time: 'Max Stay',
@@ -63,16 +56,18 @@ export default function TimelineStrip({ activeRestriction, verdict, sensorFree }
   // ── Nothing to show ───────────────────────────────────────────────────────
   if (!items.length) {
     // Only render the "not available" note if evaluation has completed
-    // (verdict will be set even for unknown — null means still loading)
+    // (verdict will be set even for unknown – null means still loading)
     if (verdict === null) return null
+    // Full rule text lives in VerdictCard; nothing extra to list here.
+    if (activeRestriction) return null
 
     return (
       <div className="mt-4">
         <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
-          Rule Schedule
+          Rule details
         </div>
         <p className="text-xs text-gray-400 dark:text-gray-500 italic leading-relaxed">
-          Detailed schedule not available. Check posted street signage for hours and conditions.
+          No timed breakdown available. Check posted signage.
         </p>
       </div>
     )
@@ -81,7 +76,7 @@ export default function TimelineStrip({ activeRestriction, verdict, sensorFree }
   return (
     <div className="mt-4">
       <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
-        {activeRestriction ? 'Current rule & sensor' : 'Sensor status'}
+        {activeRestriction ? 'Bay status & limits' : 'Bay status'}
       </div>
       {items.map((t, i) => (
         <div key={i} className="flex gap-3 mb-3 items-start">

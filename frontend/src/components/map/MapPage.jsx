@@ -4,6 +4,28 @@ import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import FilterChips from '../feedback/FilterChips'
 import { useMapState } from '../../hooks/useMapState'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
+import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
+import { fetchEvaluateBulk } from '../../services/apiBays'
+import { formatAtDateTime, formatDurationLabel } from '../../utils/plannerTime'
+
+function MapTimeBanner({ arrivalIso, durationMins, onDismiss }) {
+  return (
+    <button
+      type="button"
+      onClick={onDismiss}
+      className="flex w-full min-w-0 items-center justify-center gap-2 rounded-full border border-amber-200/90 bg-amber-50 px-3 py-1.5 text-left text-xs font-semibold text-amber-800 shadow-card dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-100 cursor-pointer hover:bg-amber-100/90 dark:hover:bg-amber-900/40 transition-colors"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 text-amber-700 dark:text-amber-200" aria-hidden>
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
+        <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      </svg>
+      <span className="min-w-0 truncate">
+        Showing bays at {formatAtDateTime(arrivalIso)} · {formatDurationLabel(durationMins)} stay
+      </span>
+    </button>
+  )
+}
 
 export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry }) {
   const mapRef = useRef(null)
@@ -26,7 +48,74 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     destinationMapZoom,
   } = useMapState()
 
-  useEffect(() => { setBaysRef(bays) }, [bays, setBaysRef])
+  /** Persisted across bay opens: last debounced plan from the detail sheet. */
+  const [plannerArrivalIso, setPlannerArrivalIso] = useState(null)
+  const [plannerDurationMins, setPlannerDurationMins] = useState(null)
+  /** True after "Show all bays at this time" in the panel. */
+  const [mapBaysAtPlannedTime, setMapBaysAtPlannedTime] = useState(false)
+  /** Bump to force sheet form reset when banner or Clear resets live mode. */
+  const [plannerResetNonce, setPlannerResetNonce] = useState(0)
+
+  const [mapBounds, setMapBounds] = useState(null)
+  const [bulkVerdictById, setBulkVerdictById] = useState({})
+
+  const debouncedBounds = useDebouncedValue(mapBounds, 300)
+
+  const plannerParams = useMemo(() => {
+    if (!plannerArrivalIso || plannerDurationMins == null) return null
+    return { arrivalIso: plannerArrivalIso, durationMins: plannerDurationMins }
+  }, [plannerArrivalIso, plannerDurationMins])
+
+  const debouncedPlannerForBulk = useDebouncedPlannerParams(
+    mapBaysAtPlannedTime ? plannerParams : null,
+    300,
+  )
+
+  const handleMapBounds = useCallback((b) => {
+    setMapBounds(b)
+  }, [])
+
+  const handleDebouncedPlannerFromSheet = useCallback((p) => {
+    if (!p) {
+      setPlannerArrivalIso(null)
+      setPlannerDurationMins(null)
+      return
+    }
+    setPlannerArrivalIso(p.arrivalIso)
+    setPlannerDurationMins(p.durationMins)
+  }, [])
+
+  const resetPlannerToLive = useCallback(() => {
+    setPlannerArrivalIso(null)
+    setPlannerDurationMins(null)
+    setMapBaysAtPlannedTime(false)
+    setPlannerResetNonce((n) => n + 1)
+  }, [])
+
+  useEffect(() => {
+    if (!mapBaysAtPlannedTime) setBulkVerdictById({})
+  }, [mapBaysAtPlannedTime])
+
+  useEffect(() => {
+    if (!debouncedPlannerForBulk || !debouncedBounds) return
+    let cancelled = false
+    const bbox = `${debouncedBounds.south},${debouncedBounds.west},${debouncedBounds.north},${debouncedBounds.east}`
+    fetchEvaluateBulk(bbox, debouncedPlannerForBulk).then((rows) => {
+      if (cancelled) return
+      const next = {}
+      for (const r of rows) {
+        if (r?.bay_id != null) next[String(r.bay_id)] = r.verdict
+      }
+      setBulkVerdictById(next)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedPlannerForBulk, debouncedBounds])
+
+  useEffect(() => {
+    setBaysRef(bays)
+  }, [bays, setBaysRef])
 
   const visibleBays = getVisibleBays(bays)
   const proximityBays = getProximityBays(bays)
@@ -63,7 +152,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         second: '2-digit',
         hour12: false,
       })
-    : '—'
+    : '–'
 
   const handlePickLandmark = useCallback((lm) => pickDestination(lm), [pickDestination])
 
@@ -86,6 +175,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const desktopSheetReservePx = selectedBay && !isMobile ? 396 : 0
   const rightInsetPx = 14 + desktopSheetReservePx
 
+  const showMapTimeBanner = mapBaysAtPlannedTime && plannerArrivalIso && plannerDurationMins != null
+
   return (
     <div className="pt-16 h-screen overflow-hidden">
       <div className="relative w-full h-[calc(100vh-64px)] overflow-hidden">
@@ -98,6 +189,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           destination={destination}
           onBayClick={handleBayClick}
           onMapReady={handleMapReady}
+          onBoundsChange={handleMapBounds}
+          plannerMapActive={mapBaysAtPlannedTime && Boolean(plannerParams)}
+          verdictByBayId={bulkVerdictById}
           showLimitedBays={showLimitedBays}
           defaultCenter={defaultMapCenter}
           defaultZoom={defaultMapZoom}
@@ -157,7 +251,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             </div>
           </div>
 
-          <div className="w-full pointer-events-auto">
+          <div className="w-full pointer-events-auto min-w-0">
             <FilterChips
               activeFilter={activeFilter}
               onFilterChange={setActiveFilter}
@@ -165,6 +259,16 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
               onToggleLimitedBays={setShowLimitedBays}
             />
           </div>
+
+          {showMapTimeBanner && (
+            <div className="w-full pointer-events-auto min-w-0 mt-0.5">
+              <MapTimeBanner
+                arrivalIso={plannerArrivalIso}
+                durationMins={plannerDurationMins}
+                onDismiss={resetPlannerToLive}
+              />
+            </div>
+          )}
         </div>
 
         {!selectedBay && (
@@ -188,7 +292,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             </span>
             {proxLimitedCount > 0 && (
               <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                +{proxLimitedCount} sensor-only bay{proxLimitedCount !== 1 ? 's' : ''} nearby (limited info)
+                +{proxLimitedCount} sensor-only nearby
               </span>
             )}
           </div>
@@ -200,7 +304,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </span>
           {showLimitedBays && limitedCount > 0 && (
             <span className="text-[11px] font-medium text-white/65 dark:text-brand-900/55">
-              +{limitedCount} sensor-only nearby
+              +{limitedCount} sensor only
             </span>
           )}
         </div>
@@ -210,28 +314,25 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           style={{ right: rightInsetPx }}
         >
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
-            Verified Bays
+            Verified bays
           </div>
           {[
-            ['bg-accent', 'Available'],
-            ['bg-[#FFB382]', 'Rule Trap'],
-            ['bg-[#ed6868]', 'Occupied'],
+            ['bg-[#a3ec48]', 'Available (green)'],
+            ['bg-[#FFB382]', 'Caution (orange)'],
+            ['bg-[#ed6868]', 'Occupied (red)'],
           ].map(([bg, label]) => (
             <div key={label} className="mb-1 flex items-center gap-1.5 text-xs text-white/95 dark:text-brand-900">
-              <div className="relative flex items-center justify-center w-3.5 h-3.5 shrink-0">
-                <div className={`${bg} w-2.5 h-2.5 rounded-full`} />
-                <div className="absolute inset-0 rounded-full border-[1.5px] border-[#FFD700]" />
-              </div>
+              <div className={`${bg} h-2.5 w-2.5 shrink-0 rounded-full`} />
               {label}
             </div>
           ))}
-          <div className="mt-2 pt-1.5 border-t border-white/20 dark:border-brand-800/20">
+          <div className="mt-2 border-t border-white/20 pt-1.5 dark:border-brand-800/20">
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
-              Limited Info
+              Sensor only
             </div>
             <div className="flex items-center gap-1.5 text-xs text-white/75 dark:text-brand-900/70">
-              <div className="w-2 h-2 rounded-full bg-gray-400/60 shrink-0" />
-              Sensor only — check signage
+              <div className="h-2 w-2 shrink-0 rounded-full bg-gray-400/60" />
+              Occupancy only, check signs
             </div>
           </div>
         </div>
@@ -244,6 +345,19 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             isMobile={isMobile}
             lastUpdated={lastUpdated}
             reserveBottomPx={0}
+            savedPlannerArrivalIso={plannerArrivalIso}
+            savedPlannerDurationMins={plannerDurationMins}
+            onDebouncedPlannerChange={handleDebouncedPlannerFromSheet}
+            mapBaysAtPlannedTime={mapBaysAtPlannedTime}
+            onShowAllBaysAtThisTime={(p) => {
+              if (p) {
+                setPlannerArrivalIso(p.arrivalIso)
+                setPlannerDurationMins(p.durationMins)
+              }
+              setMapBaysAtPlannedTime(true)
+            }}
+            onResetPlannerToLive={resetPlannerToLive}
+            plannerResetNonce={plannerResetNonce}
           />
         )}
       </div>

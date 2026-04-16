@@ -16,14 +16,14 @@
  * Map a raw `/api/parking` record into the bay object used by the frontend.
  *
  * ONLY real, API-backed fields are set here.
- * Rule decisions are NOT made here — they come from the evaluate endpoint.
+ * Rule decisions are NOT made here – they come from the evaluate endpoint.
  *
  * Fields:
  *   id              – CoM kerbside sensor ID (real)
  *   name            – Street name from CoM roadsegmentdescription, or null (real)
  *   type            – Visual map-dot category: available / trap / occupied
  *                     Derived from sensor status + bayType (both from real APIs).
- *                     Used ONLY for map dot colour — not for rule decisions.
+ *                     Used ONLY for map dot colour – not for rule decisions.
  *   lat / lng       – GPS coordinates (real)
  *   spots           – Always 1; each CoM sensor monitors a single kerbside bay
  *   free            – 0 or 1 from sensor (real)
@@ -37,7 +37,7 @@ export function mapApiRecordToBay(record) {
   const isFree = status === 'free'
   const bayType = record.bay_type || 'Other'
 
-  // Map dot colour category — derived from real API data (not rule inference).
+  // Map dot colour category – derived from real API data (not rule inference).
   // "trap" applies to absolute restrictions (Loading Zone, No Standing) which
   // the CoM restriction API classifies directly; no time logic is applied here.
   const isDefinitelyRestricted =
@@ -48,7 +48,7 @@ export function mapApiRecordToBay(record) {
 
   return {
     id,
-    name: record.street_name || null,   // null → UI shows "Unnamed Bay"
+    name: record.street_name || null,   // null → UI uses ID-first title (see bayLabels.js)
     type,
     lat: record.lat,
     lng: record.lng,
@@ -84,7 +84,7 @@ export async function fetchParkingBays() {
     }
     const msg =
       res.status === 503
-        ? 'Parking data is not ready yet — the server may still be loading sensors.'
+        ? 'Parking data is not ready yet – the server may still be loading sensors.'
         : `Could not load bays (${res.status})${detail ? `: ${detail}` : ''}`
     throw new Error(msg)
   }
@@ -106,10 +106,18 @@ export async function fetchParkingBays() {
  *   warning          – { description, ... } | null
  *   data_source      – "db" | "api_fallback" | "unknown"
  */
-export async function fetchBayEvaluation(bayId) {
+/**
+ * @param {string} bayId
+ * @param {{ arrivalIso?: string | null, durationMins?: number | null } | null} [options] Omit or null for live (server uses now + default duration).
+ */
+export async function fetchBayEvaluation(bayId, options = null) {
   if (!bayId) return null
   const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
-  const url = `${base}/api/bays/${encodeURIComponent(bayId)}/evaluate`
+  const params = new URLSearchParams()
+  if (options?.arrivalIso) params.set('arrival_iso', options.arrivalIso)
+  if (options?.durationMins != null) params.set('duration_mins', String(options.durationMins))
+  const qs = params.toString()
+  const url = `${base}/api/bays/${encodeURIComponent(bayId)}/evaluate${qs ? `?${qs}` : ''}`
   try {
     const res = await fetch(url)
     if (!res.ok) return null
@@ -117,5 +125,29 @@ export async function fetchBayEvaluation(bayId) {
     return data ?? null
   } catch {
     return null
+  }
+}
+
+/**
+ * Bulk verdicts for map colouring. bbox: south,west,north,east (WGS84).
+ * @param {string} bbox
+ * @param {{ arrivalIso: string, durationMins: number }} options
+ * @returns {Promise<Array<{ bay_id: string, lat?: number, lon?: number, verdict: string }>>}
+ */
+export async function fetchEvaluateBulk(bbox, options) {
+  if (!bbox || !options?.arrivalIso || options.durationMins == null) return []
+  const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+  const params = new URLSearchParams()
+  params.set('bbox', bbox)
+  params.set('arrival_iso', options.arrivalIso)
+  params.set('duration_mins', String(options.durationMins))
+  const url = `${base}/api/bays/evaluate-bulk?${params.toString()}`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data = await res.json()
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
   }
 }
