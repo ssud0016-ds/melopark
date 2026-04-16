@@ -24,7 +24,6 @@
 
   #root {
     min-height: 100vh;
-    min-height: 100dvh;
   }
 }
 
@@ -67,17 +66,6 @@
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
-}
-
-/* Full viewport height with dynamic viewport fallback (mobile browser chrome). */
-.mp-h-viewport {
-  height: 100vh;
-  height: 100dvh;
-}
-
-.mp-map-canvas-h {
-  height: calc(100vh - 4rem - env(safe-area-inset-top, 0px));
-  height: calc(100dvh - 4rem - env(safe-area-inset-top, 0px));
 }
 
 /* Focus-visible ring for a11y */
