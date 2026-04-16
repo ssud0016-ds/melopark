@@ -111,10 +111,9 @@ export default function BottomSheet({ snap, onSnapChange, title, subtitle, child
     <div
       ref={sheetRef}
       className={cn(
-        'absolute inset-x-0 bottom-0 z-[550] flex flex-col rounded-t-[20px] bg-white shadow-sheet dark:bg-surface-dark',
-        'max-h-[min(75vh,75dvh)] pb-[env(safe-area-inset-bottom,0px)]',
-        'transition-transform duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]',
-        open ? 'translate-y-0' : 'translate-y-[calc(100%-260px)]',
+        'absolute bottom-0 inset-x-0 z-[550] bg-white dark:bg-surface-dark',
+        'rounded-t-[20px] shadow-sheet flex flex-col',
+        !dragging && 'transition-[height] duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]',
       )}
       style={{ height: visualHeight }}
     >
