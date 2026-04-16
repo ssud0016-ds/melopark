@@ -404,11 +404,13 @@ export default function ParkingMap({
             style={
               isMobile
                 ? {
-                    left: '50%',
-                    transform: 'translateX(-50%)',
+                    left: '14px',
+                    right: '220px',
                     bottom: '86px',
-                    maxWidth: 'calc(100% - 28px)',
+                    maxWidth: 'calc(100% - 234px)',
                     whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
                   }
                 : {
                     left: '50%',
@@ -420,7 +422,7 @@ export default function ParkingMap({
                   }
             }
           >
-            Zoom in to view and select individual bays
+            Zoom in to select individual bays
           </div>
         )}
       </MapContainer>
