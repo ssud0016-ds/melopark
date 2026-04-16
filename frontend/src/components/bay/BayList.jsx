@@ -37,7 +37,7 @@ export default function BayList({ visibleBays, selectedBayId, destination, onSel
   if (!sorted.length) {
     return (
       <div className="text-center py-8 px-4 text-gray-400 dark:text-gray-500">
-        <div className="text-3xl mb-2.5">🅿️</div>
+        <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-lg font-bold text-gray-400 dark:text-gray-500 mx-auto mb-2.5">P</div>
         <div className="font-semibold mb-1 text-gray-500 dark:text-gray-400">No bays match</div>
         <div className="text-sm">Try a different filter or widen your search</div>
       </div>

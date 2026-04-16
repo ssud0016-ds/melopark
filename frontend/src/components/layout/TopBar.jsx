@@ -36,7 +36,7 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
                  border-gray-200/60 dark:border-gray-700/60 shadow-sm px-3 sm:px-4 md:px-6
                  flex items-center gap-2 sm:gap-3"
     >
-      {/* Logo — left */}
+      {/* Logo – left */}
       <a
         href="#"
         onClick={(e) => { e.preventDefault(); onNavigate('map') }}
@@ -50,7 +50,7 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
         />
       </a>
 
-      {/* Centre — Live Map + About Us */}
+      {/* Centre – Live Map + About Us */}
       <div className="flex min-w-0 flex-1 items-center justify-center gap-2 sm:gap-3 px-1">
         <button
           type="button"
@@ -80,7 +80,7 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
         </button>
       </div>
 
-      {/* Right — live badge + theme toggle */}
+      {/* Right – live badge + theme toggle */}
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <div className="hidden sm:flex items-center gap-2 rounded-full border border-brand bg-brand px-3.5 py-1.5 text-xs font-medium text-white dark:border-brand-300/80 dark:bg-brand-50 dark:text-brand-900">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/85 animate-pulse-dot dark:bg-brand-700" />

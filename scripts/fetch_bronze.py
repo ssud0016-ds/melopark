@@ -2,6 +2,18 @@
 fetch_bronze.py - Downloads raw data from City of Melbourne APIs
 and saves to data/bronze/ as Parquet files without any transformation.
 
+PURPOSE
+-------
+Fetches raw data from the City of Melbourne (CoM) Open Data API and saves
+it as-is to the data/bronze/ directory with no transformations.
+
+DATASETS FETCHED
+----------------
+1. on-street-parking-bay-sensors — live sensor readings per bay
+2. on-street-car-park-bay-restrictions — restriction rules per bay
+3. on-street-parking-bays — bay polygons (geometry)
+4. street-addresses — geocoded addresses (search index input)
+
 Usage:
     python scripts/fetch_bronze.py
 
@@ -9,17 +21,19 @@ This pulls:
     1. Live sensor data (snapshot)
     2. Parking bays (static, full export)
     3. Bay restrictions (static, full export)
+    4. Street addresses (static, full export, for search)
 
 Output:
     data/bronze/sensors.parquet
     data/bronze/restrictions.parquet
     data/bronze/parking_bays.parquet
+    data/bronze/addresses.parquet
     data/bronze/fetch_metadata.json
 """
 
+import argparse
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -54,10 +68,31 @@ DATASETS = {
         "description": "Spatial polygon boundaries for each physical bay",
         "output_file": "parking_bays.parquet",
     },
+    "addresses": {
+        "dataset_id": "street-addresses",
+        "description": "City of Melbourne street/property addresses for search",
+        "output_file": "addresses.parquet",
+    },
 }
 
 MAX_API_OFFSET = 10_000
 PAGE_SIZE = 100
+
+
+def _sanitize_bronze_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Stringify dict/list cells so PyArrow can write API records with varying nested shapes."""
+    out = df.copy()
+    for col in out.columns:
+        if out[col].dtype != object:
+            continue
+        sample = out[col].dropna()
+        if sample.empty:
+            continue
+        if isinstance(sample.iloc[0], (dict, list)):
+            out[col] = out[col].apply(
+                lambda x: json.dumps(x, sort_keys=True) if isinstance(x, (dict, list)) else x
+            )
+    return out
 
 
 def fetch_dataset(name: str, config: dict) -> list[dict]:
@@ -81,7 +116,7 @@ def fetch_dataset(name: str, config: dict) -> list[dict]:
     return all_records
 
 
-def main():
+def main(datasets_filter: list[str] | None = None) -> None:
     BASE_DIR.mkdir(parents=True, exist_ok=True)
     fetched_at = datetime.now(timezone.utc)
     log.info("Fetching bronze data at %s", fetched_at.isoformat())
@@ -102,12 +137,19 @@ def main():
         ],
     }
 
-    for name, config in DATASETS.items():
+    items = DATASETS.items()
+    if datasets_filter is not None:
+        bad = [k for k in datasets_filter if k not in DATASETS]
+        if bad:
+            raise SystemExit(f"Unknown dataset(s): {bad}. Choose from: {list(DATASETS)}")
+        items = [(k, DATASETS[k]) for k in datasets_filter]
+
+    for name, config in items:
         try:
             log.info("Fetching %s (%s) …", name, config["description"])
             records = fetch_dataset(name, config)
 
-            df = pd.DataFrame(records)
+            df = _sanitize_bronze_df(pd.DataFrame(records))
             out_path = BASE_DIR / config["output_file"]
             df.to_parquet(out_path, index=False, engine="pyarrow")
 
@@ -132,4 +174,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Fetch CoM bronze datasets to data/bronze/")
+    parser.add_argument(
+        "--dataset",
+        action="append",
+        dest="datasets",
+        metavar="NAME",
+        choices=list(DATASETS.keys()),
+        help="Fetch only this dataset (can be repeated). Default: all.",
+    )
+    args = parser.parse_args()
+    main(datasets_filter=args.datasets)

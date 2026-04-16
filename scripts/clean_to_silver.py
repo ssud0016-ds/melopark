@@ -132,6 +132,10 @@ LON_MIN, LON_MAX = 144.6, 145.2
 #: Number of restriction slot columns in the wide restrictions dataset
 N_SLOTS = 8
 
+#: Tighter CBD bounds used for search address index
+SEARCH_LAT_MIN, SEARCH_LAT_MAX = -37.825, -37.805
+SEARCH_LON_MIN, SEARCH_LON_MAX = 144.950, 144.985
+
 
 # ─── LOAD HELPERS ───────────────────────────────────────────────────────────
 
@@ -426,6 +430,159 @@ def melt_restrictions(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFra
     return long_df
 
 
+# ─── ADDRESS CLEANING (SEARCH INDEX) ────────────────────────────────────────
+
+def _pick_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    """Return the first matching column from a candidate list."""
+    for col in candidates:
+        if col in df.columns:
+            return col
+    return None
+
+
+def _as_mapping(val) -> dict | None:
+    """Parse API geo objects from dicts or JSON strings (after bronze Parquet round-trip)."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str) and val.strip().startswith("{"):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, dict) else None
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def _lat_lng_from_geo_cell(val) -> tuple:
+    m = _as_mapping(val)
+    if not m:
+        return (None, None)
+    return (m.get("lat"), m.get("lon"))
+
+
+def clean_addresses(df_raw: pd.DataFrame, verbose: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Clean raw address data into search-ready rows.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        - addresses_df with columns: name, sub, category, lat, lng
+        - streets_df with columns: name, sub, category, lat, lng
+    """
+    log.info("--- Cleaning addresses ---")
+    df = df_raw.copy()
+    initial_rows = len(df)
+
+    geo_col = _pick_column(df, ["geo_point_2d", "location", "geo_shape"])
+    lat_col = _pick_column(df, ["latitude", "lat", "y"])
+    lon_col = _pick_column(df, ["longitude", "lon", "lng", "x"])
+
+    if (lat_col is None or lon_col is None) and geo_col:
+        latlng = df[geo_col].apply(_lat_lng_from_geo_cell)
+        df["lat"] = latlng.apply(lambda t: t[0])
+        df["lng"] = latlng.apply(lambda t: t[1])
+    elif lat_col and lon_col:
+        df["lat"] = pd.to_numeric(df[lat_col], errors="coerce")
+        df["lng"] = pd.to_numeric(df[lon_col], errors="coerce")
+    else:
+        raise ValueError(
+            "Could not detect latitude/longitude columns in addresses dataset. "
+            f"Available columns: {list(df.columns)}"
+        )
+
+    df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
+    df["lng"] = pd.to_numeric(df["lng"], errors="coerce")
+
+    in_cbd = (
+        df["lat"].between(SEARCH_LAT_MIN, SEARCH_LAT_MAX)
+        & df["lng"].between(SEARCH_LON_MIN, SEARCH_LON_MAX)
+        & df["lat"].notna()
+        & df["lng"].notna()
+    )
+    df = df[in_cbd].copy()
+
+    if verbose:
+        log.info("  Address columns: %s", list(df.columns))
+    log.info("  CBD filter: %d -> %d rows", initial_rows, len(df))
+
+    addr_col = _pick_column(
+        df,
+        ["add_comp", "address_pnt", "address", "street_address", "full_address", "streetaddress"],
+    )
+    house_col = _pick_column(df, ["street_no", "housenumber", "house_number", "street_number"])
+    street_col = _pick_column(df, ["str_name", "streetname", "street_name", "road_name"])
+    street_type_col = _pick_column(df, ["streettype", "street_type", "road_type"])
+    suburb_col = _pick_column(df, ["suburb", "locality", "city"])
+    postcode_col = _pick_column(df, ["postcode", "post_code", "postal_code"])
+
+    if addr_col:
+        df["name"] = df[addr_col].astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
+    elif street_col:
+        house_series = df[house_col].fillna("").astype(str).str.strip() if house_col else ""
+        street_series = df[street_col].fillna("").astype(str).str.strip()
+        street_type_series = (
+            " " + df[street_type_col].fillna("").astype(str).str.strip()
+            if street_type_col else ""
+        )
+        df["name"] = (
+            house_series + " " + street_series + street_type_series
+            if house_col else street_series + street_type_series
+        ).str.replace(r"\s+", " ", regex=True).str.strip()
+    else:
+        raise ValueError(
+            "Could not detect address/street columns to build searchable name. "
+            f"Available columns: {list(df.columns)}"
+        )
+
+    sub_parts: list[pd.Series] = []
+    if suburb_col:
+        sub_parts.append(df[suburb_col].fillna("").astype(str).str.strip())
+    if postcode_col:
+        sub_parts.append(df[postcode_col].fillna("").astype(str).str.strip())
+
+    if sub_parts:
+        sub = sub_parts[0]
+        for part in sub_parts[1:]:
+            sub = (sub + " " + part).str.replace(r"\s+", " ", regex=True).str.strip()
+        df["sub"] = sub
+    else:
+        df["sub"] = "Melbourne VIC"
+
+    df = df[df["name"] != ""].copy()
+    df["category"] = "address"
+    addresses_df = df[["name", "sub", "category", "lat", "lng"]].drop_duplicates(
+        subset=["name", "lat", "lng"]
+    ).reset_index(drop=True)
+
+    if street_col:
+        street_name = df[street_col].fillna("").astype(str).str.strip()
+        if street_type_col:
+            street_name = (street_name + " " + df[street_type_col].fillna("").astype(str).str.strip()).str.strip()
+        street_name = street_name.str.replace(r"\s+", " ", regex=True).str.title()
+
+        tmp = df.copy()
+        tmp["_street_name"] = street_name
+        tmp = tmp[tmp["_street_name"] != ""]
+        streets_df = (
+            tmp.groupby("_street_name", as_index=False)
+            .agg(lat=("lat", "mean"), lng=("lng", "mean"), count=("lat", "size"))
+        )
+        streets_df = streets_df[streets_df["count"] >= 2].copy()
+        streets_df["name"] = streets_df["_street_name"]
+        streets_df["sub"] = "Melbourne CBD"
+        streets_df["category"] = "street"
+        streets_df = streets_df[["name", "sub", "category", "lat", "lng"]].reset_index(drop=True)
+    else:
+        streets_df = pd.DataFrame(columns=["name", "sub", "category", "lat", "lng"])
+
+    log.info("  Address rows: %d", len(addresses_df))
+    log.info("  Street rows:  %d", len(streets_df))
+    return addresses_df, streets_df
+
+
 # ─── JOIN ────────────────────────────────────────────────────────────────────
 
 def join_silver(
@@ -497,7 +654,9 @@ def join_silver(
 def write_metadata(
     sensors: pd.DataFrame,
     restrictions: pd.DataFrame,
-    merged: pd.DataFrame
+    merged: pd.DataFrame,
+    addresses: pd.DataFrame | None = None,
+    streets: pd.DataFrame | None = None,
 ) -> None:
     """
     Write silver layer metadata JSON for audit and downstream use.
@@ -538,6 +697,17 @@ def write_metadata(
         },
     }
 
+    if addresses is not None:
+        meta["datasets"]["addresses_clean"] = {
+            "rows": len(addresses),
+            "columns": list(addresses.columns),
+        }
+    if streets is not None:
+        meta["datasets"]["streets_clean"] = {
+            "rows": len(streets),
+            "columns": list(streets.columns),
+        }
+
     path = SILVER_DIR / "clean_metadata.json"
     with open(path, "w") as f:
         json.dump(meta, f, indent=2)
@@ -576,12 +746,24 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     # Join
     merged = join_silver(sensors_clean, restrictions_long)
 
+    addresses_clean = None
+    streets_clean = None
+    addresses_path = BRONZE_DIR / "addresses.parquet"
+    if addresses_path.exists():
+        addresses_raw = load_bronze("addresses.parquet")
+        addresses_clean, streets_clean = clean_addresses(addresses_raw, verbose)
+    else:
+        log.info("No addresses.parquet found. Skipping address search datasets.")
+
     if dry_run:
         log.info("DRY RUN — no files written.")
         log.info("Would write:")
         log.info("  data/silver/sensors_clean.parquet      (%d rows)", len(sensors_clean))
         log.info("  data/silver/restrictions_long.parquet   (%d rows)", len(restrictions_long))
         log.info("  data/silver/merged.parquet              (%d rows)", len(merged))
+        if addresses_clean is not None and streets_clean is not None:
+            log.info("  data/silver/addresses_clean.parquet (%d rows)", len(addresses_clean))
+            log.info("  data/silver/streets_clean.parquet   (%d rows)", len(streets_clean))
         return
 
     # Save
@@ -597,7 +779,21 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     merged.to_parquet(merged_path, index=False, engine="pyarrow")
     log.info("Saved merged.parquet             (%d rows)", len(merged))
 
-    write_metadata(sensors_clean, restrictions_long, merged)
+    if addresses_clean is not None and streets_clean is not None:
+        addr_path = SILVER_DIR / "addresses_clean.parquet"
+        street_path = SILVER_DIR / "streets_clean.parquet"
+        addresses_clean.to_parquet(addr_path, index=False, engine="pyarrow")
+        streets_clean.to_parquet(street_path, index=False, engine="pyarrow")
+        log.info("Saved addresses_clean.parquet (%d rows)", len(addresses_clean))
+        log.info("Saved streets_clean.parquet   (%d rows)", len(streets_clean))
+
+    write_metadata(
+        sensors_clean,
+        restrictions_long,
+        merged,
+        addresses=addresses_clean,
+        streets=streets_clean,
+    )
 
     log.info("=" * 60)
     log.info("Silver layer complete.")
