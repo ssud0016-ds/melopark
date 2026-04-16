@@ -76,8 +76,19 @@ function PlannerVerdictStrip({ evaluation, evaluationPending }) {
  *   bay                 – bay object (always present); only bay.type and bay.bayType used
  *   evaluation          – BayEvaluation from backend, or null while loading / on failure
  *   evaluationPending   – true while the evaluate request is in flight
+ *   plannerActive       – arrival planner on: compact strip verdict (US 2.2)
  */
-export default function VerdictCard({ bay, evaluation, evaluationPending = false }) {
+export default function VerdictCard({ bay, evaluation, evaluationPending = false, plannerActive = false }) {
+  const [reasonExpanded, setReasonExpanded] = useState(false)
+
+  useEffect(() => {
+    setReasonExpanded(false)
+  }, [bay.id])
+
+  if (plannerActive) {
+    return <PlannerVerdictStrip evaluation={evaluation} evaluationPending={evaluationPending} />
+  }
+
   const verdict = evaluation?.verdict ?? null      // "yes" | "no" | "unknown" | null
   const hasRealVerdict = verdict === 'yes' || verdict === 'no'
   const isUnknown = verdict === 'unknown'
@@ -106,12 +117,12 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
 
   const loading = evaluationPending
 
-  // ── Primary answer — YES/NO + plain headline ─────────────────────────────
+  // ── Primary answer – YES/NO + plain headline ─────────────────────────────
   let verdictWord
   let headlineText
   if (loading) {
     verdictWord = null
-    headlineText = 'Checking whether you can park here'
+    headlineText = 'Checking rules\u2026'
   } else if (isUnknown) {
     verdictWord = '?'
     headlineText = "We can't tell if you can park here"
@@ -125,11 +136,15 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
 
   const reasonText = loading
     ? 'Loading rule evaluation\u2026'
-    : isUnknown
-      ? evaluation?.reason ?? 'Rule data not available for this bay. Check posted street signage.'
-      : hasRealVerdict
-        ? evaluation.reason
-        : 'Rule data unavailable — check posted signage.'
+    : noRestrictionData
+      ? NO_DATA_FALLBACK
+      : isUnknown
+        ? (evaluation?.reason ?? NO_DATA_FALLBACK)
+        : hasRealVerdict
+          ? evaluation.reason
+          : NO_DATA_FALLBACK
+
+  const reasonStr = typeof reasonText === 'string' ? reasonText : ''
 
   const limitVal = restriction?.typedesc
     ?? (bay.bayType !== 'Other' ? bay.bayType : null)
@@ -209,17 +224,33 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
       >
         {headlineText}
       </h2>
-      <p
-        className={cn(
-          'text-sm leading-relaxed mb-4',
-          tone === 'yes' && 'text-white/95',
-          tone === 'trap' && 'text-gray-800 dark:text-gray-200',
-          tone === 'no' && 'text-gray-800 dark:text-gray-200',
-          tone === 'neutral' && 'text-gray-600 dark:text-gray-300',
+      <div className="mb-4">
+        <p
+          className={cn(
+            'text-sm leading-relaxed',
+            !reasonExpanded && reasonNeedsCollapse && 'line-clamp-3',
+            tone === 'yes' && 'text-white/95',
+            tone === 'trap' && 'text-gray-800 dark:text-gray-200',
+            tone === 'no' && 'text-gray-800 dark:text-gray-200',
+            tone === 'neutral' && 'text-gray-600 dark:text-gray-300',
+          )}
+        >
+          {reasonText}
+        </p>
+        {reasonNeedsCollapse && (
+          <button
+            type="button"
+            onClick={() => setReasonExpanded((e) => !e)}
+            className={cn(
+              'mt-1.5 text-xs font-semibold underline-offset-2 hover:underline',
+              tone === 'yes' && 'text-white/90',
+              tone !== 'yes' && 'text-brand dark:text-brand-light',
+            )}
+          >
+            {reasonExpanded ? 'Show less' : 'Show full explanation'}
+          </button>
         )}
-      >
-        {reasonText}
-      </p>
+      </div>
 
       <div className="grid grid-cols-2 gap-2.5">
         {[
@@ -231,7 +262,7 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
             key={row.label}
             className={cn(
               'rounded-lg px-3 py-2',
-              row.label === 'Applies' && 'col-span-2',
+              row.label === 'Details' && 'col-span-2',
               tone === 'yes' ? 'bg-white/15' : 'bg-white/60 dark:bg-white/5',
             )}
           >

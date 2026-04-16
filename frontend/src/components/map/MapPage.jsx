@@ -8,7 +8,6 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
 import { fetchEvaluateBulk } from '../../services/apiBays'
 import { formatAtDateTime, formatDurationLabel } from '../../utils/plannerTime'
-import { cn } from '../../utils/cn'
 
 function MapTimeBanner({ arrivalIso, durationMins, onDismiss }) {
   return (
@@ -29,7 +28,6 @@ function MapTimeBanner({ arrivalIso, durationMins, onDismiss }) {
 }
 
 export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry }) {
-
   const mapRef = useRef(null)
 
   const {
@@ -144,11 +142,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 900)
     window.addEventListener('resize', onResize)
-    window.addEventListener('orientationchange', onResize)
-    return () => {
-      window.removeEventListener('resize', onResize)
-      window.removeEventListener('orientationchange', onResize)
-    }
+    return () => window.removeEventListener('resize', onResize)
   }, [])
 
   const tsStr = lastUpdated
@@ -184,9 +178,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const showMapTimeBanner = mapBaysAtPlannedTime && plannerArrivalIso && plannerDurationMins != null
 
   return (
-    <div className="mp-h-viewport overflow-hidden pt-[calc(4rem+env(safe-area-inset-top,0px))]">
-      <div className="relative w-full overflow-hidden mp-map-canvas-h">
-        {/* Map */}
+    <div className="pt-16 h-screen overflow-hidden">
+      <div className="relative w-full h-[calc(100vh-64px)] overflow-hidden">
         <ParkingMap
           bays={bays}
           visibleBays={visibleBays}
@@ -213,7 +206,14 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         )}
 
         {apiError && (
-          <div className="absolute top-[72px] left-1/2 z-[520] max-w-[min(420px,calc(100vw-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] -translate-x-1/2 bg-trap-50 border border-trap-300 text-orange-800 dark:text-orange-200 rounded-xl px-3.5 py-2.5 text-sm leading-relaxed shadow-overlay">
+          <div
+            className="absolute top-[72px] z-[520] max-w-[min(420px,92vw)] bg-trap-50 border border-trap-300 text-orange-800 dark:text-orange-200 rounded-xl px-3.5 py-2.5 text-sm leading-relaxed shadow-overlay"
+            style={
+              desktopSheetReservePx
+                ? { left: 14, right: rightInsetPx, marginInline: 'auto' }
+                : { left: '50%', transform: 'translateX(-50%)' }
+            }
+          >
             <strong>Live data:</strong> {apiError}
             {onRetry && (
               <button
@@ -227,21 +227,18 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </div>
         )}
 
-        {/* Top overlay: search + zoom + filters */}
-        <div className="pointer-events-none absolute top-3.5 left-1/2 z-[500] flex w-[min(560px,calc(100%-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] -translate-x-1/2 flex-col items-center gap-2.5 md:w-[min(760px,calc(100%-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] lg:w-[min(900px,calc(100%-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))]">
-          <div className="flex w-full flex-col gap-2 pointer-events-auto min-[440px]:flex-row min-[440px]:items-center [@media(max-height:520px)]:flex-row [@media(max-height:520px)]:items-center">
-            <div className="min-w-0 w-full flex-1">
-              <SearchBar
-                destination={destination}
-                onPick={handlePickLandmark}
-                onClear={clearDestination}
-              />
-            </div>
-            <div className="flex shrink-0 flex-col gap-1 [@media(max-height:520px)]:flex-col">
-              {[
-                { delta: 0.3, label: '+' },
-                { delta: -0.3, label: '\u2212' },
-              ].map(({ delta, label }) => (
+        <div
+          className="absolute top-3.5 flex flex-col items-center gap-2.5 z-[500] pointer-events-none"
+          style={
+            desktopSheetReservePx
+              ? { left: 14, right: rightInsetPx, width: 'auto', maxWidth: 'none' }
+              : { left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 28px)', maxWidth: 560 }
+          }
+        >
+          <div className="flex items-center gap-2.5 w-full pointer-events-auto">
+            <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
+            <div className="flex flex-col gap-1">
+              {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
                 <button
                   key={label}
                   type="button"
@@ -255,16 +252,24 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             </div>
           </div>
 
-          <div className="w-full min-w-0 pointer-events-auto">
-            <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+          <div className="w-full pointer-events-auto min-w-0">
+            <FilterChips
+              activeFilter={activeFilter}
+              onFilterChange={setActiveFilter}
+              showLimitedBays={showLimitedBays}
+              onToggleLimitedBays={setShowLimitedBays}
+            />
           </div>
 
-        </div>
-
-        {/* Live badge (top-right) */}
-        <div className="absolute top-3.5 z-[500] flex items-center gap-1.5 rounded-full border border-gray-200/60 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-card dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-400 right-[max(0.875rem,env(safe-area-inset-right,0px))]">
-          <span className="w-1.5 h-1.5 bg-brand rounded-full animate-pulse-dot" />
-          <span title="Last data refresh">Updated {tsStr}</span>
+          {showMapTimeBanner && (
+            <div className="w-full pointer-events-auto min-w-0 mt-0.5">
+              <MapTimeBanner
+                arrivalIso={plannerArrivalIso}
+                durationMins={plannerDurationMins}
+                onDismiss={resetPlannerToLive}
+              />
+            </div>
+          )}
         </div>
 
         {!selectedBay && (
@@ -278,8 +283,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         )}
 
         {destination && (
-          <div className="absolute top-[118px] left-1/2 z-[500] flex max-w-[min(36rem,calc(100vw-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] -translate-x-1/2 flex-wrap items-center gap-2 whitespace-normal rounded-full bg-surface-secondary px-5 py-2 text-sm font-semibold text-gray-900 shadow-overlay sm:whitespace-nowrap">
-            <span>{proxFreeSpots > 0 ? '🟢' : '🔴'}</span>
+          <div
+            className="absolute bottom-3.5 z-[500] bg-surface-secondary text-gray-900 rounded-2xl px-5 py-2.5 text-sm font-semibold shadow-overlay flex flex-col items-center gap-0.5 max-w-[calc(100%-120px)] border-2 border-brand"
+            style={{ left: '50%', transform: 'translateX(-50%)' }}
+          >
             <span>
               {proxVerifiedFree} free spot{proxVerifiedFree !== 1 ? 's' : ''} across&nbsp;
               {proxVerifiedFreeBays} verified bay{proxVerifiedFreeBays !== 1 ? 's' : ''} within 400 m of {destination.name}
@@ -292,31 +299,43 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </div>
         )}
 
-        {/* Bay count pill (bottom-left) */}
-        <div
-          className="absolute left-[max(0.875rem,env(safe-area-inset-left,0px))] z-[500] rounded-full border border-gray-200/60 bg-white px-3.5 py-1.5 text-sm font-semibold text-gray-900 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)] dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-100 bottom-[calc(290px+env(safe-area-inset-bottom,0px))]"
-          aria-live="polite"
-        >
-          <span className="text-brand">{visibleBays.length}</span> bays shown
+        <div className="absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-3.5 py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col">
+          <span className="text-sm font-semibold text-white dark:text-brand-900">
+            {verifiedCount} verified bay{verifiedCount !== 1 ? 's' : ''}
+          </span>
+          {showLimitedBays && limitedCount > 0 && (
+            <span className="text-[11px] font-medium text-white/65 dark:text-brand-900/55">
+              +{limitedCount} sensor only
+            </span>
+          )}
         </div>
 
-        {/* Legend (bottom-right) */}
         <div
-          className="absolute right-[max(0.875rem,env(safe-area-inset-right,0px))] z-[500] rounded-xl border border-gray-200/60 bg-white p-2.5 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)] dark:border-gray-700/60 dark:bg-surface-dark-secondary bottom-[calc(290px+env(safe-area-inset-bottom,0px))]"
+          className="absolute bottom-3.5 z-[500] rounded-xl border border-brand bg-brand p-2.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
+          style={{ right: rightInsetPx }}
         >
-          <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wider">
-            Bay Status
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
+            Verified bays
           </div>
           {[
-            ['bg-accent', 'Available'],
-            ['bg-trap', 'Rule Trap'],
-            ['bg-[#ed6868]', 'Occupied'],
+            ['bg-[#a3ec48]', 'Available (green)'],
+            ['bg-[#FFB382]', 'Caution (orange)'],
+            ['bg-[#ed6868]', 'Occupied (red)'],
           ].map(([bg, label]) => (
-            <div key={label} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1 last:mb-0">
-              <div className={cn('w-2.5 h-2.5 rounded-full shrink-0', bg)} />
+            <div key={label} className="mb-1 flex items-center gap-1.5 text-xs text-white/95 dark:text-brand-900">
+              <div className={`${bg} h-2.5 w-2.5 shrink-0 rounded-full`} />
               {label}
             </div>
           ))}
+          <div className="mt-2 border-t border-white/20 pt-1.5 dark:border-brand-800/20">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
+              Sensor only
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-white/75 dark:text-brand-900/70">
+              <div className="h-2 w-2 shrink-0 rounded-full bg-gray-400/60" />
+              Occupancy only, check signs
+            </div>
+          </div>
         </div>
 
         {selectedBay && (
