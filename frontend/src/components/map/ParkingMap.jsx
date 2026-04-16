@@ -95,6 +95,7 @@ export default function ParkingMap({
   defaultCenter = DEFAULT_MAP_CENTER,
   defaultZoom = DEFAULT_MAP_ZOOM,
   destZoom = DESTINATION_MAP_ZOOM,
+  isMobile = false,
 }) {
   const [isDark, setIsDark] = useState(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -259,7 +260,12 @@ export default function ParkingMap({
             >
               <Popup>
                 <div className="min-w-[130px]">
-                  <strong>{c.available}/{c.total}</strong> bays available
+                  <strong>
+                    {c.available} free of {c.total} bays
+                  </strong>
+                  <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                    Tap cluster to zoom into bays
+                  </div>
                 </div>
               </Popup>
             </Marker>
@@ -276,11 +282,13 @@ export default function ParkingMap({
           const selected = bay.id === selectedBayId
           const hasRules = bay.hasRules
           const baseRadius = hasRules ? 9 : 6
+          const markerRadius = isMobile ? baseRadius + 2 : baseRadius
+          const selectedRadius = isMobile ? 15 : 13
           return (
             <CircleMarker
               key={bay.id}
               center={[ll.lat, ll.lng]}
-              radius={selected ? 13 : baseRadius}
+              radius={selected ? selectedRadius : markerRadius}
               pathOptions={{
                 color: hasRules ? '#FFD700' : '#ffffff',
                 fillColor: cols.border,
@@ -318,6 +326,32 @@ export default function ParkingMap({
 
         {destination && destLatLng && destIcon && (
           <Marker position={[destLatLng.lat, destLatLng.lng]} icon={destIcon} interactive={false} />
+        )}
+
+        {zoomLevel < CLUSTER_ZOOM_CUTOFF && (
+          <div
+            className="pointer-events-none absolute z-[450] rounded-full border border-brand bg-white/95 px-3 py-1 text-xs font-semibold text-brand shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
+            style={
+              isMobile
+                ? {
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    bottom: '86px',
+                    maxWidth: 'calc(100% - 28px)',
+                    whiteSpace: 'nowrap',
+                  }
+                : {
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    bottom: destination ? '96px' : '18px',
+                    width: 'max-content',
+                    maxWidth: 'calc(100% - 440px)',
+                    whiteSpace: 'nowrap',
+                  }
+            }
+          >
+            Zoom in to view and select individual bays
+          </div>
         )}
       </MapContainer>
     </div>
