@@ -84,6 +84,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           defaultCenter={defaultMapCenter}
           defaultZoom={defaultMapZoom}
           destZoom={destinationMapZoom}
+          isMobile={isMobile}
         />
 
         {apiLoading && (
