@@ -211,14 +211,12 @@ export default function BayDetailSheet({
   const dataSource = evaluation?.data_source ?? null
   const showApiNote = dataSource === 'api_fallback'
 
-  const atLabel = debouncedPlanner ? formatAtDateTime(debouncedPlanner.arrivalIso) : null
-
   return (
     <div
       className={cn(
         'flex flex-col bg-white dark:bg-surface-dark overflow-y-auto overscroll-contain',
         isMobile
-          ? 'fixed top-16 inset-x-0 bottom-0 z-[2000]'
+          ? 'fixed inset-x-0 bottom-0 z-[2000] top-[calc(4rem+env(safe-area-inset-top,0px))] pb-[env(safe-area-inset-bottom,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]'
           : 'absolute right-0 top-0 w-[380px] max-w-[min(420px,44vw)] shadow-[-8px_0_40px_rgba(0,0,0,0.12)] z-[560]',
       )}
       style={!isMobile ? { bottom: reserveBottomPx } : undefined}
@@ -234,160 +232,12 @@ export default function BayDetailSheet({
         &times;
       </button>
 
-      <div
-        ref={plannerSectionRef}
-        id="bay-arrival-planner"
-        className="px-5 pt-0.5 pb-3 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0 scroll-mt-20"
-      >
-        <button
-          type="button"
-          onClick={handleToggleCheckTime}
-          className="flex w-full min-h-[40px] items-center justify-between gap-2 rounded-xl border border-gray-200/90 bg-gray-50/80 px-3 py-2 text-left hover:bg-gray-100/80 dark:border-gray-600 dark:bg-gray-800/50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-          aria-expanded={checkTimeExpanded}
-          aria-controls="bay-arrival-planner"
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <ClockIcon className="shrink-0 text-gray-600 dark:text-gray-400" />
-            <span className="text-xs font-semibold text-gray-800 dark:text-gray-100">Check another time</span>
-          </span>
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            className={cn(
-              'shrink-0 text-gray-500 transition-transform duration-200',
-              checkTimeExpanded && 'rotate-180',
-            )}
-            aria-hidden
-          >
-            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
-
-        {checkTimeExpanded && (
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-            <label className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Date
-              </span>
-              <input
-                type="date"
-                value={dateStr}
-                onChange={(e) => setDateStr(e.target.value)}
-                className="rounded-lg border border-gray-200/90 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-900 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100 min-h-[40px] w-full min-w-0"
-              />
-            </label>
-            <label className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Time
-              </span>
-              <input
-                type="time"
-                value={timeStr}
-                onChange={(e) => setTimeStr(e.target.value)}
-                className="rounded-lg border border-gray-200/90 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-900 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100 min-h-[40px] w-full min-w-0"
-              />
-            </label>
-            <label className="flex min-w-0 flex-1 flex-col gap-0.5 sm:max-w-[11rem]">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Stay
-              </span>
-              <select
-                value={durationMins}
-                onChange={(e) => setDurationMins(Number(e.target.value))}
-                className="rounded-lg border border-gray-200/90 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-900 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100 cursor-pointer min-h-[40px] w-full min-w-0"
-              >
-                {DURATIONS.map((m) => (
-                  <option key={m} value={m}>
-                    {m === 30
-                      ? '30 min'
-                      : m === 60
-                        ? '1 hr'
-                        : m === 90
-                          ? '1.5 hr'
-                          : m === 120
-                            ? '2 hr'
-                            : m === 180
-                              ? '3 hr'
-                              : '4 hr'}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        )}
-
-        {checkTimeExpanded && (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3 dark:border-gray-700/80">
-            <button
-              type="button"
-              onClick={handleClearPlanner}
-              className="text-xs font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 cursor-pointer"
-            >
-              Clear
-            </button>
-            {debouncedPlanner &&
-              (!mapBaysAtPlannedTime ? (
-                <button
-                  type="button"
-                  onClick={() => debouncedPlanner && onShowAllBaysAtThisTime?.(debouncedPlanner)}
-                  className="text-xs font-semibold text-brand dark:text-brand-light hover:underline cursor-pointer text-right"
-                >
-                  Show all bays at this time →
-                </button>
-              ) : (
-                <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Map uses this time</span>
-              ))}
-          </div>
-        )}
-
-        {!checkTimeExpanded && debouncedPlanner && (
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700/80">
-            {!mapBaysAtPlannedTime ? (
-              <button
-                type="button"
-                onClick={() => debouncedPlanner && onShowAllBaysAtThisTime?.(debouncedPlanner)}
-                className="text-xs font-semibold text-brand dark:text-brand-light hover:underline cursor-pointer text-right"
-              >
-                Show all bays at this time →
-              </button>
-            ) : (
-              <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Map uses this time</span>
-            )}
-          </div>
-        )}
+      {/* Primary answer first — "Can I park here?" */}
+      <div className="px-5 pb-4 shrink-0 -mt-2">
+        <VerdictCard bay={bay} evaluation={evaluation} evaluationPending={evalLoading} />
       </div>
 
-      <div className="px-5 pb-4 shrink-0 pt-3 border-b border-gray-200/60 dark:border-gray-700/60">
-        {atLabel && (
-          <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-2">At {atLabel}</p>
-        )}
-        <VerdictCard
-          bay={bay}
-          evaluation={evaluation}
-          evaluationPending={evalLoading}
-          plannerActive={plannerActive}
-        />
-      </div>
-
-      {plannerActive && bay.hasRules && !evalLoading && evaluation && (
-        <div className="px-5 pb-3 shrink-0 border-b border-gray-200/60 dark:border-gray-700/60">
-          <div className="flex justify-between gap-4 text-sm py-1">
-            <span className="text-gray-500 dark:text-gray-400 shrink-0">Stay limit:</span>
-            <span className="font-semibold text-gray-900 dark:text-gray-100 text-right tabular-nums">
-              {formatStayLimitShort(evaluation?.active_restriction?.max_stay_mins) ?? '-'}
-            </span>
-          </div>
-          <div className="flex justify-between gap-4 text-sm py-1">
-            <span className="text-gray-500 dark:text-gray-400 shrink-0">Leave by:</span>
-            <span className="font-semibold text-gray-900 dark:text-gray-100 text-right">
-              {formatLeaveByClock(evaluation?.active_restriction?.expires_at) ?? '-'}
-            </span>
-          </div>
-        </div>
-      )}
-
+      {/* Location & feed context */}
       <div className="px-5 pb-4 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex-1 min-w-0">
@@ -453,37 +303,28 @@ export default function BayDetailSheet({
           </span>
         </div>
 
-        {!evalLoading && !bay.hasRules && (
-          <div className="mb-3.5 px-3.5 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-start gap-2.5">
-              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="shrink-0 text-gray-400 mt-0.5">
-                <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5" />
-                <line x1="10" y1="10" x2="14" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-              <div>
-                <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-                  No rule text for this bay
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-1">
-                  Sensor data only – confirm rules on street signs before parking.
-                </p>
-                <p className="text-[11px] text-[#35338c] dark:text-[#a3a1e6] font-medium mt-1.5">
-                  Gold ring on the map = full rule data.
-                </p>
-              </div>
-            </div>
+        {/* Sensor timestamp */}
+        {sensorStr ? (
+          <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-3.5 px-3 py-2 bg-surface-tertiary dark:bg-surface-dark-tertiary rounded-lg">
+            Sensor last reported: {sensorStr}
+          </div>
+        ) : (
+          <div className="text-[11px] text-gray-400 dark:text-gray-500 mb-3.5 px-3 py-2 bg-surface-tertiary dark:bg-surface-dark-tertiary rounded-lg italic">
+            Live occupancy data unavailable
           </div>
         )}
 
+        {/* Data source transparency note */}
         {!evalLoading && showApiNote && (
           <div className="mb-3 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/40 text-[11px] text-blue-700 dark:text-blue-300">
-            Rules from CoM API (no hourly schedule in this feed).
+            Rule data sourced from City of Melbourne external API (no detailed time schedule available).
           </div>
         )}
 
-        {warnLine && (
-          <div className="mt-3.5 pl-3 pr-3.5 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 border-l-4 border-l-amber-500 dark:border-amber-700/50 dark:border-l-amber-500 text-xs text-amber-900 dark:text-amber-100 leading-snug">
-            {warnLine}
+        {/* Warning — only from backend evaluation, never locally inferred */}
+        {backendWarn && (
+          <div className="mt-3.5 px-3.5 py-2.5 bg-trap-50 dark:bg-trap-500/10 border border-trap-200 dark:border-trap-400/30 rounded-xl text-xs text-orange-700 dark:text-orange-300 leading-relaxed">
+            &#9888; {backendWarn}
           </div>
         )}
 
