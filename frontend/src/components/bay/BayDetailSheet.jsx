@@ -1,10 +1,43 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { BAY_COLORS } from '../../data/mapData'
 import { metersBetweenBayAndDestination, walkingMinutesFromMeters } from '../../utils/mapGeo'
+import { bayHeading, bayMissingStreetNote } from '../../utils/bayLabels'
 import { cn } from '../../utils/cn'
 import { fetchBayEvaluation } from '../../services/apiBays'
+import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
+import {
+  formatStayLimitShort,
+  formatLeaveByClock,
+  formatAtDateTime,
+  nextQuarterHourDefaults,
+} from '../../utils/plannerTime'
 import VerdictCard from './VerdictCard'
 import TimelineStrip from './TimelineStrip'
+
+const DURATIONS = [30, 60, 90, 120, 180, 240]
+
+function splitIsoForInputs(iso) {
+  if (!iso) return { dateStr: '', timeStr: '' }
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(iso)
+  if (!m) return { dateStr: '', timeStr: '' }
+  return { dateStr: m[1], timeStr: `${m[2]}:${m[3]}` }
+}
+
+function firstSentence(text) {
+  if (!text?.trim()) return ''
+  const t = text.trim()
+  const match = t.match(/^(.+?[.!?])(\s|$)/)
+  return match ? match[1].trim() : t
+}
+
+function ClockIcon({ className }) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
+      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  )
+}
 
 export default function BayDetailSheet({
   bay,
@@ -13,21 +46,80 @@ export default function BayDetailSheet({
   isMobile,
   lastUpdated,
   reserveBottomPx = 280,
+  savedPlannerArrivalIso = null,
+  savedPlannerDurationMins = null,
+  onDebouncedPlannerChange,
+  mapBaysAtPlannedTime = false,
+  onShowAllBaysAtThisTime,
+  onResetPlannerToLive,
+  plannerResetNonce = 0,
 }) {
   const [evaluation, setEvaluation] = useState(null)
   const [evalLoading, setEvalLoading] = useState(false)
 
-  // Fetch real evaluation from backend whenever the selected bay changes.
-  // The backend tries DB first, then external API cache, then returns "unknown".
+  const [checkTimeExpanded, setCheckTimeExpanded] = useState(false)
+  const [dateStr, setDateStr] = useState(() =>
+    savedPlannerArrivalIso ? splitIsoForInputs(savedPlannerArrivalIso).dateStr : '',
+  )
+  const [timeStr, setTimeStr] = useState(() =>
+    savedPlannerArrivalIso ? splitIsoForInputs(savedPlannerArrivalIso).timeStr : '',
+  )
+  const [durationMins, setDurationMins] = useState(() =>
+    savedPlannerDurationMins != null ? savedPlannerDurationMins : 60,
+  )
+
+  const rawPlanner = useMemo(() => {
+    if (!dateStr || !timeStr) return null
+    return { arrivalIso: `${dateStr}T${timeStr}:00`, durationMins }
+  }, [dateStr, timeStr, durationMins])
+
+  const debouncedPlanner = useDebouncedPlannerParams(rawPlanner, 300)
+
+  const plannerActive = Boolean(debouncedPlanner)
+
+  /** Sync MapPage only when debounced value is stable; avoid pushing null on mount while saved plan is still debouncing. */
+  useEffect(() => {
+    if (debouncedPlanner === null) {
+      if (rawPlanner === null) {
+        onDebouncedPlannerChange?.(null)
+      }
+      return
+    }
+    onDebouncedPlannerChange?.(debouncedPlanner)
+  }, [debouncedPlanner, rawPlanner, onDebouncedPlannerChange])
+
+  useEffect(() => {
+    if (savedPlannerArrivalIso && savedPlannerDurationMins != null) {
+      const s = splitIsoForInputs(savedPlannerArrivalIso)
+      setDateStr(s.dateStr)
+      setTimeStr(s.timeStr)
+      setDurationMins(savedPlannerDurationMins)
+    } else {
+      setDateStr('')
+      setTimeStr('')
+      setDurationMins(60)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- omit saved* deps so parent debounce updates do not reset inputs
+  }, [bay?.id, plannerResetNonce])
+
+  const fetchOpts = useMemo(() => {
+    if (!debouncedPlanner) return null
+    return {
+      arrivalIso: debouncedPlanner.arrivalIso,
+      durationMins: debouncedPlanner.durationMins,
+    }
+  }, [debouncedPlanner])
+
   useEffect(() => {
     if (!bay?.id) {
       setEvaluation(null)
+      setEvalLoading(false)
       return
     }
     let cancelled = false
     setEvalLoading(true)
     setEvaluation(null)
-    fetchBayEvaluation(bay.id).then((data) => {
+    fetchBayEvaluation(bay.id, fetchOpts).then((data) => {
       if (!cancelled) {
         setEvaluation(data)
         setEvalLoading(false)
@@ -36,32 +128,63 @@ export default function BayDetailSheet({
     return () => {
       cancelled = true
     }
-  }, [bay?.id])
+  }, [bay?.id, fetchOpts, debouncedPlanner])
+
+  useEffect(() => {
+    if (!checkTimeExpanded) return
+    if (dateStr || timeStr) return
+    const d = nextQuarterHourDefaults()
+    setDateStr(d.dateStr)
+    setTimeStr(d.timeStr)
+    setDurationMins(d.durationMins)
+  }, [checkTimeExpanded, dateStr, timeStr])
+
+  const plannerSectionRef = useRef(null)
+
+  useEffect(() => {
+    if (!checkTimeExpanded) return
+    const id = window.setTimeout(() => {
+      plannerSectionRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }, 100)
+    return () => window.clearTimeout(id)
+  }, [checkTimeExpanded])
+
+  const handleToggleCheckTime = useCallback(() => {
+    setCheckTimeExpanded((e) => !e)
+  }, [])
+
+  const handleClearPlanner = useCallback(() => {
+    setCheckTimeExpanded(false)
+    setDateStr('')
+    setTimeStr('')
+    setDurationMins(60)
+    onResetPlannerToLive?.()
+  }, [onResetPlannerToLive])
 
   if (!bay) return null
 
   const cols = BAY_COLORS[bay.type] || BAY_COLORS.available
 
-  // Header badge reflects sensor occupancy (real data from CoM sensor API)
   let badgeLabel = 'Occupied'
   if (bay.type === 'available') badgeLabel = 'Available'
   else if (bay.type === 'trap') badgeLabel = 'Restricted'
 
-  // Bay display name — real street name from CoM API, or honest fallback
-  const bayDisplayName = bay.name || 'Unnamed Bay'
+  const bayDisplayName = bayHeading(bay)
+  const missingStreetNote = bayMissingStreetNote(bay)
 
-  // Walking distance (only shown when user has selected a destination)
   let walkStr = null
   if (destination) {
     const m = Math.round(metersBetweenBayAndDestination(bay, destination))
     walkStr = `${m} m from ${destination.name} \u2013 ${walkingMinutesFromMeters(m)} min walk`
   }
 
-  // Spot dot colour based on live sensor data
   const spotDotColor = bay.free === 0 ? 'bg-danger' : 'bg-accent'
 
   const feedUpdatedStr = lastUpdated
-    ? lastUpdated.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    ? lastUpdated.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
     : null
 
   const sensorStr = bay.sensorLastUpdated
@@ -76,16 +199,15 @@ export default function BayDetailSheet({
       })()
     : null
 
-  // limitType label: prefer backend restriction typedesc, then raw bayType, then dash
   const limitTypeLabel =
     (evaluation?.active_restriction?.typedesc) ||
     (bay.bayType !== 'Other' ? bay.bayType : null) ||
-    '\u2014'
+    '\u2013'
 
-  // Backend warning description (only from real evaluation — no local guessing)
   const backendWarn = evaluation?.warning?.description ?? null
+  const warnLine = backendWarn ? firstSentence(String(backendWarn)) : null
+  const hasRuleInfo = Boolean(bay.hasRules)
 
-  // Data source transparency note
   const dataSource = evaluation?.data_source ?? null
   const showApiNote = dataSource === 'api_fallback'
 
@@ -99,9 +221,8 @@ export default function BayDetailSheet({
       )}
       style={!isMobile ? { bottom: reserveBottomPx } : undefined}
       role="dialog"
-      aria-label={`Bay ${bayDisplayName} details`}
+      aria-label={`${bayDisplayName}, parking details`}
     >
-      {/* Close button */}
       <button
         type="button"
         onClick={onClose}
@@ -129,9 +250,28 @@ export default function BayDetailSheet({
             <div className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-white mb-1">
               {bayDisplayName}
             </div>
-            <div className="text-xs text-gray-400 dark:text-gray-500">
-              Bay #{bay.id}
-              {walkStr && <span> \u2013 {walkStr}</span>}
+            {missingStreetNote && (
+              <div className="text-xs text-gray-400 dark:text-gray-500 mb-1">{missingStreetNote}</div>
+            )}
+            {(bay.name?.trim() || walkStr) && (
+              <div className="text-xs text-gray-400 dark:text-gray-500">
+                {bay.name?.trim() ? <span>#{bay.id}</span> : null}
+                {bay.name?.trim() && walkStr ? <span> · {walkStr}</span> : null}
+                {!bay.name?.trim() && walkStr ? <span>{walkStr}</span> : null}
+              </div>
+            )}
+            <div className="mt-2">
+              {hasRuleInfo ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#35338c]/30 bg-[#35338c]/5 px-2 py-0.5 text-[10px] font-semibold text-[#35338c] dark:border-[#a3a1e6]/40 dark:bg-[#35338c]/20 dark:text-[#a3a1e6]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#35338c] dark:bg-[#a3a1e6]" />
+                  Rules on file
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-300" />
+                  Rules not on file
+                </span>
+              )}
             </div>
           </div>
           {feedUpdatedStr && (
@@ -142,15 +282,25 @@ export default function BayDetailSheet({
         </div>
       </div>
 
-      {/* Body */}
       <div className="px-5 pt-4 pb-7 flex-1">
-        {/* Sensor occupancy row — 1 bay sensor, real data */}
-        <div className="flex items-center gap-2.5 bg-surface-secondary rounded-xl px-3.5 py-3 mb-4">
+        <div className="flex items-center gap-2.5 bg-surface-secondary rounded-xl px-3.5 py-2.5 mb-3">
           <div className={cn('w-3 h-3 rounded-full shrink-0', spotDotColor)} />
-          <span className="text-sm font-bold text-gray-900">
-            {bay.free === 1 ? 'Bay unoccupied' : bay.free === 0 ? 'Bay occupied' : 'Occupancy unknown'}
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold text-gray-900 dark:text-white">
+              {bay.free === 1 ? 'Space looks free' : bay.free === 0 ? 'Space looks occupied' : 'Occupancy unknown'}
+            </div>
+            {sensorStr && (
+              <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                Sensor · {sensorStr}
+              </div>
+            )}
+            {!sensorStr && (
+              <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 italic">No live sensor time</div>
+            )}
+          </div>
+          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 text-right max-w-[45%] leading-snug">
+            {limitTypeLabel}
           </span>
-          <span className="text-xs text-gray-500 ml-auto">{limitTypeLabel}</span>
         </div>
 
         {/* Sensor timestamp */}
@@ -178,7 +328,6 @@ export default function BayDetailSheet({
           </div>
         )}
 
-        {/* Timeline — only backend restriction data; no fake schedules */}
         <TimelineStrip
           activeRestriction={evalLoading ? null : evaluation?.active_restriction ?? null}
           verdict={evaluation?.verdict ?? null}

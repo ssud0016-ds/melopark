@@ -1,4 +1,67 @@
+import { useState, useEffect } from 'react'
 import { cn } from '../../utils/cn'
+
+/** Sentences from `plain_english` not already covered by `reason` (API text only; no invention). */
+function plainEnglishBeyondReason(plain, reason) {
+  if (!plain?.trim()) return null
+  const p = plain.trim()
+  if (!reason?.trim()) return p
+  const r = reason.toLowerCase()
+  const sentences = p.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean)
+  const extra = sentences.filter((s) => {
+    const head = s.toLowerCase().slice(0, 32)
+    return head.length >= 6 && !r.includes(head)
+  })
+  if (extra.length) return extra.join(' ')
+  if (!r.includes(p.toLowerCase().slice(0, Math.min(28, p.length)))) return p
+  return null
+}
+
+const REASON_COLLAPSE_AT = 220
+
+const ONE_LINE_REASON = 72
+
+function PlannerVerdictStrip({ evaluation, evaluationPending }) {
+  const verdict = evaluation?.verdict ?? null
+  const reason = typeof evaluation?.reason === 'string' ? evaluation.reason.trim() : ''
+  let stripClass =
+    'px-3 py-2.5 text-sm font-semibold leading-snug border-b border-black/5 dark:border-white/10 truncate'
+  let line = ''
+  let titleAttr = undefined
+
+  if (evaluationPending) {
+    stripClass +=
+      ' bg-gray-100 dark:bg-gray-800 min-h-[2.5rem] flex items-center justify-center'
+    line = '\u00a0'
+  } else if (verdict === 'yes') {
+    stripClass += ' bg-emerald-600 text-white'
+    line = 'OK to park'
+  } else if (verdict === 'no') {
+    stripClass += ' bg-red-600 text-white'
+    const rest = reason || 'Restricted'
+    const full = `Can't park · ${rest}`
+    line = full
+    titleAttr = full.length > ONE_LINE_REASON ? full : undefined
+  } else {
+    stripClass += ' bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-gray-100'
+    line = 'No data · check signage'
+  }
+
+  return (
+    <div
+      className={cn(
+        'rounded-xl overflow-hidden border border-gray-200/90 dark:border-gray-600/80',
+        evaluationPending && 'opacity-55 transition-opacity duration-200',
+      )}
+      aria-busy={evaluationPending}
+      aria-live="polite"
+    >
+      <div className={stripClass} title={titleAttr}>
+        {line}
+      </div>
+    </div>
+  )
+}
 
 /**
  * Displays parking rule verdict for a bay.
@@ -19,6 +82,10 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
   const hasRealVerdict = verdict === 'yes' || verdict === 'no'
   const isUnknown = verdict === 'unknown'
   const restriction = evaluation?.active_restriction ?? null
+  const dataSource = evaluation?.data_source ?? null
+  const hasRealData = dataSource === 'db' || dataSource === 'api_fallback'
+  const noRestrictionData = !evaluationPending && !restriction && !hasRealData
+  const NO_DATA_FALLBACK = 'Restriction data not available – check signage on site'
 
   // ── Visual type (colour) ────────────────────────────────────────────────
   let resolvedType = bay.type   // 'available' | 'trap' | 'occupied'
@@ -66,11 +133,35 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
 
   const limitVal = restriction?.typedesc
     ?? (bay.bayType !== 'Other' ? bay.bayType : null)
-    ?? '\u2014'
+    ?? (hasRealData && verdict === 'yes' ? 'None active' : '\u2013')
 
-  const costVal = 'Check street signage for pricing'  // no cost data in any source
+  const costVal = 'Not shown – check meters or signage'
 
-  const appliesVal = restriction?.plain_english ?? 'Check posted street signage'
+  /** Extra wording from API `plain_english` not already stated in `reason` (AC: plain English without repeating). */
+  let appliesVal = '\u2013'
+  if (!loading) {
+    if (restriction?.plain_english) {
+      const extra = plainEnglishBeyondReason(restriction.plain_english, reasonStr)
+      appliesVal = extra ?? '\u2013'
+    } else if (hasRealData && verdict === 'yes') {
+      appliesVal = 'No restrictions active right now – free to park.'
+    } else {
+      appliesVal = NO_DATA_FALLBACK
+    }
+  }
+
+  const showDetailsRow =
+    !loading &&
+    appliesVal !== '\u2013' &&
+    appliesVal.trim() !== reasonStr.trim()
+  const reasonNeedsCollapse = reasonStr.length > REASON_COLLAPSE_AT
+
+  let tone
+  if (loading) tone = 'neutral'
+  else if (hasRealVerdict && verdict === 'yes') tone = 'yes'
+  else if (hasRealVerdict && verdict === 'no' && isTrap) tone = 'trap'
+  else if (hasRealVerdict && verdict === 'no') tone = 'no'
+  else tone = 'neutral'
 
   let tone
   if (loading) tone = 'neutral'
@@ -141,7 +232,7 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
         {[
           { label: 'Time limit', value: limitVal },
           { label: 'Cost', value: costVal },
-          { label: 'Applies', value: appliesVal },
+          ...(showDetailsRow ? [{ label: 'Details', value: appliesVal }] : []),
         ].map((row) => (
           <div
             key={row.label}
@@ -165,7 +256,7 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
                 tone === 'yes' ? 'text-white' : 'text-gray-900 dark:text-gray-100',
               )}
             >
-              {row.value ?? '\u2014'}
+              {row.value ?? '\u2013'}
             </div>
           </div>
         ))}

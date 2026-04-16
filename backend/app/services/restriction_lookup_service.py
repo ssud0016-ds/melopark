@@ -1,6 +1,9 @@
 """Fetches and caches bay type information from the CoM restrictions dataset.
 
-Provides a lookup dict {bay_id -> bay_type} used to enrich parking bay records.
+Provides a lookup dict {deviceid -> bay_type} used to enrich parking bay records.
+The key is ``deviceid`` from the restrictions API which equals ``kerbsideid`` in
+the sensor API — these share the same ID namespace.  ``bayid`` is a different
+CoM-internal namespace and must NOT be used for joining.
 
 Architecture: same background-refresh, read-cache-only model as parking_service.
   - start_background_restrictions_refresh() launches a background task (call once at startup).
@@ -14,6 +17,7 @@ Architecture: same background-refresh, read-cache-only model as parking_service.
 
 import asyncio
 import logging
+from typing import Optional
 
 import httpx
 
@@ -44,7 +48,7 @@ _cache: dict[int, str] = {}
 _cache_lock = asyncio.Lock()
 
 
-def _map_type_desc(raw: str | None) -> str:
+def _map_type_desc(raw: Optional[str]) -> str:
     """Map a raw TypeDesc value to a frontend-friendly bay_type category."""
     if not raw:
         return "Other"
@@ -60,17 +64,26 @@ def _map_type_desc(raw: str | None) -> str:
     return "Other"
 
 
-def _extract_type_desc(record: dict) -> str | None:
-    """Extract TypeDesc from a record regardless of exact field name casing."""
-    for key in ("typedesc", "type_desc", "TypeDesc", "TYPEDESC"):
-        if key in record:
-            return record[key]
+def _extract_type_desc(record: dict) -> Optional[str]:
+    """Extract TypeDesc from a record regardless of exact field name casing.
+
+    The raw CoM API returns both ``description1`` (human-readable sign text)
+    and ``typedesc1`` (category code).  Either works for bay-type classification.
+    """
+    for key in ("typedesc1", "description1", "typedesc", "type_desc", "TypeDesc"):
+        val = record.get(key)
+        if val is not None:
+            return str(val)
     return None
 
 
-def _extract_bay_id(record: dict) -> int | None:
-    """Extract the bay identifier used to join with sensor data."""
-    for key in ("bay_id", "bayid", "BayId", "BAY_ID"):
+def _extract_bay_id(record: dict) -> Optional[int]:
+    """Extract the bay identifier used to join with sensor data.
+
+    The correct join key is ``deviceid`` (restrictions) = ``kerbsideid`` (sensors).
+    ``bayid`` is a different CoM-internal namespace and must NOT be used here.
+    """
+    for key in ("deviceid", "device_id", "DeviceId"):
         if key in record and record[key] is not None:
             try:
                 return int(record[key])
@@ -226,7 +239,7 @@ async def fetch_restrictions_lookup() -> dict[int, str]:
         return dict(_cache)
 
 
-def get_cached_bay_type(bay_id_str: str) -> str | None:
+def get_cached_bay_type(bay_id_str: str) -> Optional[str]:
     """Synchronously return the cached bay_type string for a given bay_id.
 
     Safe to call from synchronous code (e.g. SQLAlchemy route handlers)
