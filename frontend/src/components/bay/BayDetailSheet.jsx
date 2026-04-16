@@ -94,7 +94,7 @@ export default function BayDetailSheet({
       className={cn(
         'flex flex-col bg-white dark:bg-surface-dark overflow-y-auto overscroll-contain',
         isMobile
-          ? 'fixed top-16 inset-x-0 bottom-0 z-[2000]'
+          ? 'fixed inset-x-0 bottom-0 z-[2000] top-[calc(4rem+env(safe-area-inset-top,0px))] pb-[env(safe-area-inset-bottom,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]'
           : 'absolute right-0 top-0 w-[380px] max-w-[min(420px,44vw)] shadow-[-8px_0_40px_rgba(0,0,0,0.12)] z-[560]',
       )}
       style={!isMobile ? { bottom: reserveBottomPx } : undefined}

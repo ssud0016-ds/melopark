@@ -6,9 +6,7 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
 
   return (
     <nav
-      className="fixed top-0 inset-x-0 z-50 h-16 bg-white dark:bg-surface-dark border-b
-                 border-gray-200/60 dark:border-gray-700/60 shadow-sm px-4 md:px-6
-                 flex items-center justify-between"
+      className="fixed top-0 inset-x-0 z-50 flex min-h-[calc(4rem+env(safe-area-inset-top,0px))] items-center justify-between border-b border-gray-200/60 bg-white pt-[env(safe-area-inset-top,0px)] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] shadow-sm dark:border-gray-700/60 dark:bg-surface-dark md:pl-[max(1.5rem,env(safe-area-inset-left,0px))] md:pr-[max(1.5rem,env(safe-area-inset-right,0px))]"
     >
       {/* Logo — navigates to map */}
       <a

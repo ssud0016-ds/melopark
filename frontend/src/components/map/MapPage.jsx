@@ -41,7 +41,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 900)
     window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    window.addEventListener('orientationchange', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('orientationchange', onResize)
+    }
   }, [])
 
   const proxFreeSpots = proximityBays.reduce(
@@ -83,8 +87,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   }, [selectedBay, setSheetOpen])
 
   return (
-    <div className="pt-16 h-screen overflow-hidden">
-      <div className="relative w-full h-[calc(100vh-64px)] overflow-hidden">
+    <div className="mp-h-viewport overflow-hidden pt-[calc(4rem+env(safe-area-inset-top,0px))]">
+      <div className="relative w-full overflow-hidden mp-map-canvas-h">
         {/* Map */}
         <ParkingMap
           bays={bays}
@@ -108,7 +112,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {/* Error banner */}
         {apiError && (
-          <div className="absolute top-[72px] left-1/2 -translate-x-1/2 z-[520] max-w-[min(420px,92vw)] bg-trap-50 border border-trap-300 text-orange-800 dark:text-orange-200 rounded-xl px-3.5 py-2.5 text-sm leading-relaxed shadow-overlay">
+          <div className="absolute top-[72px] left-1/2 z-[520] max-w-[min(420px,calc(100vw-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] -translate-x-1/2 bg-trap-50 border border-trap-300 text-orange-800 dark:text-orange-200 rounded-xl px-3.5 py-2.5 text-sm leading-relaxed shadow-overlay">
             <strong>Live data:</strong> {apiError}
             {onRetry && (
               <button
@@ -123,14 +127,16 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         )}
 
         {/* Top overlay: search + zoom + filters */}
-        <div className="absolute top-3.5 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2.5 w-[calc(100%-28px)] max-w-[560px] z-[500] pointer-events-none">
-          <div className="flex items-center gap-2.5 w-full pointer-events-auto">
-            <SearchBar
-              destination={destination}
-              onPick={handlePickLandmark}
-              onClear={clearDestination}
-            />
-            <div className="flex flex-col gap-1">
+        <div className="pointer-events-none absolute top-3.5 left-1/2 z-[500] flex w-[min(560px,calc(100%-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] -translate-x-1/2 flex-col items-center gap-2.5">
+          <div className="flex w-full flex-col gap-2 pointer-events-auto min-[440px]:flex-row min-[440px]:items-center [@media(max-height:520px)]:flex-row [@media(max-height:520px)]:items-center">
+            <div className="min-w-0 w-full flex-1">
+              <SearchBar
+                destination={destination}
+                onPick={handlePickLandmark}
+                onClear={clearDestination}
+              />
+            </div>
+            <div className="flex shrink-0 flex-col gap-1 [@media(max-height:520px)]:flex-col">
               {[
                 { delta: 0.3, label: '+' },
                 { delta: -0.3, label: '\u2212' },
@@ -148,20 +154,20 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             </div>
           </div>
 
-          <div className="w-full pointer-events-auto">
+          <div className="w-full min-w-0 pointer-events-auto">
             <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} />
           </div>
         </div>
 
         {/* Live badge (top-right) */}
-        <div className="absolute top-3.5 right-3.5 z-[500] flex items-center gap-1.5 bg-white dark:bg-surface-dark-secondary border border-gray-200/60 dark:border-gray-700/60 rounded-full px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 shadow-card">
+        <div className="absolute top-3.5 z-[500] flex items-center gap-1.5 rounded-full border border-gray-200/60 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-card dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-400 right-[max(0.875rem,env(safe-area-inset-right,0px))]">
           <span className="w-1.5 h-1.5 bg-brand rounded-full animate-pulse-dot" />
           <span title="Last data refresh">Updated {tsStr}</span>
         </div>
 
         {/* Destination proximity badge */}
         {destination && (
-          <div className="absolute top-[118px] left-1/2 -translate-x-1/2 z-[500] bg-surface-secondary text-gray-900 rounded-full px-5 py-2 text-sm font-semibold whitespace-nowrap shadow-overlay flex items-center gap-2 max-w-[calc(100%-28px)]">
+          <div className="absolute top-[118px] left-1/2 z-[500] flex max-w-[min(36rem,calc(100vw-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] -translate-x-1/2 flex-wrap items-center gap-2 whitespace-normal rounded-full bg-surface-secondary px-5 py-2 text-sm font-semibold text-gray-900 shadow-overlay sm:whitespace-nowrap">
             <span>{proxFreeSpots > 0 ? '🟢' : '🔴'}</span>
             <span>
               {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across&nbsp;
@@ -173,8 +179,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         {/* Bay count pill (bottom-left) */}
         <div
           className={cn(
-            'absolute left-3.5 z-[500] bg-white dark:bg-surface-dark-secondary rounded-full px-3.5 py-1.5 border border-gray-200/60 dark:border-gray-700/60 shadow-overlay text-sm font-semibold text-gray-900 dark:text-gray-100 transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]',
-            sheetOpen ? 'bottom-[calc(75vh+14px)]' : 'bottom-[290px]',
+            'absolute left-[max(0.875rem,env(safe-area-inset-left,0px))] z-[500] rounded-full border border-gray-200/60 bg-white px-3.5 py-1.5 text-sm font-semibold text-gray-900 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)] dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-100',
+            sheetOpen
+              ? 'bottom-[calc(75vh+14px+env(safe-area-inset-bottom,0px))]'
+              : 'bottom-[calc(290px+env(safe-area-inset-bottom,0px))]',
           )}
           aria-live="polite"
         >
@@ -184,8 +192,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         {/* Legend (bottom-right) */}
         <div
           className={cn(
-            'absolute right-3.5 z-[500] bg-white dark:bg-surface-dark-secondary rounded-xl p-2.5 border border-gray-200/60 dark:border-gray-700/60 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]',
-            sheetOpen ? 'bottom-[calc(75vh+14px)]' : 'bottom-[290px]',
+            'absolute right-[max(0.875rem,env(safe-area-inset-right,0px))] z-[500] rounded-xl border border-gray-200/60 bg-white p-2.5 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)] dark:border-gray-700/60 dark:bg-surface-dark-secondary',
+            sheetOpen
+              ? 'bottom-[calc(75vh+14px+env(safe-area-inset-bottom,0px))]'
+              : 'bottom-[calc(290px+env(safe-area-inset-bottom,0px))]',
           )}
         >
           <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wider">

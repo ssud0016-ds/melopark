@@ -11,7 +11,7 @@ export default function App() {
   const [darkMode, toggleDark] = useDarkMode()
 
   return (
-    <div className="min-h-screen font-sans">
+    <div className="min-h-screen min-h-dvh font-sans">
       <TopBar
         activePage={page}
         onNavigate={setPage}
