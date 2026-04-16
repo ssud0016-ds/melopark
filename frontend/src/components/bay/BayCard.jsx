@@ -1,5 +1,6 @@
 import { BAY_COLORS } from '../../data/mapData'
 import { metersBetweenBayAndDestination, walkingMinutesFromMeters } from '../../utils/mapGeo'
+import { bayHeading, bayMissingStreetNote } from '../../utils/bayLabels'
 import { cn } from '../../utils/cn'
 
 const STATUS_BADGE = {
@@ -12,7 +13,7 @@ const STATUS_BADGE = {
  * Compact bay card shown in the bay list.
  *
  * Displays only fields that come from real data sources:
- *   - bay.name        – street name from CoM sensor API (or "Unnamed Bay")
+ *   - bay.name        – street name from CoM sensor API (or ID-first title via bayLabels)
  *   - bay.id          – kerbside sensor ID (real)
  *   - bay.free        – sensor occupancy (real)
  *   - bay.type        – visual category derived from sensor + restriction API (real)
@@ -36,7 +37,8 @@ export default function BayCard({ bay, selected, destination, onSelect }) {
     distLabel = `${m} m \u00b7 ~${mn} min walk`
   }
 
-  const displayName = bay.name || 'Unnamed Bay'
+  const title = bayHeading(bay)
+  const missingStreetNote = bayMissingStreetNote(bay)
 
   // Bay type label from CoM restriction API (real external data)
   const typeLabel = bay.bayType && bay.bayType !== 'Other' ? bay.bayType : null
@@ -63,17 +65,20 @@ export default function BayCard({ bay, selected, destination, onSelect }) {
       <div className="flex-1 min-w-0">
         {/* Name + status badge */}
         <div className="flex items-center justify-between gap-2 mb-0.5">
-          <div className="text-sm font-bold text-gray-900 dark:text-white truncate">
-            {displayName}
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-gray-900 dark:text-white truncate">{title}</div>
+            {missingStreetNote && (
+              <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">{missingStreetNote}</div>
+            )}
           </div>
           <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0', badge.className)}>
             {badge.label}
           </span>
         </div>
 
-        {/* Sub info — only real data */}
+        {/* Sub info – only real data */}
         <div className="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-2 flex-wrap mb-1.5">
-          <span>#{bay.id}</span>
+          {bay.name?.trim() ? <span>#{bay.id}</span> : null}
           <span>
             {occupancyDot}{' '}
             <strong className="text-gray-600 dark:text-gray-300">

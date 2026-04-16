@@ -59,7 +59,7 @@ export function destinationLatLng(destination) {
   return normToLatLng(destination.x ?? 0.5, destination.y ?? 0.5)
 }
 
-/** Rough CBD bounds plus padding — filters live markers for map performance. */
+/** Rough CBD bounds plus padding – filters live markers for map performance. */
 const CBD_PAD = 0.015
 
 export function isApproxCbd(lat, lng) {
@@ -75,7 +75,7 @@ export function walkingMinutesFromMeters(m) {
   return Math.max(1, Math.ceil(m / 80))
 }
 
-/** Default map view — CBD overview. */
+/** Default map view – CBD overview. */
 export const DEFAULT_MAP_CENTER = toLatLngTuple(normToLatLng(0.52, 0.66))
 export const DEFAULT_MAP_ZOOM = 15
 export const DESTINATION_MAP_ZOOM = 17

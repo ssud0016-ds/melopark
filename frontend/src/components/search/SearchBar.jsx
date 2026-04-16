@@ -5,6 +5,15 @@ const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 const SEARCH_LIMIT = 8
 const SEARCH_DEBOUNCE_MS = 300
 
+function SearchIcon({ className, size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className}>
+      <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="10" y1="10" x2="14" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function Highlight({ text, query }) {
   const i = text.toLowerCase().indexOf(query.toLowerCase())
   if (i < 0) return text
@@ -182,7 +191,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
       {showDrop && query && !destination && matches.length === 0 && !loading && (
         <div className="absolute top-[calc(100%+6px)] inset-x-0 bg-white dark:bg-surface-dark-secondary rounded-xl z-50 shadow-card-lg border border-gray-200/60 dark:border-gray-700/60 px-4 py-3.5">
           <div className="flex items-center gap-2.5 text-gray-400 text-sm">
-            <span>🔍</span>
+            <SearchIcon size={18} className="shrink-0 text-gray-400" />
             <div>
               <div className="font-semibold">No matching places</div>
               <div className="text-xs mt-0.5">MeloPark covers Melbourne CBD only. Try "Flinders", "RMIT", or a CBD street name.</div>
@@ -194,10 +203,10 @@ export default function SearchBar({ destination, onPick, onClear }) {
       {/* Full no-results toast */}
       {noResults && (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[200] bg-white dark:bg-surface-dark-secondary rounded-2xl p-7 text-center shadow-card-lg max-w-[280px] w-[90%]">
-          <div className="text-[40px] mb-3">🔍</div>
+          <div className="mb-3 text-gray-300 dark:text-gray-500"><SearchIcon size={40} /></div>
           <div className="text-base font-bold text-gray-900 dark:text-white mb-2">No results found</div>
           <div className="text-sm text-gray-500 leading-relaxed mb-4">
-            We couldn't find "{query}". MeloPark covers <span className="font-semibold text-gray-700 dark:text-gray-300">Melbourne CBD only</span> — try a landmark like "Flinders Street" or "Melbourne Central".
+            We couldn't find "{query}". MeloPark covers <span className="font-semibold text-gray-700 dark:text-gray-300">Melbourne CBD only</span> – try a landmark like "Flinders Street" or "Melbourne Central".
           </div>
           <button
             onClick={() => { setNoResults(false); clear() }}
