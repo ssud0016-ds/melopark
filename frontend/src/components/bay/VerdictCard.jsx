@@ -21,11 +21,11 @@ const REASON_COLLAPSE_AT = 220
 
 const ONE_LINE_REASON = 72
 
-function PlannerVerdictStrip({ evaluation, evaluationPending }) {
+function PlannerVerdictStrip({ evaluation, evaluationPending, hasRules }) {
   const verdict = evaluation?.verdict ?? null
   const reason = typeof evaluation?.reason === 'string' ? evaluation.reason.trim() : ''
   let stripClass =
-    'px-3 py-2.5 text-sm font-semibold leading-snug border-b border-black/5 dark:border-white/10 truncate'
+    'px-3 py-2.5 text-sm font-semibold leading-snug border-b border-black/5 dark:border-white/10 whitespace-normal break-words'
   let line = ''
   let titleAttr = undefined
 
@@ -44,7 +44,7 @@ function PlannerVerdictStrip({ evaluation, evaluationPending }) {
     titleAttr = full.length > ONE_LINE_REASON ? full : undefined
   } else {
     stripClass += ' bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-gray-100'
-    line = 'No data · check signage'
+    line = hasRules ? "Couldn't load rule info · check signage" : 'No data · check signage'
   }
 
   return (
@@ -86,7 +86,13 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
   }, [bay.id])
 
   if (plannerActive) {
-    return <PlannerVerdictStrip evaluation={evaluation} evaluationPending={evaluationPending} />
+    return (
+      <PlannerVerdictStrip
+        evaluation={evaluation}
+        evaluationPending={evaluationPending}
+        hasRules={Boolean(bay?.hasRules)}
+      />
+    )
   }
 
   const verdict = evaluation?.verdict ?? null      // "yes" | "no" | "unknown" | null

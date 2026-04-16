@@ -121,19 +121,33 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const proximityBays = getProximityBays(bays)
   const selectedBay = bays.find((b) => b.id === selectedBayId) || null
 
-  const { verifiedCount, limitedCount, proxVerifiedFree, proxVerifiedFreeBays, proxLimitedCount } = useMemo(() => {
+  const {
+    verifiedCount,
+    limitedCount,
+    proxFreeSpots,
+    proxFreeBays,
+    proxLimitedCount,
+    proxModeLabel,
+  } = useMemo(() => {
     const verified = visibleBays.filter((b) => b.hasRules)
     const limited = visibleBays.filter((b) => !b.hasRules)
     const proxVerified = proximityBays.filter((b) => b.hasRules)
     const proxLimited = proximityBays.filter((b) => !b.hasRules)
+
+    const proxLive = proximityBays.filter((b) => b.source === 'live')
+    const proxLiveAvailable = proxLive.filter((b) => b.type === 'available')
+
     return {
       verifiedCount: verified.length,
       limitedCount: limited.length,
-      proxVerifiedFree: proxVerified.reduce((a, b) => a + (b.type === 'available' ? b.free : 0), 0),
-      proxVerifiedFreeBays: proxVerified.filter((b) => b.type === 'available').length,
+      proxFreeSpots: showLimitedBays
+        ? proxVerified.reduce((a, b) => a + (b.type === 'available' ? b.free : 0), 0)
+        : proxLiveAvailable.reduce((a, b) => a + (b.free || 0), 0),
+      proxFreeBays: showLimitedBays ? proxVerified.filter((b) => b.type === 'available').length : proxLiveAvailable.length,
       proxLimitedCount: proxLimited.length,
+      proxModeLabel: showLimitedBays ? 'verified bay' : 'live bay',
     }
-  }, [visibleBays, proximityBays])
+  }, [visibleBays, proximityBays, showLimitedBays])
 
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 900,
@@ -301,10 +315,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             style={{ left: '50%', transform: 'translateX(-50%)' }}
           >
             <span>
-              {proxVerifiedFree} free spot{proxVerifiedFree !== 1 ? 's' : ''} across&nbsp;
-              {proxVerifiedFreeBays} verified bay{proxVerifiedFreeBays !== 1 ? 's' : ''} within 400 m of {destination.name}
+              {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across&nbsp;
+              {proxFreeBays} {proxModeLabel}
+              {proxFreeBays !== 1 ? 's' : ''} within 400 m of {destination.name}
             </span>
-            {proxLimitedCount > 0 && (
+            {!showLimitedBays && proxLimitedCount > 0 && (
               <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                 +{proxLimitedCount} sensor-only nearby
               </span>
@@ -316,7 +331,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           <span className="text-sm font-semibold text-white dark:text-brand-900">
             {verifiedCount} verified bay{verifiedCount !== 1 ? 's' : ''}
           </span>
-          {showLimitedBays && limitedCount > 0 && (
+          {!showLimitedBays && limitedCount > 0 && (
             <span className="text-[11px] font-medium text-white/65 dark:text-brand-900/55">
               +{limitedCount} sensor only
             </span>
