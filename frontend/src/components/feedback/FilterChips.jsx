@@ -50,21 +50,21 @@ export default function FilterChips({
 
         <div
           className="flex shrink-0 items-center gap-1.5 rounded-full border border-gray-200/90 bg-white/90 py-1 pl-2 pr-1 shadow-card dark:border-gray-700 dark:bg-surface-dark-secondary/95"
-          title="When on, the map includes bays where we only know occupancy—not full parking rules. Turn off to show verified bays only."
+          title="When on, the map shows only bays with full rule information. Turn off to include sensor-only bays too."
         >
           <div className="min-w-0 max-w-[7.75rem] leading-tight">
             <span className="block text-[10px] font-semibold text-gray-800 dark:text-gray-100">
-              Show all bays
+              Rule info only
             </span>
             <span className="block text-[9px] text-gray-500 dark:text-gray-400">
-              Including bays without rule info
+              Hide sensor-only bays
             </span>
           </div>
           <button
             type="button"
             role="switch"
             aria-checked={showLimitedBays}
-            aria-label="Show all bays, including bays without full rule information in the app"
+            aria-label="Show only bays with full rule information"
             onClick={() => onToggleLimitedBays?.(!showLimitedBays)}
             className={cn(
               'relative h-6 w-10 shrink-0 rounded-full transition-colors',
