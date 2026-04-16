@@ -5,6 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.db import get_db
 
 router = APIRouter(prefix="/api/search", tags=["search"])
@@ -32,7 +33,7 @@ def search_places(
         SELECT name, sub, category, lat, lng
         FROM search_index
         WHERE lower(name) LIKE lower(:pattern)
-           OR lower(sub)  LIKE lower(:pattern)
+           OR lower(COALESCE(sub, '')) LIKE lower(:pattern)
         ORDER BY
             CASE category
                 WHEN 'landmark' THEN 0
@@ -49,13 +50,14 @@ def search_places(
     try:
         rows = db.execute(stmt, {"pattern": pattern, "prefix": prefix, "limit": limit}).mappings().all()
     except SQLAlchemyError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Search index is not available yet. Please create and load the "
-                "'search_index' table first."
-            ),
-        ) from exc
+        settings = get_settings()
+        detail = (
+            "Search index is not available yet. Create the table (see docs/search_index_schema.sql) "
+            "and load data (e.g. python scripts/load_search_index.py). "
+        )
+        if settings.ENVIRONMENT.strip().lower() == "development":
+            detail += f"DB error: {exc.__class__.__name__}: {exc}"
+        raise HTTPException(status_code=503, detail=detail) from exc
 
     return [
         {
