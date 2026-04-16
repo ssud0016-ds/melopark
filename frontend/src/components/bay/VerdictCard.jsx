@@ -170,13 +170,6 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
   else if (hasRealVerdict && verdict === 'no') tone = 'no'
   else tone = 'neutral'
 
-  let tone
-  if (loading) tone = 'neutral'
-  else if (hasRealVerdict && verdict === 'yes') tone = 'yes'
-  else if (hasRealVerdict && verdict === 'no' && isTrap) tone = 'trap'
-  else if (hasRealVerdict && verdict === 'no') tone = 'no'
-  else tone = 'neutral'
-
   return (
     <div
       className={cn(
