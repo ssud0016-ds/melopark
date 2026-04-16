@@ -29,27 +29,6 @@ function MapTimeBanner({ arrivalIso, durationMins, onDismiss }) {
 }
 
 export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry }) {
-  // #region agent log
-  fetch('http://127.0.0.1:7821/ingest/e1842ad7-9c21-486e-8c1a-76c861137f8d', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '2e2407' },
-    body: JSON.stringify({
-      sessionId: '2e2407',
-      runId: 'post-fix-2',
-      hypothesisId: 'H1',
-      location: 'frontend/src/components/map/MapPage.jsx:MapPage',
-      message: 'MapPage render entry',
-      data: {
-        codeVersion: 'sheetOpen-removed-v2',
-        typeofCn: typeof cn,
-        hasCn: typeof cn === 'function',
-        hasBaysArray: Array.isArray(bays),
-        baysLen: Array.isArray(bays) ? bays.length : null,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {})
-  // #endregion agent log
 
   const mapRef = useRef(null)
 
