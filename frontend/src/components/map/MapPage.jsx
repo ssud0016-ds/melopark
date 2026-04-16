@@ -257,8 +257,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} />
           </div>
 
-        </div>
-
         {/* Live badge (top-right) */}
         <div className="absolute top-3.5 z-[500] flex items-center gap-1.5 rounded-full border border-gray-200/60 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 shadow-card dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-400 right-[max(0.875rem,env(safe-area-inset-right,0px))]">
           <span className="w-1.5 h-1.5 bg-brand rounded-full animate-pulse-dot" />
@@ -298,12 +296,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
               ? 'bottom-[calc(75vh+14px+env(safe-area-inset-bottom,0px))]'
               : 'bottom-[calc(290px+env(safe-area-inset-bottom,0px))]',
           )}
-          aria-live="polite"
-        >
-          <span className="text-brand">{visibleBays.length}</span> bays shown
         </div>
 
-        {/* Legend (bottom-right) */}
         <div
           className={cn(
             'absolute right-[max(0.875rem,env(safe-area-inset-right,0px))] z-[500] rounded-xl border border-gray-200/60 bg-white p-2.5 shadow-overlay transition-all duration-400 ease-[cubic-bezier(0.32,0.72,0,1)] dark:border-gray-700/60 dark:bg-surface-dark-secondary',
@@ -312,19 +306,28 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
               : 'bottom-[calc(290px+env(safe-area-inset-bottom,0px))]',
           )}
         >
-          <div className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 mb-1.5 uppercase tracking-wider">
-            Bay Status
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
+            Verified bays
           </div>
           {[
-            ['bg-accent', 'Available'],
-            ['bg-trap', 'Rule Trap'],
-            ['bg-[#ed6868]', 'Occupied'],
+            ['bg-[#a3ec48]', 'Available (green)'],
+            ['bg-[#FFB382]', 'Caution (orange)'],
+            ['bg-[#ed6868]', 'Occupied (red)'],
           ].map(([bg, label]) => (
-            <div key={label} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1 last:mb-0">
-              <div className={cn('w-2.5 h-2.5 rounded-full shrink-0', bg)} />
+            <div key={label} className="mb-1 flex items-center gap-1.5 text-xs text-white/95 dark:text-brand-900">
+              <div className={`${bg} h-2.5 w-2.5 shrink-0 rounded-full`} />
               {label}
             </div>
           ))}
+          <div className="mt-2 border-t border-white/20 pt-1.5 dark:border-brand-800/20">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
+              Sensor only
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-white/75 dark:text-brand-900/70">
+              <div className="h-2 w-2 shrink-0 rounded-full bg-gray-400/60" />
+              Occupancy only, check signs
+            </div>
+          </div>
         </div>
 
         {selectedBay && (
