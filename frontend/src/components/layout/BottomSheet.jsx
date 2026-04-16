@@ -3,16 +3,16 @@ import { cn } from '../../utils/cn'
 
 /**
  * Snap points as fractions of the viewport height (from the bottom).
- * PEEK  — just the header visible (~240px worth)
- * HALF  — comfortably browse ~5-6 bay cards while keeping the map visible
- * FULL  — maximum expansion
+ * PEEK  – just the header visible (~240px worth)
+ * HALF  – comfortably browse ~5-6 bay cards while keeping the map visible
+ * FULL  – maximum expansion
  */
 const SNAP_PEEK = 0.28
 const SNAP_HALF = 0.50
 const SNAP_FULL = 0.75
 
 const SNAPS = [SNAP_PEEK, SNAP_HALF, SNAP_FULL]
-const VELOCITY_THRESHOLD = 0.4   // px/ms — flick faster than this snaps in drag direction
+const VELOCITY_THRESHOLD = 0.4   // px/ms – flick faster than this snaps in drag direction
 const MIN_DRAG_PX = 8            // ignore micro-movements
 
 function closestSnap(fraction) {
@@ -117,7 +117,7 @@ export default function BottomSheet({ snap, onSnapChange, title, subtitle, child
       )}
       style={{ height: visualHeight }}
     >
-      {/* Drag handle — real interactive zone */}
+      {/* Drag handle – real interactive zone */}
       <div
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
