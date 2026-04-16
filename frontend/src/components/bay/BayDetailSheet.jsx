@@ -83,7 +83,7 @@ export default function BayDetailSheet({
 
   const debouncedPlanner = useDebouncedPlannerParams(rawPlanner, 300)
 
-  const plannerActive = Boolean(debouncedPlanner)
+  const plannerActive = Boolean(debouncedPlanner) && !plannerBackdatedError
 
   /** Sync MapPage only when debounced value is stable; avoid pushing null on mount while saved plan is still debouncing. */
   useEffect(() => {
@@ -126,6 +126,11 @@ export default function BayDetailSheet({
       setEvalLoading(false)
       return
     }
+    if (plannerBackdatedError) {
+      setEvaluation(null)
+      setEvalLoading(false)
+      return
+    }
     let cancelled = false
     setEvalLoading(true)
     setEvaluation(null)
@@ -138,7 +143,7 @@ export default function BayDetailSheet({
     return () => {
       cancelled = true
     }
-  }, [bay?.id, fetchOpts, debouncedPlanner])
+  }, [bay?.id, fetchOpts, debouncedPlanner, plannerBackdatedError])
 
   const plannerSectionRef = useRef(null)
 
@@ -389,18 +394,36 @@ export default function BayDetailSheet({
 
       {plannerActive && bay.hasRules && !evalLoading && evaluation && (
         <div className="px-5 py-4 shrink-0 border-b border-gray-200/60 dark:border-gray-700/60">
+          {/*
+            When no restriction is active (often overnight), show Unlimited and (if available)
+            the next restriction start time from `evaluation.warning.starts_at`.
+          */}
+          {(() => {
+            const noActiveRestriction = evaluation?.verdict === 'yes' && !evaluation?.active_restriction
+            const stayLimitLabel = noActiveRestriction
+              ? 'Unlimited'
+              : (formatStayLimitShort(evaluation?.active_restriction?.max_stay_mins) ?? '-')
+            const leaveByLabel = noActiveRestriction
+              ? (formatLeaveByClock(evaluation?.warning?.starts_at) ?? '-')
+              : (formatLeaveByClock(evaluation?.active_restriction?.expires_at) ?? '-')
+
+            return (
+              <>
           <div className="flex justify-between gap-4 text-sm py-1.5">
             <span className="text-gray-500 dark:text-gray-400 shrink-0">Stay limit:</span>
             <span className="font-semibold text-gray-900 dark:text-gray-100 text-right tabular-nums">
-              {formatStayLimitShort(evaluation?.active_restriction?.max_stay_mins) ?? '-'}
+              {stayLimitLabel}
             </span>
           </div>
           <div className="flex justify-between gap-4 text-sm py-1.5">
             <span className="text-gray-500 dark:text-gray-400 shrink-0">Leave by:</span>
             <span className="font-semibold text-gray-900 dark:text-gray-100 text-right">
-              {formatLeaveByClock(evaluation?.active_restriction?.expires_at) ?? '-'}
+              {leaveByLabel}
             </span>
           </div>
+              </>
+            )
+          })()}
         </div>
       )}
 
