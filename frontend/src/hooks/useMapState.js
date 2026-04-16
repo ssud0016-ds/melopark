@@ -56,10 +56,7 @@ export function useMapState() {
       return pool.filter((b) => {
         if (activeFilter === 'all') return true
         if (activeFilter === 'available') return b.type === 'available'
-        if (activeFilter === 'hasRules') return b.hasRules === true
         if (activeFilter === 'trap') return b.type === 'trap'
-        if (activeFilter === 'timed') return b.bayType === 'Timed'
-        if (activeFilter === 'occupied') return b.type === 'occupied'
         return true
       })
     },

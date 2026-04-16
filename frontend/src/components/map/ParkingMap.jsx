@@ -10,7 +10,6 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
-import { BAY_COLORS } from '../../data/mapData'
 import {
   bayLatLng,
   destinationLatLng,
@@ -19,8 +18,31 @@ import {
   DEFAULT_MAP_ZOOM,
   DESTINATION_MAP_ZOOM,
 } from '../../utils/mapGeo'
+import { bayHeading } from '../../utils/bayLabels'
 
 const CLUSTER_ZOOM_CUTOFF = 18
+
+/** Verified-dot fill colours (match map legend): green / orange / red */
+const VERIFIED_FILL = {
+  available: '#a3ec48',
+  trap: '#FFB382',
+  occupied: '#ed6868',
+}
+
+function verifiedBayFillColor(bay, plannerMapActive, verdictByBayId) {
+  if (plannerMapActive && verdictByBayId) {
+    const pv = verdictByBayId[bay.id]
+    if (pv === 'yes') return VERIFIED_FILL.available
+    if (pv === 'no') return VERIFIED_FILL.occupied
+    return '#9ca3af'
+  }
+  const t = bay.type === 'trap' ? 'trap' : bay.type === 'occupied' ? 'occupied' : 'available'
+  return VERIFIED_FILL[t] || VERIFIED_FILL.available
+}
+
+function bayPopupStatusWord(bay) {
+  return bay.free === 1 ? 'Free' : 'Occupied'
+}
 const INTERSECTION_CELL_DEG = 0.0012
 
 function FlyToController({ destination, defaultCenter, defaultZoom, destZoom }) {
@@ -70,6 +92,30 @@ function MapZoomTracker({ onZoomChange }) {
   return null
 }
 
+function MapBoundsNotifier({ onBoundsChange }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!onBoundsChange) return
+    const report = () => {
+      const b = map.getBounds()
+      onBoundsChange({
+        south: b.getSouth(),
+        west: b.getWest(),
+        north: b.getNorth(),
+        east: b.getEast(),
+      })
+    }
+    report()
+    map.on('moveend', report)
+    map.on('zoomend', report)
+    return () => {
+      map.off('moveend', report)
+      map.off('zoomend', report)
+    }
+  }, [map, onBoundsChange])
+  return null
+}
+
 function destinationDivIcon(name) {
   const esc = String(name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\"/g, '&quot;')
   return L.divIcon({
@@ -92,6 +138,9 @@ export default function ParkingMap({
   destination,
   onBayClick,
   onMapReady,
+  onBoundsChange = null,
+  plannerMapActive = false,
+  verdictByBayId = null,
   showLimitedBays = false,
   defaultCenter = DEFAULT_MAP_CENTER,
   defaultZoom = DEFAULT_MAP_ZOOM,
@@ -129,8 +178,10 @@ export default function ParkingMap({
 
   const baysForClustering = useMemo(() => {
     const live = verifiedBays.filter((b) => b.source === 'live')
-    return live.length ? live : verifiedBays
-  }, [verifiedBays])
+    const verifiedCore = live.length ? live : verifiedBays
+    if (!showLimitedBays) return verifiedCore
+    return [...verifiedCore, ...limitedBays]
+  }, [verifiedBays, limitedBays, showLimitedBays])
 
   const clustered = useMemo(() => {
     if (zoomLevel >= CLUSTER_ZOOM_CUTOFF) return []
@@ -176,7 +227,9 @@ export default function ParkingMap({
   }, [baysForClustering, zoomLevel, destination, proximityBays])
 
   const clusterIcon = (available, occupied, trap, total) => {
-    const label = `${available}/${total}`
+    const a = Number(available) || 0
+    const t = Number(total) || 0
+    const label = `${a}/${t}`
     const labelLen = label.length
     let bg = isDark ? '#35338c' : '#dce8ff'
     let text = isDark ? '#f4f6ff' : '#35338c'
@@ -187,17 +240,17 @@ export default function ParkingMap({
     if (bg === '#a3ec48') text = '#3f5618'
     else if (bg === '#FF7F50') text = '#8f3f22'
     else if (bg === '#ed6868') text = '#611d1d'
-    const ring = activeFilter === 'timed' || activeFilter === 'hasRules' ? '#FFD700' : '#ffffff'
+    const ring = '#ffffff'
 
     const fontSize = labelLen >= 10 ? 7 : labelLen >= 8 ? 8 : labelLen >= 6 ? 9 : 11
     return L.divIcon({
       className: 'mp-cluster-icon',
       html: `<div style="
-        width:42px;height:42px;border-radius:999px;
+        box-sizing:border-box;width:42px;height:42px;border-radius:999px;
         background:${bg};border:2px solid ${ring};
         display:flex;align-items:center;justify-content:center;
-        color:${text};font:700 ${fontSize}px/1 Inter,system-ui,sans-serif;
-        letter-spacing:-0.1px;white-space:nowrap;overflow:hidden;
+        color:${text};font-family:Inter,system-ui,sans-serif;font-weight:700;font-size:${fontSize}px;line-height:1;
+        letter-spacing:-0.1px;white-space:nowrap;overflow:hidden;text-align:center;
         box-shadow:0 2px 10px rgba(0,0,0,0.2);
       ">${label}</div>`,
       iconSize: [42, 42],
@@ -233,6 +286,7 @@ export default function ParkingMap({
           destZoom={destZoom}
         />
         <MapReadyNotifier onReady={onMapReady} />
+        <MapBoundsNotifier onBoundsChange={onBoundsChange} />
         <MapZoomTracker onZoomChange={setZoomLevel} />
         <MapEmptyClick onEmptyClick={() => onBayClick(null)} />
 
@@ -257,6 +311,7 @@ export default function ParkingMap({
               key={`cluster-${c.key}`}
               position={[c.lat, c.lng]}
               icon={clusterIcon(c.available, c.occupied, c.trap, c.total)}
+              title={`${c.available} free of ${c.total} bays`}
               eventHandlers={{
                 click: (e) => {
                   const m = e.target?._map
@@ -266,7 +321,12 @@ export default function ParkingMap({
             >
               <Popup>
                 <div className="min-w-[130px]">
-                  <strong>{c.available}/{c.total}</strong> bays available
+                  <strong>
+                    {c.available} free of {c.total} bays
+                  </strong>
+                  <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                    Free / total bays in area
+                  </div>
                 </div>
               </Popup>
             </Marker>
@@ -298,19 +358,19 @@ export default function ParkingMap({
           let opacity = 1
           if (!inRadius) opacity = 0.12
           else if (!inFilter) opacity = 0.22
-          const cols = BAY_COLORS[bay.type] || BAY_COLORS.available
           const selected = bay.id === selectedBayId
+          const fillColor = verifiedBayFillColor(bay, plannerMapActive, verdictByBayId)
           return (
             <CircleMarker
               key={bay.id}
               center={[ll.lat, ll.lng]}
               radius={selected ? 13 : 9}
               pathOptions={{
-                color: '#FFD700',
-                fillColor: cols.border,
+                color: fillColor,
+                fillColor,
                 fillOpacity: opacity,
                 opacity,
-                weight: selected ? 3 : 2.5,
+                weight: 0,
               }}
               eventHandlers={{
                 click: (e) => {
@@ -320,16 +380,11 @@ export default function ParkingMap({
               }}
             >
               <Popup>
-                <div className="min-w-[120px]">
-                  <strong>#{bay.id}</strong> {bay.name}
-                  <br />
-                  <span className="text-gray-700 dark:text-gray-300">
-                    {bay.free}/{bay.spots} spots free
-                  </span>
-                  <br />
-                  <span style={{ color: '#35338c', fontWeight: 600, fontSize: '11px' }}>
-                    ✓ Verified — restriction rules available
-                  </span>
+                <div className="min-w-[120px] text-xs leading-snug">
+                  <div className="font-semibold text-gray-900 dark:text-gray-100">{bayHeading(bay)}</div>
+                  <div className="mt-1 text-gray-600 dark:text-gray-400">
+                    Status: {bayPopupStatusWord(bay)}
+                  </div>
                 </div>
               </Popup>
             </CircleMarker>
