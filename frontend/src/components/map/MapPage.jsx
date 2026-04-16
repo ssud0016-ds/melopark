@@ -127,7 +127,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         )}
 
         {/* Top overlay: search + zoom + filters */}
-        <div className="pointer-events-none absolute top-3.5 left-1/2 z-[500] flex w-[min(560px,calc(100%-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] -translate-x-1/2 flex-col items-center gap-2.5">
+        <div className="pointer-events-none absolute top-3.5 left-1/2 z-[500] flex w-[min(560px,calc(100%-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] -translate-x-1/2 flex-col items-center gap-2.5 md:w-[min(760px,calc(100%-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] lg:w-[min(900px,calc(100%-1.75rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))]">
           <div className="flex w-full flex-col gap-2 pointer-events-auto min-[440px]:flex-row min-[440px]:items-center [@media(max-height:520px)]:flex-row [@media(max-height:520px)]:items-center">
             <div className="min-w-0 w-full flex-1">
               <SearchBar
