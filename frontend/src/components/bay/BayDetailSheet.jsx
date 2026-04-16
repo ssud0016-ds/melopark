@@ -9,7 +9,6 @@ import {
   formatStayLimitShort,
   formatLeaveByClock,
   formatAtDateTime,
-  nextQuarterHourDefaults,
 } from '../../utils/plannerTime'
 import VerdictCard from './VerdictCard'
 import TimelineStrip from './TimelineStrip'
@@ -141,15 +140,6 @@ export default function BayDetailSheet({
     }
   }, [bay?.id, fetchOpts, debouncedPlanner])
 
-  useEffect(() => {
-    if (!checkTimeExpanded) return
-    if (dateStr || timeStr) return
-    const d = nextQuarterHourDefaults()
-    setDateStr(d.dateStr)
-    setTimeStr(d.timeStr)
-    setDurationMins(d.durationMins)
-  }, [checkTimeExpanded, dateStr, timeStr])
-
   const plannerSectionRef = useRef(null)
 
   useEffect(() => {
@@ -277,7 +267,14 @@ export default function BayDetailSheet({
         </button>
 
         {checkTimeExpanded && (
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="mt-3 flex flex-col gap-3">
+            {!dateStr && !timeStr && (
+              <div className="rounded-xl border border-gray-200/90 bg-white/70 px-3.5 py-2.5 text-xs font-semibold text-gray-600 shadow-card dark:border-gray-700/70 dark:bg-surface-dark-secondary/70 dark:text-gray-200">
+                Please select a date and time to check the rules.
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 Date
@@ -326,6 +323,7 @@ export default function BayDetailSheet({
                 ))}
               </select>
             </label>
+            </div>
           </div>
         )}
 
