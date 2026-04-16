@@ -21,7 +21,8 @@ sensors.parquet:
   lastupdated        -> ISO timestamp of last sensor reading
 
 restrictions.parquet:
-  bayid              -> renamed to bay_id (our join key)
+  bayid              -> kept as restriction_bayid (internal CoM bay key)
+  deviceid           -> renamed to bay_id (= kerbsideid — the correct join key)
   description1..8    -> restriction sign code e.g. '2P MTR' (what we call typedesc)
   fromday1..8        -> start day of week (0=Sunday … 6=Saturday)
   today1..8          -> end day of week
@@ -35,8 +36,10 @@ WHY SILVER MATTERS
 The bronze data has several known quality issues this script fixes:
 
 1. COLUMN NAME MISMATCH
-   - Sensors use kerbsideid, restrictions use bayid
-   - Both are renamed to bay_id for the join
+   - Sensors use kerbsideid, restrictions use bayid + deviceid
+   - kerbsideid and deviceid share the same ID space (device/sensor IDs)
+   - bayid is a DIFFERENT namespace — joining on it produces zero matches
+   - We join on deviceid = kerbsideid (both renamed to bay_id)
 
 2. DURATION PARSING BUG (critical — do not reintroduce)
    - Values like 120, 240 are ALREADY in minutes
@@ -128,6 +131,10 @@ LON_MIN, LON_MAX = 144.6, 145.2
 
 #: Number of restriction slot columns in the wide restrictions dataset
 N_SLOTS = 8
+
+#: Tighter CBD bounds used for search address index
+SEARCH_LAT_MIN, SEARCH_LAT_MAX = -37.825, -37.805
+SEARCH_LON_MIN, SEARCH_LON_MAX = 144.950, 144.985
 
 
 # ─── LOAD HELPERS ───────────────────────────────────────────────────────────
@@ -327,7 +334,8 @@ def melt_restrictions(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFra
     Clean and melt the wide restrictions DataFrame into long format.
 
     The CoM restrictions API uses different column names than expected:
-      - bayid        -> our standard bay_id (join key)
+      - bayid        -> kept as restriction_bayid (CoM internal key, different namespace)
+      - deviceid     -> renamed to bay_id (= kerbsideid — our join key to sensors)
       - description1..8 -> restriction sign code (we store as typedesc)
       - fromday1..8  -> start day of week (0=Sunday … 6=Saturday)
       - today1..8    -> end day of week
@@ -350,22 +358,36 @@ def melt_restrictions(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFra
     -------
     pd.DataFrame
         Long-format restrictions with columns:
-        bay_id, slot_num, typedesc, fromday, today,
+        bay_id, restriction_bayid, slot_num, typedesc, fromday, today,
         starttime, endtime, duration_mins, disabilityext_mins
     """
     log.info("--- Cleaning restrictions ---")
     df = df_raw.copy()
     initial_rows = len(df)
 
-    # Extract bay_id from bayid (CoM restrictions use 'bayid' not 'bay_id')
-    df["bay_id"] = df["bayid"].astype(str).str.strip()
+    # deviceid is the correct join key (= kerbsideid in the sensor namespace).
+    # bayid is a DIFFERENT CoM-internal namespace that does NOT match sensors.
+    if "deviceid" not in df.columns:
+        log.error(
+            "  'deviceid' column missing from restrictions bronze data. "
+            "Re-fetch bronze data with the latest fetch_bronze.py."
+        )
+        raise KeyError("deviceid column required in restrictions data")
 
-    # Drop null bay_id
+    df["bay_id"] = df["deviceid"].astype(str).str.strip()
+    df["restriction_bayid"] = df["bayid"].astype(str).str.strip()
+
+    # Drop null bay_id (missing deviceid)
     null_bay = df["bay_id"].isnull() | (df["bay_id"] == "nan") | (df["bay_id"] == "")
     dropped_null = null_bay.sum()
     df = df[~null_bay]
     if dropped_null > 0:
-        log.warning("  Dropped %d null bay_id rows", dropped_null)
+        log.warning("  Dropped %d rows with null deviceid", dropped_null)
+
+    log.info(
+        "  Restrictions: %d rows, %d unique deviceids (bay_id), %d unique bayids",
+        len(df), df["bay_id"].nunique(), df["restriction_bayid"].nunique(),
+    )
 
     # Melt wide → long (one row per restriction slot)
     # CoM uses description1..8 for the sign code (not typedesc1..8)
@@ -381,6 +403,7 @@ def melt_restrictions(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFra
 
             slot_records.append({
                 "bay_id":             row["bay_id"],
+                "restriction_bayid":  row["restriction_bayid"],
                 "slot_num":           slot_num,
                 "typedesc":           str(typedesc).strip(),
                 "fromday":            int(row.get(f"fromday{slot_num}")) if pd.notna(row.get(f"fromday{slot_num}")) else None,
@@ -405,6 +428,159 @@ def melt_restrictions(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFra
         len(long_df), long_df["bay_id"].nunique()
     )
     return long_df
+
+
+# ─── ADDRESS CLEANING (SEARCH INDEX) ────────────────────────────────────────
+
+def _pick_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    """Return the first matching column from a candidate list."""
+    for col in candidates:
+        if col in df.columns:
+            return col
+    return None
+
+
+def _as_mapping(val) -> dict | None:
+    """Parse API geo objects from dicts or JSON strings (after bronze Parquet round-trip)."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str) and val.strip().startswith("{"):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, dict) else None
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def _lat_lng_from_geo_cell(val) -> tuple:
+    m = _as_mapping(val)
+    if not m:
+        return (None, None)
+    return (m.get("lat"), m.get("lon"))
+
+
+def clean_addresses(df_raw: pd.DataFrame, verbose: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Clean raw address data into search-ready rows.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, pd.DataFrame]
+        - addresses_df with columns: name, sub, category, lat, lng
+        - streets_df with columns: name, sub, category, lat, lng
+    """
+    log.info("--- Cleaning addresses ---")
+    df = df_raw.copy()
+    initial_rows = len(df)
+
+    geo_col = _pick_column(df, ["geo_point_2d", "location", "geo_shape"])
+    lat_col = _pick_column(df, ["latitude", "lat", "y"])
+    lon_col = _pick_column(df, ["longitude", "lon", "lng", "x"])
+
+    if (lat_col is None or lon_col is None) and geo_col:
+        latlng = df[geo_col].apply(_lat_lng_from_geo_cell)
+        df["lat"] = latlng.apply(lambda t: t[0])
+        df["lng"] = latlng.apply(lambda t: t[1])
+    elif lat_col and lon_col:
+        df["lat"] = pd.to_numeric(df[lat_col], errors="coerce")
+        df["lng"] = pd.to_numeric(df[lon_col], errors="coerce")
+    else:
+        raise ValueError(
+            "Could not detect latitude/longitude columns in addresses dataset. "
+            f"Available columns: {list(df.columns)}"
+        )
+
+    df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
+    df["lng"] = pd.to_numeric(df["lng"], errors="coerce")
+
+    in_cbd = (
+        df["lat"].between(SEARCH_LAT_MIN, SEARCH_LAT_MAX)
+        & df["lng"].between(SEARCH_LON_MIN, SEARCH_LON_MAX)
+        & df["lat"].notna()
+        & df["lng"].notna()
+    )
+    df = df[in_cbd].copy()
+
+    if verbose:
+        log.info("  Address columns: %s", list(df.columns))
+    log.info("  CBD filter: %d -> %d rows", initial_rows, len(df))
+
+    addr_col = _pick_column(
+        df,
+        ["add_comp", "address_pnt", "address", "street_address", "full_address", "streetaddress"],
+    )
+    house_col = _pick_column(df, ["street_no", "housenumber", "house_number", "street_number"])
+    street_col = _pick_column(df, ["str_name", "streetname", "street_name", "road_name"])
+    street_type_col = _pick_column(df, ["streettype", "street_type", "road_type"])
+    suburb_col = _pick_column(df, ["suburb", "locality", "city"])
+    postcode_col = _pick_column(df, ["postcode", "post_code", "postal_code"])
+
+    if addr_col:
+        df["name"] = df[addr_col].astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
+    elif street_col:
+        house_series = df[house_col].fillna("").astype(str).str.strip() if house_col else ""
+        street_series = df[street_col].fillna("").astype(str).str.strip()
+        street_type_series = (
+            " " + df[street_type_col].fillna("").astype(str).str.strip()
+            if street_type_col else ""
+        )
+        df["name"] = (
+            house_series + " " + street_series + street_type_series
+            if house_col else street_series + street_type_series
+        ).str.replace(r"\s+", " ", regex=True).str.strip()
+    else:
+        raise ValueError(
+            "Could not detect address/street columns to build searchable name. "
+            f"Available columns: {list(df.columns)}"
+        )
+
+    sub_parts: list[pd.Series] = []
+    if suburb_col:
+        sub_parts.append(df[suburb_col].fillna("").astype(str).str.strip())
+    if postcode_col:
+        sub_parts.append(df[postcode_col].fillna("").astype(str).str.strip())
+
+    if sub_parts:
+        sub = sub_parts[0]
+        for part in sub_parts[1:]:
+            sub = (sub + " " + part).str.replace(r"\s+", " ", regex=True).str.strip()
+        df["sub"] = sub
+    else:
+        df["sub"] = "Melbourne VIC"
+
+    df = df[df["name"] != ""].copy()
+    df["category"] = "address"
+    addresses_df = df[["name", "sub", "category", "lat", "lng"]].drop_duplicates(
+        subset=["name", "lat", "lng"]
+    ).reset_index(drop=True)
+
+    if street_col:
+        street_name = df[street_col].fillna("").astype(str).str.strip()
+        if street_type_col:
+            street_name = (street_name + " " + df[street_type_col].fillna("").astype(str).str.strip()).str.strip()
+        street_name = street_name.str.replace(r"\s+", " ", regex=True).str.title()
+
+        tmp = df.copy()
+        tmp["_street_name"] = street_name
+        tmp = tmp[tmp["_street_name"] != ""]
+        streets_df = (
+            tmp.groupby("_street_name", as_index=False)
+            .agg(lat=("lat", "mean"), lng=("lng", "mean"), count=("lat", "size"))
+        )
+        streets_df = streets_df[streets_df["count"] >= 2].copy()
+        streets_df["name"] = streets_df["_street_name"]
+        streets_df["sub"] = "Melbourne CBD"
+        streets_df["category"] = "street"
+        streets_df = streets_df[["name", "sub", "category", "lat", "lng"]].reset_index(drop=True)
+    else:
+        streets_df = pd.DataFrame(columns=["name", "sub", "category", "lat", "lng"])
+
+    log.info("  Address rows: %d", len(addresses_df))
+    log.info("  Street rows:  %d", len(streets_df))
+    return addresses_df, streets_df
 
 
 # ─── JOIN ────────────────────────────────────────────────────────────────────
@@ -478,7 +654,9 @@ def join_silver(
 def write_metadata(
     sensors: pd.DataFrame,
     restrictions: pd.DataFrame,
-    merged: pd.DataFrame
+    merged: pd.DataFrame,
+    addresses: pd.DataFrame | None = None,
+    streets: pd.DataFrame | None = None,
 ) -> None:
     """
     Write silver layer metadata JSON for audit and downstream use.
@@ -494,11 +672,12 @@ def write_metadata(
         "cleaned_at":     datetime.now(timezone.utc).isoformat(),
         "notes": [
             "CoM sensors use kerbsideid (not bay_id) and status_description (not status).",
-            "CoM restrictions use bayid (not bay_id) and description1..8 (not typedesc1..8).",
+            "CoM restrictions use bayid (internal key) + deviceid (= kerbsideid).",
+            "Join key: restrictions.deviceid = sensors.kerbsideid (both → bay_id).",
+            "bayid is a DIFFERENT namespace — do NOT join on it (produces false matches).",
             "Duration values are in MINUTES. Do NOT multiply by 60.",
             "location column is a dict — lat/lon extracted before coordinate validation.",
             "Restrictions melted from wide (description1..8) to long (one row per slot).",
-            "Join: sensors.bay_id LEFT JOIN restrictions.bay_id.",
             "No street name in restrictions — use GPS lat/lon → nearest sensor → bay_id.",
         ],
         "datasets": {
@@ -517,6 +696,17 @@ def write_metadata(
             },
         },
     }
+
+    if addresses is not None:
+        meta["datasets"]["addresses_clean"] = {
+            "rows": len(addresses),
+            "columns": list(addresses.columns),
+        }
+    if streets is not None:
+        meta["datasets"]["streets_clean"] = {
+            "rows": len(streets),
+            "columns": list(streets.columns),
+        }
 
     path = SILVER_DIR / "clean_metadata.json"
     with open(path, "w") as f:
@@ -556,12 +746,24 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     # Join
     merged = join_silver(sensors_clean, restrictions_long)
 
+    addresses_clean = None
+    streets_clean = None
+    addresses_path = BRONZE_DIR / "addresses.parquet"
+    if addresses_path.exists():
+        addresses_raw = load_bronze("addresses.parquet")
+        addresses_clean, streets_clean = clean_addresses(addresses_raw, verbose)
+    else:
+        log.info("No addresses.parquet found. Skipping address search datasets.")
+
     if dry_run:
         log.info("DRY RUN — no files written.")
         log.info("Would write:")
         log.info("  data/silver/sensors_clean.parquet      (%d rows)", len(sensors_clean))
         log.info("  data/silver/restrictions_long.parquet   (%d rows)", len(restrictions_long))
         log.info("  data/silver/merged.parquet              (%d rows)", len(merged))
+        if addresses_clean is not None and streets_clean is not None:
+            log.info("  data/silver/addresses_clean.parquet (%d rows)", len(addresses_clean))
+            log.info("  data/silver/streets_clean.parquet   (%d rows)", len(streets_clean))
         return
 
     # Save
@@ -577,7 +779,21 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     merged.to_parquet(merged_path, index=False, engine="pyarrow")
     log.info("Saved merged.parquet             (%d rows)", len(merged))
 
-    write_metadata(sensors_clean, restrictions_long, merged)
+    if addresses_clean is not None and streets_clean is not None:
+        addr_path = SILVER_DIR / "addresses_clean.parquet"
+        street_path = SILVER_DIR / "streets_clean.parquet"
+        addresses_clean.to_parquet(addr_path, index=False, engine="pyarrow")
+        streets_clean.to_parquet(street_path, index=False, engine="pyarrow")
+        log.info("Saved addresses_clean.parquet (%d rows)", len(addresses_clean))
+        log.info("Saved streets_clean.parquet   (%d rows)", len(streets_clean))
+
+    write_metadata(
+        sensors_clean,
+        restrictions_long,
+        merged,
+        addresses=addresses_clean,
+        streets=streets_clean,
+    )
 
     log.info("=" * 60)
     log.info("Silver layer complete.")

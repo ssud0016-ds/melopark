@@ -9,11 +9,41 @@ const FACT_COLORS = {
   red: 'border-l-danger',
 }
 
+const IconCar = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 17h14M5 17a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1l2-3h8l2 3h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2M5 17v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1M19 17v1a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1" />
+  </svg>
+)
+const IconLeaf = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22c-4-4-8-7.5-8-12a8 8 0 0 1 16 0c0 4.5-4 8-8 12Z" />
+    <path d="M12 10v6M9 13h6" />
+  </svg>
+)
+const IconSignal = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 20V4" />
+  </svg>
+)
+const IconBuilding = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="2" width="16" height="20" rx="1" />
+    <path d="M9 22V12h6v10M8 6h.01M16 6h.01M12 6h.01M8 10h.01M16 10h.01M12 10h.01" />
+  </svg>
+)
+const IconParking = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+    <path d="M9 17V7h4a3 3 0 0 1 0 6H9" />
+  </svg>
+)
+
 const WHY_CARDS = [
-  { icon: '🚗', title: 'Reduced Congestion',     body: "Drivers spend an average of 17 minutes cruising for parking in Melbourne's CBD. MeloPark guides you to available bays in real time, slashing that wasted time \u2014 and the traffic it creates." },
-  { icon: '🌱', title: 'Lower Emissions',         body: "Every minute a car cruises for parking releases unnecessary CO\u2082. By reducing search time, MeloPark directly cuts vehicle emissions \u2014 supporting Melbourne's net-zero targets by 2040." },
-  { icon: '📡', title: 'Predictive Intelligence',  body: "We don't just show you what's available now \u2014 our models predict which bays will free up in the next 30 minutes, so you can plan your journey before leaving home." },
-  { icon: '🏙️', title: 'Better City Utilisation',  body: "Melbourne already has the infrastructure. MeloPark makes it smarter \u2014 no new construction required. Existing sensors, existing bays, better outcomes for everyone." },
+  { icon: <IconCar />,      title: 'Reduced Congestion',       body: "Drivers spend an average of 17 minutes cruising for parking in Melbourne's CBD. MeloPark guides you to available bays in real time, slashing that wasted time \u2013 and the traffic it creates." },
+  { icon: <IconLeaf />,     title: 'Lower Emissions',          body: "Every minute a car cruises for parking releases unnecessary CO\u2082. By reducing search time, MeloPark directly cuts vehicle emissions \u2013 supporting Melbourne's net-zero targets by 2040." },
+  { icon: <IconSignal />,   title: 'Predictive Intelligence',  body: "We don't just show you what's available now \u2013 our models predict which bays will free up in the next 30 minutes, so you can plan your journey before leaving home." },
+  { icon: <IconBuilding />, title: 'Better City Utilisation',  body: "Melbourne already has the infrastructure. MeloPark makes it smarter \u2013 no new construction required. Existing sensors, existing bays, better outcomes for everyone." },
+  { icon: <IconParking />,  title: 'Plain-English restrictions', body: "Raw codes such as 2P Meter 8\u201318 Mon\u2013Fri become clear wording: 2-hour parking, Mon\u2013Fri 8 am\u20136 pm, pay by meter. Parking signage is notoriously confusing; MeloPark decodes it so you do not have to." },
 ]
 
 function SectionLabel({ children }) {
@@ -49,7 +79,7 @@ export default function HomePage({ availableBayCount, totalFreeSpots, onNavigate
             Melbourne&rsquo;s <span className="text-brand">Intelligent</span> Parking Platform
           </h1>
           <p className="text-base text-gray-500 dark:text-gray-400 leading-relaxed mb-7">
-            Transforming Melbourne&rsquo;s existing infrastructure data into real-time, predictive parking intelligence &mdash; reducing congestion, lowering carbon emissions and getting you parked faster.
+            Transforming Melbourne&rsquo;s existing infrastructure data into real-time, predictive parking intelligence &ndash; reducing congestion, lowering carbon emissions and getting you parked faster.
           </p>
           <button
             onClick={() => onNavigate('map')}
@@ -86,12 +116,12 @@ export default function HomePage({ availableBayCount, totalFreeSpots, onNavigate
           The parking problem is a climate problem
         </h2>
         <p className="text-[15px] text-gray-500 dark:text-gray-400 leading-relaxed mb-8">
-          30% of urban traffic is drivers circling for parking. We fix that &mdash; one bay at a time.
+          30% of urban traffic is drivers circling for parking. We fix that &ndash; one bay at a time.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {WHY_CARDS.map((c, i) => (
             <HoverCard key={i}>
-              <div className="w-11 h-11 rounded-xl bg-brand-50 dark:bg-brand-900/40 flex items-center justify-center text-xl mb-3.5">
+              <div className="w-11 h-11 rounded-xl bg-brand-50 dark:bg-brand-900/40 flex items-center justify-center text-brand-dark dark:text-brand-light mb-3.5">
                 {c.icon}
               </div>
               <h3 className="text-base font-bold mb-2 text-gray-900 dark:text-white">{c.title}</h3>
