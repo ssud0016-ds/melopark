@@ -73,12 +73,22 @@ export default function BayDetailSheet({
     return { arrivalIso: `${dateStr}T${timeStr}:00`, durationMins }
   }, [dateStr, timeStr, durationMins])
 
+  const plannerBackdatedError = useMemo(() => {
+    if (!rawPlanner?.arrivalIso) return null
+    const t = new Date(rawPlanner.arrivalIso)
+    if (Number.isNaN(t.getTime())) return 'Invalid date/time. Please try again.'
+    // Give a small buffer so "now" doesn't immediately fail due to seconds drift.
+    if (t.getTime() < Date.now() - 30_000) return "That time is in the past. Please choose a future time."
+    return null
+  }, [rawPlanner])
+
   const debouncedPlanner = useDebouncedPlannerParams(rawPlanner, 300)
 
   const plannerActive = Boolean(debouncedPlanner)
 
   /** Sync MapPage only when debounced value is stable; avoid pushing null on mount while saved plan is still debouncing. */
   useEffect(() => {
+    if (plannerBackdatedError) return
     if (debouncedPlanner === null) {
       if (rawPlanner === null) {
         onDebouncedPlannerChange?.(null)
@@ -86,7 +96,7 @@ export default function BayDetailSheet({
       return
     }
     onDebouncedPlannerChange?.(debouncedPlanner)
-  }, [debouncedPlanner, rawPlanner, onDebouncedPlannerChange])
+  }, [debouncedPlanner, rawPlanner, onDebouncedPlannerChange, plannerBackdatedError])
 
   useEffect(() => {
     if (savedPlannerArrivalIso && savedPlannerDurationMins != null) {
@@ -103,12 +113,13 @@ export default function BayDetailSheet({
   }, [bay?.id, plannerResetNonce])
 
   const fetchOpts = useMemo(() => {
+    if (plannerBackdatedError) return null
     if (!debouncedPlanner) return null
     return {
       arrivalIso: debouncedPlanner.arrivalIso,
       durationMins: debouncedPlanner.durationMins,
     }
-  }, [debouncedPlanner])
+  }, [debouncedPlanner, plannerBackdatedError])
 
   useEffect(() => {
     if (!bay?.id) {
@@ -237,7 +248,7 @@ export default function BayDetailSheet({
       <div
         ref={plannerSectionRef}
         id="bay-arrival-planner"
-        className="px-5 pt-0.5 pb-3 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0 scroll-mt-20"
+        className="px-5 pt-2 pb-4 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0 scroll-mt-20"
       >
         <button
           type="button"
@@ -318,6 +329,12 @@ export default function BayDetailSheet({
           </div>
         )}
 
+        {checkTimeExpanded && plannerBackdatedError && (
+          <div className="mt-3 rounded-xl border border-danger-200 bg-danger-50 px-3.5 py-2.5 text-xs font-semibold text-danger shadow-card dark:border-danger-400/40 dark:bg-danger-500/10 dark:text-danger-200">
+            {plannerBackdatedError}
+          </div>
+        )}
+
         {checkTimeExpanded && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3 dark:border-gray-700/80">
             <button
@@ -328,6 +345,7 @@ export default function BayDetailSheet({
               Clear
             </button>
             {debouncedPlanner &&
+              !plannerBackdatedError &&
               (!mapBaysAtPlannedTime ? (
                 <button
                   type="button"
@@ -342,7 +360,7 @@ export default function BayDetailSheet({
           </div>
         )}
 
-        {!checkTimeExpanded && debouncedPlanner && (
+        {!checkTimeExpanded && debouncedPlanner && !plannerBackdatedError && (
           <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700/80">
             {!mapBaysAtPlannedTime ? (
               <button
@@ -359,9 +377,9 @@ export default function BayDetailSheet({
         )}
       </div>
 
-      <div className="px-5 pb-4 shrink-0 pt-3 border-b border-gray-200/60 dark:border-gray-700/60">
+      <div className="px-5 pb-5 shrink-0 pt-4 border-b border-gray-200/60 dark:border-gray-700/60">
         {atLabel && (
-          <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-2">At {atLabel}</p>
+          <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-3">At {atLabel}</p>
         )}
         <VerdictCard
           bay={bay}
@@ -372,14 +390,14 @@ export default function BayDetailSheet({
       </div>
 
       {plannerActive && bay.hasRules && !evalLoading && evaluation && (
-        <div className="px-5 pb-3 shrink-0 border-b border-gray-200/60 dark:border-gray-700/60">
-          <div className="flex justify-between gap-4 text-sm py-1">
+        <div className="px-5 py-4 shrink-0 border-b border-gray-200/60 dark:border-gray-700/60">
+          <div className="flex justify-between gap-4 text-sm py-1.5">
             <span className="text-gray-500 dark:text-gray-400 shrink-0">Stay limit:</span>
             <span className="font-semibold text-gray-900 dark:text-gray-100 text-right tabular-nums">
               {formatStayLimitShort(evaluation?.active_restriction?.max_stay_mins) ?? '-'}
             </span>
           </div>
-          <div className="flex justify-between gap-4 text-sm py-1">
+          <div className="flex justify-between gap-4 text-sm py-1.5">
             <span className="text-gray-500 dark:text-gray-400 shrink-0">Leave by:</span>
             <span className="font-semibold text-gray-900 dark:text-gray-100 text-right">
               {formatLeaveByClock(evaluation?.active_restriction?.expires_at) ?? '-'}
@@ -388,7 +406,7 @@ export default function BayDetailSheet({
         </div>
       )}
 
-      <div className="px-5 pb-4 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0">
+      <div className="px-5 py-5 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex-1 min-w-0">
             <div
@@ -397,11 +415,11 @@ export default function BayDetailSheet({
             >
               {badgeLabel}
             </div>
-            <div className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-white mb-1">
+            <div className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-white mb-1.5">
               {bayDisplayName}
             </div>
             {missingStreetNote && (
-              <div className="text-xs text-gray-400 dark:text-gray-500 mb-1">{missingStreetNote}</div>
+              <div className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">{missingStreetNote}</div>
             )}
             {(bay.name?.trim() || walkStr) && (
               <div className="text-xs text-gray-400 dark:text-gray-500">
@@ -410,7 +428,7 @@ export default function BayDetailSheet({
                 {!bay.name?.trim() && walkStr ? <span>{walkStr}</span> : null}
               </div>
             )}
-            <div className="mt-2">
+            <div className="mt-3">
               {hasRuleInfo ? (
                 <span className="inline-flex items-center gap-1 rounded-full border border-[#35338c]/30 bg-[#35338c]/5 px-2 py-0.5 text-[10px] font-semibold text-[#35338c] dark:border-[#a3a1e6]/40 dark:bg-[#35338c]/20 dark:text-[#a3a1e6]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#35338c] dark:bg-[#a3a1e6]" />
@@ -432,8 +450,8 @@ export default function BayDetailSheet({
         </div>
       </div>
 
-      <div className="px-5 pt-4 pb-7 flex-1">
-        <div className="flex items-center gap-2.5 bg-surface-secondary rounded-xl px-3.5 py-2.5 mb-3">
+      <div className="px-5 pt-5 pb-8 flex-1 space-y-4">
+        <div className="flex items-center gap-3 bg-surface-secondary rounded-xl px-4 py-3">
           <div className={cn('w-3 h-3 rounded-full shrink-0', spotDotColor)} />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-bold text-gray-900 dark:text-white">
@@ -454,7 +472,7 @@ export default function BayDetailSheet({
         </div>
 
         {!evalLoading && !bay.hasRules && (
-          <div className="mb-3.5 px-3.5 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+          <div className="px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
             <div className="flex items-start gap-2.5">
               <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="shrink-0 text-gray-400 mt-0.5">
                 <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5" />
@@ -482,7 +500,7 @@ export default function BayDetailSheet({
         )}
 
         {warnLine && (
-          <div className="mt-3.5 pl-3 pr-3.5 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 border-l-4 border-l-amber-500 dark:border-amber-700/50 dark:border-l-amber-500 text-xs text-amber-900 dark:text-amber-100 leading-snug">
+          <div className="pl-4 pr-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 border-l-4 border-l-amber-500 dark:border-amber-700/50 dark:border-l-amber-500 text-xs text-amber-900 dark:text-amber-100 leading-snug">
             {warnLine}
           </div>
         )}

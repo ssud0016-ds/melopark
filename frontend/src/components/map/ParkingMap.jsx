@@ -186,7 +186,7 @@ export default function ParkingMap({
   const baysForClustering = useMemo(() => {
     const live = verifiedBays.filter((b) => b.source === 'live')
     const verifiedCore = live.length ? live : verifiedBays
-    if (!showLimitedBays) return verifiedCore
+    if (showLimitedBays) return verifiedCore
     return [...verifiedCore, ...limitedBays]
   }, [verifiedBays, limitedBays, showLimitedBays])
 
@@ -340,7 +340,7 @@ export default function ParkingMap({
           ))}
 
         {/* Sensor-only bays: same zoom threshold as verified dots — low zoom uses clusters only (fewer, larger); high zoom shows many smaller dots. */}
-        {showLimitedBays &&
+        {!showLimitedBays &&
           zoomLevel >= CLUSTER_ZOOM_CUTOFF &&
           limitedBays.map((bay) => {
             const ll = bayLatLng(bay)
@@ -423,23 +423,25 @@ export default function ParkingMap({
                 ? {
                     left: '14px',
                     right: '220px',
-                    bottom: '86px',
+                    bottom: destination ? '108px' : '86px',
                     maxWidth: 'calc(100% - 234px)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
+                    whiteSpace: showLimitedBays ? 'nowrap' : 'normal',
+                    overflow: showLimitedBays ? 'hidden' : 'visible',
+                    textOverflow: showLimitedBays ? 'ellipsis' : 'clip',
                   }
                 : {
                     left: '50%',
                     transform: 'translateX(-50%)',
-                    bottom: destination ? '96px' : '18px',
+                    bottom: destination ? '118px' : '18px',
                     width: 'max-content',
                     maxWidth: 'calc(100% - 440px)',
-                    whiteSpace: 'nowrap',
+                    whiteSpace: showLimitedBays ? 'nowrap' : 'normal',
                   }
             }
           >
-            Zoom in to select individual bays
+            {showLimitedBays
+              ? 'Zoom in to see individual bays and tap a bay to see its rule info'
+              : 'Zoom in to see individual bays'}
           </div>
         )}
       </MapContainer>
