@@ -38,8 +38,8 @@ export default function FilterChips({
                   'whitespace-nowrap shrink-0 transition-all cursor-pointer',
                   'shadow-card',
                   isActive
-                    ? 'bg-brand-50 text-brand-900 border-brand-300 dark:bg-brand dark:text-white dark:border-brand'
-                    : 'bg-brand text-white border-brand dark:bg-brand-50 dark:text-brand-900 dark:border-brand-300/80',
+                    ? 'bg-brand text-white border-brand dark:bg-brand dark:text-white dark:border-brand'
+                    : 'bg-brand-50 text-brand-900 border-brand-300 dark:bg-brand-50 dark:text-brand-900 dark:border-brand-300/80',
                 )}
               >
                 {f.label}
