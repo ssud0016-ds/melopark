@@ -178,6 +178,12 @@ export default function BayDetailSheet({
   if (bay.type === 'available') badgeLabel = 'Available'
   else if (bay.type === 'trap') badgeLabel = 'Restricted'
 
+  if (!evalLoading && evaluation?.verdict) {
+    if (evaluation.verdict === 'yes') badgeLabel = 'OK to park'
+    else if (evaluation.verdict === 'no') badgeLabel = 'Restricted'
+    else if (evaluation.verdict === 'unknown') badgeLabel = 'Unclear'
+  }
+
   const bayDisplayName = bayHeading(bay)
   const missingStreetNote = bayMissingStreetNote(bay)
 
@@ -388,7 +394,6 @@ export default function BayDetailSheet({
           bay={bay}
           evaluation={evaluation}
           evaluationPending={evalLoading}
-          plannerActive={plannerActive}
         />
       </div>
 
