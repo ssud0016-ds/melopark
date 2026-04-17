@@ -1,6 +1,6 @@
-/** Base box for MelOPark PNG lockups (width scales from height). */
+/** Base box for MelOPark PNG lockups (width scales from height). shrink-0 avoids flex shrinking the mark. */
 const LOGO_MARK_BASE =
-  'block w-auto max-w-[min(300px,58vw)] object-contain object-left'
+  'block w-auto shrink-0 max-w-[min(300px,58vw)] object-contain object-left'
 
 /**
  * Header: both assets are wide lockups after alpha-trim. Same height for light/dark so
