@@ -1,5 +1,8 @@
 import { useClock } from '../../hooks/useClock'
 import { cn } from '../../utils/cn'
+import logoLight from '../../assets/MelOParkLogoLight.png'
+import logoDarkMode from '../../assets/MelOParkLogoDarkMode.png'
+import { LOGO_HEADER_IMG_CLASS } from '../../constants/logoMark'
 
 function SunGlyph({ className }) {
   return (
@@ -30,6 +33,8 @@ function MoonGlyph({ className }) {
 
 export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark }) {
   const time = useClock()
+  const logoSrc = darkMode ? logoDarkMode : logoLight
+
   return (
     <nav
       className="fixed top-0 inset-x-0 z-50 h-16 overflow-visible bg-white dark:bg-surface-dark border-b
@@ -42,12 +47,7 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
         onClick={(e) => { e.preventDefault(); onNavigate('map') }}
         className="relative z-[1] flex shrink-0 items-center bg-transparent"
       >
-        <img
-          src={darkMode ? '/MelOParkLogoDark.png' : '/MelOParkLogoLight.png'}
-          alt="MelOPark"
-          className="block h-[10.25rem] w-auto max-w-[min(860px,95vw)] object-contain object-left bg-transparent
-                     drop-shadow-[0_2px_8px_rgba(0,0,0,0.18)] dark:drop-shadow-[0_2px_14px_rgba(0,0,0,0.65)]"
-        />
+        <img src={logoSrc} alt="MelOPark" className={LOGO_HEADER_IMG_CLASS} />
       </a>
 
       {/* Centre – Live Map + About Us */}
