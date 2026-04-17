@@ -10,7 +10,7 @@ Covers:
 """
 
 from datetime import datetime, time, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,6 +20,7 @@ from app.services.restriction_evaluator import (
     _pick_governing_restriction,
     _to_com_day,
     evaluate_bay_at,
+    evaluate_bays_bulk,
     is_restriction_active_at,
 )
 
@@ -64,7 +65,11 @@ def _mock_db(bay=None, restrictions=None):
     db = MagicMock()
 
     bay_query = MagicMock()
-    bay_query.filter.return_value.first.return_value = bay
+    bay_filt = MagicMock()
+    bay_filt.first.return_value = bay
+    bay_filt.all.return_value = [bay] if bay is not None else []
+    bay_query.filter.return_value = bay_filt
+
     restriction_query = MagicMock()
     restriction_query.filter.return_value.all.return_value = restrictions or []
 
@@ -223,12 +228,31 @@ class TestEvaluateBayAt:
         r = _make_restriction(
             fromday=1, today=5,
             starttime=time(7, 30), endtime=time(18, 30),
+            rule_category="loading",
         )
         db = _mock_db(bay=bay, restrictions=[r])
         # Sun 10:00 — no restriction active
         result = evaluate_bay_at("1000", datetime(2026, 4, 12, 10, 0), 60, db)
         assert result["verdict"] == "yes"
         assert result["active_restriction"] is None
+        assert "free of charge" not in result["reason"].lower()
+        assert "posted signage" in result["reason"].lower()
+
+    def test_no_restriction_active_timed_bay_outside_meter_hours(self):
+        """Outside paid hours for a metered bay — do not imply unconditional free parking."""
+        bay = _make_bay()
+        r = _make_restriction(
+            fromday=1, today=5,
+            starttime=time(7, 30), endtime=time(18, 30),
+            rule_category="timed",
+            plain_english="Park for up to 2 hours. Pay at the meter.",
+        )
+        db = _mock_db(bay=bay, restrictions=[r])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 20, 0), 60, db)
+        assert result["verdict"] == "yes"
+        assert result["active_restriction"] is None
+        assert "meter" in result["reason"].lower()
+        assert "free of charge" not in result["reason"].lower()
 
     def test_clearway_always_no(self):
         bay = _make_bay()
@@ -381,3 +405,28 @@ class TestWeekdayBoundary:
         arrival = datetime(2026, 4, 18, 22, 0)
         warning = _find_strict_starting_during_stay([clearway], arrival, 720)
         assert warning is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Bulk evaluation + API cache fallback (parity with evaluate_bay_at)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestEvaluateBaysBulk:
+    @patch("app.services.restriction_lookup_service.get_cached_bay_type")
+    def test_fallback_when_no_restriction_rows_uses_cached_bay_type(self, mock_bay_type):
+        mock_bay_type.return_value = "Loading Zone"
+        bay = _make_bay(has_data=True)
+        db = _mock_db(bay=bay, restrictions=[])
+        out = evaluate_bays_bulk(["1000"], datetime(2026, 4, 14, 12, 0), 60, db)
+        assert len(out) == 1
+        assert out[0]["verdict"] == "no"
+
+    @patch("app.services.restriction_lookup_service.get_cached_bay_type")
+    def test_fallback_when_has_restriction_data_false(self, mock_bay_type):
+        mock_bay_type.return_value = "Loading Zone"
+        bay = _make_bay(has_data=False)
+        db = _mock_db(bay=bay, restrictions=[])
+        out = evaluate_bays_bulk(["1000"], datetime(2026, 4, 14, 12, 0), 60, db)
+        assert len(out) == 1
+        assert out[0]["verdict"] == "no"
