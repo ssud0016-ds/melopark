@@ -1,5 +1,3 @@
 export default function AboutPage({ onNavigate }) {
-  return (
-    <div className="pt-16 min-h-screen" />
-  )
+  return <div className="min-h-0 flex-1 bg-white dark:bg-surface-dark" />
 }

@@ -194,8 +194,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const showMapTimeBanner = mapBaysAtPlannedTime && plannerArrivalIso && plannerDurationMins != null
 
   return (
-    <div className="pt-16 h-screen overflow-hidden">
-      <div className="relative w-full h-[calc(100vh-64px)] overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="relative min-h-0 w-full flex-1 overflow-hidden">
         <ParkingMap
           bays={bays}
           visibleBays={visibleBays}
