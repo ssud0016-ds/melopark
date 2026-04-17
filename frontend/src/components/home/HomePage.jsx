@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FACT_CARDS } from '../../data/mapData'
 import { cn } from '../../utils/cn'
+import SiteFooter from '../layout/SiteFooter'
 
 const FACT_COLORS = {
   green: 'border-l-brand',
@@ -216,14 +217,7 @@ export default function HomePage({ availableBayCount, totalFreeSpots, onNavigate
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="bg-surface-dark text-white/50 text-center py-8 px-6 text-sm leading-relaxed">
-        <div className="text-lg font-bold text-white mb-1">
-          Melo<span className="text-brand-light">Park</span>
-        </div>
-        <div>Smarter Parking &middot; Cleaner City &middot; Reducing Emissions</div>
-        <div className="mt-1.5">&copy; 2026 MeloPark &middot; Melbourne, Victoria, Australia</div>
-      </footer>
+      <SiteFooter onNavigate={onNavigate} />
     </div>
   )
 }
