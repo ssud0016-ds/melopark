@@ -19,50 +19,6 @@ function plainEnglishBeyondReason(plain, reason) {
 
 const REASON_COLLAPSE_AT = 220
 
-const ONE_LINE_REASON = 72
-
-function PlannerVerdictStrip({ evaluation, evaluationPending, hasRules }) {
-  const verdict = evaluation?.verdict ?? null
-  const reason = typeof evaluation?.reason === 'string' ? evaluation.reason.trim() : ''
-  let stripClass =
-    'px-3 py-2.5 text-sm font-semibold leading-snug border-b border-black/5 dark:border-white/10 whitespace-normal break-words'
-  let line = ''
-  let titleAttr = undefined
-
-  if (evaluationPending) {
-    stripClass +=
-      ' bg-gray-100 dark:bg-gray-800 min-h-[2.5rem] flex items-center justify-center'
-    line = '\u00a0'
-  } else if (verdict === 'yes') {
-    stripClass += ' bg-emerald-600 text-white'
-    line = 'OK to park'
-  } else if (verdict === 'no') {
-    stripClass += ' bg-red-600 text-white'
-    const rest = reason || 'Restricted'
-    const full = `Can't park · ${rest}`
-    line = full
-    titleAttr = full.length > ONE_LINE_REASON ? full : undefined
-  } else {
-    stripClass += ' bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-gray-100'
-    line = hasRules ? "Couldn't load rule info · check signage" : 'No data · check signage'
-  }
-
-  return (
-    <div
-      className={cn(
-        'rounded-xl overflow-hidden border border-gray-200/90 dark:border-gray-600/80',
-        evaluationPending && 'opacity-55 transition-opacity duration-200',
-      )}
-      aria-busy={evaluationPending}
-      aria-live="polite"
-    >
-      <div className={stripClass} title={titleAttr}>
-        {line}
-      </div>
-    </div>
-  )
-}
-
 /**
  * Displays parking rule verdict for a bay.
  *
@@ -76,24 +32,13 @@ function PlannerVerdictStrip({ evaluation, evaluationPending, hasRules }) {
  *   bay                 – bay object (always present); only bay.type and bay.bayType used
  *   evaluation          – BayEvaluation from backend, or null while loading / on failure
  *   evaluationPending   – true while the evaluate request is in flight
- *   plannerActive       – arrival planner on: compact strip verdict (US 2.2)
  */
-export default function VerdictCard({ bay, evaluation, evaluationPending = false, plannerActive = false }) {
+export default function VerdictCard({ bay, evaluation, evaluationPending = false }) {
   const [reasonExpanded, setReasonExpanded] = useState(false)
 
   useEffect(() => {
     setReasonExpanded(false)
   }, [bay.id])
-
-  if (plannerActive) {
-    return (
-      <PlannerVerdictStrip
-        evaluation={evaluation}
-        evaluationPending={evaluationPending}
-        hasRules={Boolean(bay?.hasRules)}
-      />
-    )
-  }
 
   const verdict = evaluation?.verdict ?? null      // "yes" | "no" | "unknown" | null
   const hasRealVerdict = verdict === 'yes' || verdict === 'no'
@@ -152,9 +97,19 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
 
   const reasonStr = typeof reasonText === 'string' ? reasonText : ''
 
-  const limitVal = restriction?.typedesc
-    ?? (bay.bayType !== 'Other' ? bay.bayType : null)
-    ?? (hasRealData && verdict === 'yes' ? 'None active' : '\u2013')
+  /** Prefer evaluated rule; never show coarse API bay type when rules say "yes" with no active window. */
+  const limitVal = (() => {
+    if (restriction?.typedesc) return restriction.typedesc
+    if (hasRealVerdict && verdict === 'yes' && hasRealData && !restriction) {
+      return 'None active at this time'
+    }
+    if (!hasRealVerdict || isUnknown) {
+      if (bay.bayType !== 'Other') return bay.bayType
+      return '\u2013'
+    }
+    if (hasRealData && verdict === 'yes') return 'None active'
+    return '\u2013'
+  })()
 
   const costVal = 'Not shown – check meters or signage'
 
@@ -165,7 +120,8 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
       const extra = plainEnglishBeyondReason(restriction.plain_english, reasonStr)
       appliesVal = extra ?? '\u2013'
     } else if (hasRealData && verdict === 'yes') {
-      appliesVal = 'No restrictions active right now – free to park.'
+      appliesVal =
+        'No restriction windows from our data apply at this time — always confirm on posted signs.'
     } else {
       appliesVal = NO_DATA_FALLBACK
     }

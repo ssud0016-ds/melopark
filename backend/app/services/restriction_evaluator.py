@@ -222,6 +222,29 @@ def _find_strict_starting_during_stay(
     }
 
 
+def _reason_when_no_restriction_active_at_arrival(
+    restrictions: list[BayRestriction],
+) -> str:
+    """Copy for when no rule window applies at arrival (governing is None).
+
+    Avoid claiming unconditional \"free of charge\" where the bay is normally
+    metered/timed — only outside those hours.
+    """
+    has_timed = any(
+        getattr(r, "rule_category", None) == "timed" for r in restrictions
+    )
+    if has_timed:
+        return (
+            "No timed or meter restriction applies at your arrival time — "
+            "you may park during this window without paying at a meter, based on our data. "
+            "Always confirm payment rules on posted signage."
+        )
+    return (
+        "No restrictions apply at your arrival time — you may park here. "
+        "Check posted signage to confirm."
+    )
+
+
 # ── Verdict logic ───────────────────────────────────────────────────────────
 
 def _pick_governing_restriction(
@@ -379,15 +402,13 @@ def _evaluate_from_db(
     governing = _pick_governing_restriction(active)
 
     if governing is None:
-        # Outside all restriction windows → free to park now.
+        # Outside all restriction windows — legal at this moment; wording
+        # distinguishes metered bays outside paid hours from truly unrestricted bays.
         warning = _find_strict_starting_during_stay(restrictions, arrival, duration_mins)
         return {
             "bay_id": bay_id,
             "verdict": "yes",
-            "reason": (
-                "No restrictions apply at your arrival time — "
-                "you may park here free of charge."
-            ),
+            "reason": _reason_when_no_restriction_active_at_arrival(restrictions),
             "active_restriction": None,
             "warning": warning,
             "data_source": "db",
@@ -428,7 +449,12 @@ def evaluate_bays_bulk(
     """Lightweight bulk evaluation — returns only bay_id + verdict + lat/lon.
 
     Used by the frontend to recolour map dots in a single round-trip.
+
+    Matches :func:`evaluate_bay_at` tiers: DB rows when present; otherwise the
+    same CoM API cache fallback (``bay_type``) used for single-bay evaluation.
     """
+    from app.services.restriction_lookup_service import get_cached_bay_type
+
     bays = db.query(Bay).filter(Bay.bay_id.in_(bay_ids)).all()
     bay_map = {b.bay_id: b for b in bays}
 
@@ -447,24 +473,34 @@ def evaluate_bays_bulk(
         if bay is None:
             continue
 
-        if not bay.has_restriction_data:
-            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "unknown"})
-            continue
-
         bay_rest = rest_by_bay.get(bid, [])
-        if not bay_rest:
+
+        if bay.has_restriction_data and bay_rest:
+            active = [r for r in bay_rest if is_restriction_active_at(r, arrival)]
+            governing = _pick_governing_restriction(active)
+
+            if governing is None:
+                results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "yes"})
+                continue
+
+            verdict, _, _, _ = _verdict_for_restriction(governing, arrival, duration_mins)
+            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": verdict})
+            continue
+
+        # Same fallback as evaluate_bay_at when DB has no restriction rows.
+        bay_type = get_cached_bay_type(bid)
+        if bay_type and bay_type != "Other":
+            ev = _evaluate_from_bay_type(bid, bay_type)
+            results.append(
+                {
+                    "bay_id": bid,
+                    "lat": bay.lat,
+                    "lon": bay.lon,
+                    "verdict": ev["verdict"],
+                }
+            )
+        else:
             results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "unknown"})
-            continue
-
-        active = [r for r in bay_rest if is_restriction_active_at(r, arrival)]
-        governing = _pick_governing_restriction(active)
-
-        if governing is None:
-            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "yes"})
-            continue
-
-        verdict, _, _, _ = _verdict_for_restriction(governing, arrival, duration_mins)
-        results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": verdict})
 
     return results
 
