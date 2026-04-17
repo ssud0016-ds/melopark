@@ -1,7 +1,7 @@
-const GITHUB_REPO_URL = 'https://github.com/ssud0016-ds/melopark'
+import logoDarkMode from '../../assets/MelOParkLogoDarkMode.png'
+import { LOGO_FOOTER_IMG_CLASS } from '../../constants/logoMark'
 
-/** Same asset as TopBar dark mode (`/public`). Wordmark + tagline are baked into the artwork. */
-const LOGO_DARK_SRC = '/MelOParkLogoDark.png'
+const GITHUB_REPO_URL = 'https://github.com/ssud0016-ds/melopark'
 
 function FooterLabel({ children }) {
   return <h3 className="mb-2 text-[11px] font-medium text-white/50">{children}</h3>
@@ -44,13 +44,12 @@ export default function SiteFooter({ onNavigate }) {
     >
       <div className="mx-auto max-w-6xl px-10 pb-4 pt-5">
         <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-[2fr_1fr_1fr_1fr] md:gap-6">
-          {/* Brand: lockup only (no extra text — PNG includes MELOPARK + tagline). Replace file with a trimmed export if outer transparency feels too loose. */}
+          {/* Brand: lockup only (wordmark + tagline in artwork). */}
           <div>
             <img
-              src={LOGO_DARK_SRC}
+              src={logoDarkMode}
               alt="MelOPark — Smarter Parking, Cleaner City"
-              height={56}
-              className="h-14 w-auto max-w-[min(420px,92vw)] object-left object-contain"
+              className={LOGO_FOOTER_IMG_CLASS}
               decoding="async"
             />
           </div>
