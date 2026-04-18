@@ -1,128 +1,187 @@
 # MelOPark - Melbourne Parking Intelligence
 
-A parking decision-support platform for drivers unfamiliar with Melbourne CBD. Built for FIT5120 Industry Experience Studio (S1 2026) by Team FlaminGO.
+MelOPark is a parking decision-support platform for Melbourne CBD drivers, built for FIT5120 Industry Experience Studio (S1 2026) by Team FlaminGO.
 
-MelOPark joins three City of Melbourne open datasets (live bay sensors, parking restrictions, and bay geometry) into a single interface that answers: **"Can I park there, right now, legally, for how long, and at what cost?"**
+It combines live occupancy data with restriction-aware legality checks to answer:
+**Can I park here now, for my planned stay, and what rules apply?**
 
 ## What it does
 
-- **Live Parking Map** - real-time bay availability from ~5,000 in-ground sensors
-- **Restriction Translator** — raw signage-style codes (for example, 2P Meter 8–18 Mon–Fri) are turned into plain language (for example, 2-hour parking, Mon–Fri 8 am–6 pm, pay by meter). Tap any bay for rules aligned to your arrival time. Kerbside signs are easy to misread; MeloPark decodes them so drivers do not have to.
-- **Trap Detector** - warns if a clearway or tow zone kicks in during your stay
-- **Accessibility Mode** (Iteration 2) - live disability bay status with extended time calculations
+- Live map of on-street bay occupancy from City of Melbourne sensor feeds
+- Rule-aware bay evaluation at a selected arrival time and duration
+- Trap detection for stricter rules starting during a planned stay
+- Bulk map recoloring for "show all bays at this planned time"
+- Search suggestions for landmarks/streets/addresses
+
+## Architecture at a glance
+
+MelOPark uses a hybrid architecture:
+
+1. **Live path (real-time occupancy):**
+   - Frontend calls `GET /api/parking`
+   - Backend fetches and caches live City of Melbourne sensor records
+2. **Rules path (legality and search):**
+   - Data pipeline builds curated tables (`bays`, `bay_restrictions`, `search_index`)
+   - Backend evaluates legality from PostgreSQL and serves search results
 
 ## Tech stack
 
+| Layer | Technology |
+| --- | --- |
+| Frontend | React + Vite + Tailwind CSS + Leaflet |
+| Backend API | FastAPI + SQLAlchemy |
+| Lambda adapter | Mangum (`backend/lambda_handler.py`) |
+| Data pipeline | Python + Pandas (+ optional DuckDB in scripts) |
+| Database | PostgreSQL (AWS RDS in deployed environments) |
+| Data design | Medallion-style Bronze -> Silver -> Gold pipeline |
 
-| Layer             | Tech                                     | Why                                                                |
-| ----------------- | ---------------------------------------- | ------------------------------------------------------------------ |
-| Frontend          | React + Vite + Tailwind CSS + Leaflet.js | Fast dev server, mobile-first styling, free map tiles (no API key) |
-| Backend           | Python FastAPI + Mangum                  | API framework with Lambda-ready adapter                            |
-| Data pipeline     | Pandas (+ DuckDB in later iterations)    | Handles cleaning and transformation                                |
-| Database          | PostgreSQL (AWS RDS)                     | Static data store for restrictions + bay geometry                  |
-| Data architecture | Medallion (Bronze/Silver/Gold)           | Traceability from raw API to app-ready tables                      |
+## Repository structure
 
-
-## Project structure
-
-```
+```text
 melopark/
-├── frontend/              # React + Vite app
-│   ├── src/
-│   │   ├── components/    # ParkingMap, BayDetail, SearchBar, StatusBar
-│   │   ├── hooks/         # useSensors, useRestrictionTranslator
-│   │   ├── services/      # API client
-│   │   └── App.jsx        # Main app component
-│   └── package.json
-│
-├── backend/               # FastAPI REST API
-│   ├── app/
-│   │   ├── core/          # Settings + SQLAlchemy setup
-│   │   ├── models/        # SQLAlchemy models (Bay, BayRestriction)
-│   │   ├── routers/       # API routers (health, parking, bays)
-│   │   ├── schemas/       # Pydantic request/response schemas
-│   │   ├── services/      # Business logic (evaluator, parking, restrictions)
-│   │   └── tests/         # Backend tests (31 tests)
-│   ├── lambda_handler.py  # AWS Lambda entrypoint (Mangum)
-│   ├── requirements.txt
-│   └── README.md
-│
-├── data/                  # Medallion architecture
-│   ├── bronze/            # Raw API dumps (gitignored)
-│   ├── silver/            # Cleaned CSVs (committed)
-│   └── gold/              # Optional local artifacts (runtime reads from Postgres)
-│
-├── scripts/               # Data pipeline
-│   ├── fetch_bronze.py    # Pull raw data from CoM APIs
-│   ├── clean_to_silver.py # Bronze -> Silver transforms
-│   ├── build_gold.py      # Silver -> Gold (Postgres via DATABASE_URL)
-│   ├── migrations/        # SQL migration scripts
-│   └── notebooks/         # Jupyter notebooks for exploration
-│
-├── backend/.env.example
-├── .gitignore
+├── frontend/                    # React app (map UI, bay details, planner, search)
+│   ├── src/components/
+│   ├── src/hooks/
+│   ├── src/services/apiBays.js  # Frontend API client
+│   └── .env.example
+├── backend/
+│   ├── app/main.py              # FastAPI app + CORS + router mounting
+│   ├── app/routers/             # health, db_test, parking, bays, search
+│   ├── app/services/            # live fetch/cache + restriction evaluator logic
+│   ├── app/models/              # SQLAlchemy models for bays + restrictions
+│   ├── app/tests/               # evaluator and API health tests
+│   ├── lambda_handler.py
+│   └── .env.example
+├── scripts/
+│   ├── fetch_bronze.py
+│   ├── clean_to_silver.py
+│   ├── build_gold.py
+│   ├── load_search_index.py
+│   ├── diagnostics/             # API/data quality diagnostics
+│   └── migrations/
+├── docs/
+│   ├── search_index_schema.sql
+│   └── search_index_setup.md
 └── README.md
 ```
 
-## Setup (10 minutes)
+## Backend architecture
 
-### Prerequisites
+### App startup and routing
 
-- Python 3.10+ ([download](https://www.python.org/downloads/))
-- Node.js 18+ ([download](https://nodejs.org/))
-- Git
+- `backend/app/main.py` creates the FastAPI app, configures CORS, and mounts routers.
+- Startup behavior differs by runtime:
+  - **Local/server runtime:** starts background refresh tasks for parking data and restriction lookup cache
+  - **AWS Lambda runtime:** skips persistent background loops and relies on on-demand fetch behavior
 
-### 1. Clone the repo
+### API routers
 
-```bash
-git clone https://github.com/your-org/melopark.git
-cd melopark
-```
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/health` | Health status and environment |
+| GET | `/db-test` | DB connectivity smoke check |
+| GET | `/api/parking` | Frontend-ready live parking bay payload |
+| GET | `/api/parking/raw` | Raw upstream parking feed passthrough |
+| GET | `/api/bays/{bay_id}/evaluate` | Evaluate one bay for arrival/duration |
+| GET | `/api/bays/evaluate-bulk` | Evaluate bays in viewport (`bbox`) |
+| GET | `/api/search` | Search landmarks/addresses/streets |
 
-### 2. Backend setup
-
-```bash
-# Create a virtual environment
-cd backend
-python -m venv venv
-
-# Activate it
-# Mac/Linux:
-source venv/bin/activate
-# Windows:
-venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create your .env file
-cp ./.env.example .env
-
-# Start the FastAPI server
-uvicorn app.main:app --reload --port 8000
-```
-
-The API should now be running at [http://localhost:8000](http://localhost:8000). Test it:
-
-```bash
-curl http://localhost:8000/health
-# Should return: {"status":"ok","environment":"development"}
-```
-
-Run backend tests:
-
-```bash
-pytest
-```
-
-API docs:
-
+Interactive docs:
 - [http://localhost:8000/docs](http://localhost:8000/docs)
 - [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
-### 3. Frontend setup
+### Service layer responsibilities
 
-Open a **new terminal** (keep the backend running):
+- `parking_service.py`: fetches live sensor data, normalizes response shape, and applies cache strategy
+- `restriction_lookup_service.py`: builds cached `deviceid -> bay_type` lookup from restrictions API
+- `restriction_evaluator.py`: core legality engine used by single and bulk evaluation endpoints, including:
+  - day/time window checks
+  - strictest-rule precedence when multiple restrictions are active
+  - timed-duration overstay checks
+  - warnings when stricter rules begin during planned stay
+
+### Data models and DB access
+
+- `backend/app/models/bay.py` defines `Bay` and `BayRestriction` ORM models
+- `backend/app/core/db.py` configures SQLAlchemy engine/session via `DATABASE_URL`
+- Search uses the `search_index` table (schema in `docs/search_index_schema.sql`)
+
+## Frontend architecture
+
+### UI composition
+
+- `frontend/src/App.jsx` is the app shell and page switcher (`map`, `about`, `attribution`, `terms`)
+- `MapPage` orchestrates map interactions, selected bay state, planner state, and bulk map evaluation mode
+- `ParkingMap` renders bay markers and emits selection/bounds events
+- `BayDetailSheet` evaluates a selected bay for "now" or a planned arrival/time
+- `SearchBar` calls `/api/search` and supports landmark fallback data
+
+### Frontend data flow
+
+- Live map load: `useBays` -> `fetchParkingBays()` -> `GET /api/parking`
+- Selected bay panel: `fetchBayEvaluation()` -> `GET /api/bays/{bay_id}/evaluate`
+- Planned-time map recolor: `fetchEvaluateBulk()` -> `GET /api/bays/evaluate-bulk`
+
+## Data pipeline architecture
+
+Pipeline scripts are in `scripts/` and follow Bronze -> Silver -> Gold stages:
+
+1. `fetch_bronze.py`  
+   Pull raw City of Melbourne datasets into Bronze artifacts.
+2. `clean_to_silver.py`  
+   Clean/normalize IDs and reshape restrictions into Silver datasets.
+3. `build_gold.py`  
+   Build app-ready outputs and optionally write `bays` + `bay_restrictions` tables.
+4. `load_search_index.py`  
+   Apply search schema and load `search_index` into PostgreSQL.
+
+Supporting docs:
+- `docs/search_index_setup.md`
+- `docs/search_index_schema.sql`
+
+## Configuration
+
+### Backend (`backend/.env`)
+
+Required:
+- `DATABASE_URL`
+- `ENVIRONMENT`
+
+Common optional:
+- `CORS_ORIGINS` (comma-separated origins, or `*`)
+
+### Frontend (`frontend/.env`)
+
+Optional:
+- `VITE_API_URL`  
+  Leave empty in local dev to use Vite `/api` proxy to `http://127.0.0.1:8000`.
+
+## Local setup
+
+### Prerequisites
+
+- Python 3.10+
+- Node.js 18+
+- Git
+
+### 1) Start backend
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload --port 8000
+```
+
+Check:
+
+```bash
+curl http://localhost:8000/health
+```
+
+### 2) Start frontend (new terminal)
 
 ```bash
 cd frontend
@@ -130,102 +189,41 @@ npm install
 npm run dev
 ```
 
-The app should now be running at [http://localhost:5173](http://localhost:5173). Open it in your browser and you should see a map of Melbourne CBD with coloured dots for parking bays.
+Frontend runs at [http://localhost:5173](http://localhost:5173).
 
-### 4. Data pipeline (only needed to refresh restriction data)
+### 3) Run tests
 
-The `bays` and `bay_restrictions` tables are already populated in the shared RDS instance. You do **not** need to run the pipeline to use the bay evaluation endpoints — just make sure your `backend/.env` has the team's `DATABASE_URL`.
+```bash
+cd backend
+pytest
+```
 
-If you need to refresh the data (e.g. after a new CoM data release):
+## Data refresh workflow (when datasets change)
 
 ```bash
 cd scripts
-
-# Step 1: Fetch raw data into bronze/
 python fetch_bronze.py
-
-# Step 2: Clean into silver/
 python clean_to_silver.py
-
-# Step 3: Build Gold layer + write to Postgres
 python build_gold.py --write-db
+python load_search_index.py
+```
 
-# Or just build local Parquet/CSV (no DB required):
+If you only need local file exports:
+
+```bash
 python build_gold.py --export-csv
 ```
 
-## API endpoints
-
-
-| Method | Endpoint | Description |
-| ------ | -------- | ----------- |
-| GET | `/health` | Health check |
-| GET | `/api/parking` | Live sensor data (bay occupancy) |
-| GET | `/api/parking/raw` | Raw upstream sensor data |
-| GET | `/api/bays/{bay_id}/evaluate` | Evaluate parking legality for a single bay |
-| GET | `/api/bays/evaluate-bulk` | Bulk-evaluate all bays in a bounding box |
-
-### Bay evaluation (Epic 2)
-
-**Single bay** — `GET /api/bays/{bay_id}/evaluate`
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| `arrival_iso` | string (ISO-8601) | now | When you plan to arrive |
-| `duration_mins` | int (1–1440) | 60 | How long you plan to stay |
-
-Returns `{ bay_id, verdict, reason, active_restriction, warning }` where `verdict` is `"yes"`, `"no"`, or `"unknown"`.
-
-```bash
-# Is bay 6754 legal next Tuesday at 10:30 for 90 minutes?
-curl "http://localhost:8000/api/bays/6754/evaluate?arrival_iso=2026-04-14T10:30:00&duration_mins=90"
-```
-
-**Bulk (map recolour)** — `GET /api/bays/evaluate-bulk`
-
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| `bbox` | string | required | `south,west,north,east` |
-| `arrival_iso` | string (ISO-8601) | now | Arrival time |
-| `duration_mins` | int | 60 | Planned stay |
-
-Returns `[{ bay_id, lat, lon, verdict }]` for all bays in the viewport.
-
-```bash
-curl "http://localhost:8000/api/bays/evaluate-bulk?bbox=-37.82,144.95,-37.80,144.97&arrival_iso=2026-04-14T10:30:00"
-```
-
-For deployment on AWS Lambda, use `backend/lambda_handler.py` as the function entrypoint.
-
 ## Data sources
 
-All data from [City of Melbourne Open Data Portal](https://data.melbourne.vic.gov.au/) under CC BY licence.
+Primary data comes from the [City of Melbourne Open Data Portal](https://data.melbourne.vic.gov.au/) (CC BY).
 
-
-| Dataset                                    | Type      | Use               |
-| ------------------------------------------ | --------- | ----------------- |
-| On-street Parking Bay Sensors              | Real-time | Live occupancy    |
-| On-street Parking Bays                     | Static    | Bay geometry      |
-| On-street Car Park Bay Restrictions        | Static    | Restriction rules |
-| On-street Car Parking Meters with Location | Static    | Pricing + payment |
-
-
-## How datasets join
-
-```
-Sensors --(marker_id)--> Parking Bays (geometry)
-Sensors --(bay_id)-----> Bay Restrictions (rules)
-Bays and Restrictions do NOT join directly. Go through Sensors.
-```
+Used datasets include:
+- On-street Parking Bay Sensors (real-time occupancy)
+- On-street Parking Bays (geometry/reference)
+- On-street Car Park Bay Restrictions (legal rules)
+- Address/street sources used for search index building
 
 ## Team
 
 Team FlaminGO - Monash University FIT5120 S1 2026
-
-## Branching
-
-- `main` - always working, deploy-ready
-- `feat/feature-name` - feature branches (e.g. `feat/live-map`, `feat/restriction-parser`)
-- No develop branch. Keep it simple.
-
-When your feature is done, open a pull request to main. Get one teammate to review it.
