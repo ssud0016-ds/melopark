@@ -1,11 +1,14 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import SiteGate from './components/SiteGate'
 import './index.css'
 
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <SiteGate>
+      <App />
+    </SiteGate>
   </React.StrictMode>,
 )
