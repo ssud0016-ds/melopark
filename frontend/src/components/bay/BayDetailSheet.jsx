@@ -66,6 +66,13 @@ export default function BayDetailSheet({
   const [durationMins, setDurationMins] = useState(() =>
     savedPlannerDurationMins != null ? savedPlannerDurationMins : 60,
   )
+  const [customDurationInput, setCustomDurationInput] = useState(() =>
+    String(savedPlannerDurationMins != null ? savedPlannerDurationMins : 60),
+  )
+
+  useEffect(() => {
+    setCustomDurationInput(String(durationMins))
+  }, [durationMins])
 
   const rawPlanner = useMemo(() => {
     if (!dateStr || !timeStr) return null
@@ -159,13 +166,23 @@ export default function BayDetailSheet({
   }, [checkTimeExpanded])
 
   const handleToggleCheckTime = useCallback(() => {
-    setCheckTimeExpanded((e) => !e)
-  }, [])
+    setCheckTimeExpanded((e) => {
+      const next = !e
+      if (next && !dateStr && !timeStr) {
+        const now = new Date()
+        const pad = (n) => String(n).padStart(2, '0')
+        setDateStr(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`)
+        setTimeStr(`${pad(now.getHours())}:${pad(now.getMinutes())}`)
+      }
+      return next
+    })
+  }, [dateStr, timeStr])
 
   const handleClearPlanner = useCallback(() => {
-    setCheckTimeExpanded(false)
-    setDateStr('')
-    setTimeStr('')
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    setDateStr(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`)
+    setTimeStr(`${pad(now.getHours())}:${pad(now.getMinutes())}`)
     setDurationMins(60)
     onResetPlannerToLive?.()
   }, [onResetPlannerToLive])
@@ -174,14 +191,19 @@ export default function BayDetailSheet({
 
   const cols = BAY_COLORS[bay.type] || BAY_COLORS.available
 
-  let badgeLabel = 'Occupied'
-  if (bay.type === 'available') badgeLabel = 'Available'
-  else if (bay.type === 'trap') badgeLabel = 'Restricted'
-
+  let badgeLabel
   if (!evalLoading && evaluation?.verdict) {
     if (evaluation.verdict === 'yes') badgeLabel = 'OK to park'
-    else if (evaluation.verdict === 'no') badgeLabel = 'Restricted'
-    else if (evaluation.verdict === 'unknown') badgeLabel = 'Unclear'
+    else if (evaluation.verdict === 'no') badgeLabel = 'Not allowed now'
+    else badgeLabel = 'Unclear'
+  } else if (evalLoading) {
+    badgeLabel = 'Checking…'
+  } else if (bay.type === 'available') {
+    badgeLabel = 'Space free'
+  } else if (bay.type === 'trap') {
+    badgeLabel = 'Special zone'
+  } else {
+    badgeLabel = 'Space taken'
   }
 
   const bayDisplayName = bayHeading(bay)
@@ -237,19 +259,118 @@ export default function BayDetailSheet({
       role="dialog"
       aria-label={`${bayDisplayName}, parking details`}
     >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close"
-        className="sticky top-0 self-end mt-3.5 mr-3.5 w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 border-none cursor-pointer flex items-center justify-center text-base text-gray-500 dark:text-gray-400 z-[3] shrink-0 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-      >
-        &times;
-      </button>
+      <div className="sticky top-0 z-[3] flex items-center gap-3 border-b border-gray-200/60 bg-white/95 px-5 py-3 backdrop-blur dark:border-gray-700/60 dark:bg-surface-dark/95 shrink-0">
+        <div className="min-w-0 flex-1">
+          <div
+            className="text-[10px] font-bold uppercase tracking-wider"
+            style={{ color: cols.border }}
+          >
+            {badgeLabel}
+          </div>
+          <div className="truncate text-base font-extrabold tracking-tight text-gray-900 dark:text-white">
+            {bayDisplayName}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 border-none cursor-pointer flex items-center justify-center text-base text-gray-500 dark:text-gray-400 shrink-0 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+        >
+          &times;
+        </button>
+      </div>
+
+      <div className="px-5 py-4 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            {missingStreetNote && (
+              <div className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">{missingStreetNote}</div>
+            )}
+            {(bay.name?.trim() || walkStr) && (
+              <div className="text-xs text-gray-400 dark:text-gray-500">
+                {bay.name?.trim() ? <span>#{bay.id}</span> : null}
+                {bay.name?.trim() && walkStr ? <span> · {walkStr}</span> : null}
+                {!bay.name?.trim() && walkStr ? <span>{walkStr}</span> : null}
+              </div>
+            )}
+            <div className="mt-2">
+              {hasRuleInfo ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#35338c]/30 bg-[#35338c]/5 px-2 py-0.5 text-[10px] font-semibold text-[#35338c] dark:border-[#a3a1e6]/40 dark:bg-[#35338c]/20 dark:text-[#a3a1e6]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#35338c] dark:bg-[#a3a1e6]" />
+                  Full rules available
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-300" />
+                  Sensor only — check the sign
+                </span>
+              )}
+            </div>
+          </div>
+          {feedUpdatedStr && (
+            <div
+              className="text-[11px] font-semibold text-brand-dark dark:text-brand-light bg-brand-50 dark:bg-brand-900/40 border border-brand/25 rounded-full px-3 py-1.5 whitespace-nowrap self-start"
+              title="When the rules data feed last refreshed"
+            >
+              Live feed · {feedUpdatedStr}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {bay.hasRules && !evalLoading && evaluation && (
+        <div className="px-5 py-4 shrink-0 border-b border-gray-200/60 dark:border-gray-700/60">
+          {(() => {
+            const noActiveRestriction = evaluation?.verdict === 'yes' && !evaluation?.active_restriction
+            const stayLimitLabel = noActiveRestriction
+              ? 'Unlimited'
+              : (formatStayLimitShort(evaluation?.active_restriction?.max_stay_mins) ?? '-')
+            const leaveByLabel = noActiveRestriction
+              ? (formatLeaveByClock(evaluation?.warning?.starts_at) ?? '-')
+              : (formatLeaveByClock(evaluation?.active_restriction?.expires_at) ?? '-')
+            return (
+              <>
+                <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  {atLabel ? `At ${atLabel}` : 'Right now'}
+                </div>
+                <div className="flex justify-between gap-4 text-sm py-1.5">
+                  <span className="text-gray-500 dark:text-gray-400 shrink-0">Zone type</span>
+                  <span className="font-semibold text-gray-900 dark:text-gray-100 text-right">
+                    {limitTypeLabel}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4 text-sm py-1.5">
+                  <span className="text-gray-500 dark:text-gray-400 shrink-0">Stay limit</span>
+                  <span className="font-semibold text-gray-900 dark:text-gray-100 text-right tabular-nums">
+                    {stayLimitLabel}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4 text-sm py-1.5">
+                  <span className="text-gray-500 dark:text-gray-400 shrink-0">
+                    {noActiveRestriction ? 'Rules start' : 'Leave by'}
+                  </span>
+                  <span className="font-semibold text-gray-900 dark:text-gray-100 text-right">
+                    {leaveByLabel}
+                  </span>
+                </div>
+                <div className="mt-3">
+                  <VerdictCard
+                    bay={bay}
+                    evaluation={evaluation}
+                    evaluationPending={evalLoading}
+                  />
+                </div>
+              </>
+            )
+          })()}
+        </div>
+      )}
 
       <div
         ref={plannerSectionRef}
         id="bay-arrival-planner"
-        className="px-5 pt-2 pb-4 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0 scroll-mt-20"
+        className="px-5 py-4 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0 scroll-mt-20"
       >
         <button
           type="button"
@@ -260,7 +381,7 @@ export default function BayDetailSheet({
         >
           <span className="flex min-w-0 items-center gap-2">
             <ClockIcon className="shrink-0 text-gray-600 dark:text-gray-400" />
-            <span className="text-xs font-semibold text-gray-800 dark:text-gray-100">Check another time</span>
+            <span className="text-xs font-semibold text-gray-800 dark:text-gray-100">Plan ahead</span>
           </span>
           <svg
             width="18"
@@ -279,12 +400,6 @@ export default function BayDetailSheet({
 
         {checkTimeExpanded && (
           <div className="mt-3 flex flex-col gap-3">
-            {!dateStr && !timeStr && (
-              <div className="rounded-xl border border-gray-200/90 bg-white/70 px-3.5 py-2.5 text-xs font-semibold text-gray-600 shadow-card dark:border-gray-700/70 dark:bg-surface-dark-secondary/70 dark:text-gray-200">
-                Please select a date and time to check the rules.
-              </div>
-            )}
-
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
@@ -308,32 +423,62 @@ export default function BayDetailSheet({
                 className="rounded-lg border border-gray-200/90 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-900 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100 min-h-[40px] w-full min-w-0"
               />
             </label>
-            <label className="flex min-w-0 flex-1 flex-col gap-0.5 sm:max-w-[11rem]">
+            <div className="flex min-w-0 basis-full flex-col gap-1">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 Stay
               </span>
-              <select
-                value={durationMins}
-                onChange={(e) => setDurationMins(Number(e.target.value))}
-                className="rounded-lg border border-gray-200/90 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-900 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100 cursor-pointer min-h-[40px] w-full min-w-0"
-              >
-                {DURATIONS.map((m) => (
-                  <option key={m} value={m}>
-                    {m === 30
-                      ? '30 min'
-                      : m === 60
-                        ? '1 hr'
-                        : m === 90
-                          ? '1.5 hr'
-                          : m === 120
-                            ? '2 hr'
-                            : m === 180
-                              ? '3 hr'
-                              : '4 hr'}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {DURATIONS.map((m) => {
+                  const isActive = durationMins === m
+                  const label = m < 60 ? `${m}m` : m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h${m % 60}m`
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setDurationMins(m)}
+                      aria-pressed={isActive}
+                      className={`cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors min-h-[28px] ${
+                        isActive
+                          ? 'border-brand bg-brand text-white dark:border-brand-300/80 dark:bg-brand-50 dark:text-brand-900'
+                          : 'border-gray-200/90 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-200 dark:hover:bg-surface-dark-secondary'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+                <label className="ml-0.5 flex items-center gap-1 rounded-lg border border-gray-200/90 bg-white px-2 py-1 dark:border-gray-600 dark:bg-surface-dark">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Custom
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={customDurationInput}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9]/g, '')
+                      setCustomDurationInput(raw)
+                      const n = Number(raw)
+                      if (raw !== '' && Number.isFinite(n) && n > 0) setDurationMins(n)
+                    }}
+                    onBlur={() => {
+                      const n = Number(customDurationInput)
+                      if (!customDurationInput || !Number.isFinite(n) || n < 1) {
+                        setDurationMins(5)
+                        setCustomDurationInput('5')
+                        return
+                      }
+                      const clamped = Math.max(1, Math.min(480, Math.round(n)))
+                      setDurationMins(clamped)
+                      setCustomDurationInput(String(clamped))
+                    }}
+                    aria-label="Custom stay duration in minutes"
+                    className="w-14 bg-transparent text-center text-xs font-semibold text-gray-900 outline-none dark:text-gray-100"
+                  />
+                  <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">min</span>
+                </label>
+              </div>
+            </div>
             </div>
           </div>
         )}
@@ -344,157 +489,59 @@ export default function BayDetailSheet({
           </div>
         )}
 
-        {checkTimeExpanded && (
+        {(checkTimeExpanded || (debouncedPlanner && !plannerBackdatedError)) && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3 dark:border-gray-700/80">
-            <button
-              type="button"
-              onClick={handleClearPlanner}
-              className="text-xs font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 cursor-pointer"
-            >
-              Clear
-            </button>
-            {debouncedPlanner &&
-              !plannerBackdatedError &&
-              (!mapBaysAtPlannedTime ? (
-                <button
-                  type="button"
-                  onClick={() => debouncedPlanner && onShowAllBaysAtThisTime?.(debouncedPlanner)}
-                  className="text-xs font-semibold text-brand dark:text-brand-light hover:underline cursor-pointer text-right"
-                >
-                  Show all bays at this time →
-                </button>
-              ) : (
-                <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Map uses this time</span>
-              ))}
-          </div>
-        )}
-
-        {!checkTimeExpanded && debouncedPlanner && !plannerBackdatedError && (
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-700/80">
-            {!mapBaysAtPlannedTime ? (
+            {checkTimeExpanded ? (
               <button
                 type="button"
-                onClick={() => debouncedPlanner && onShowAllBaysAtThisTime?.(debouncedPlanner)}
-                className="text-xs font-semibold text-brand dark:text-brand-light hover:underline cursor-pointer text-right"
+                onClick={handleClearPlanner}
+                className="text-xs font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 cursor-pointer"
               >
-                Show all bays at this time →
+                Reset to now
               </button>
-            ) : (
-              <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Map uses this time</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="px-5 pb-5 shrink-0 pt-4 border-b border-gray-200/60 dark:border-gray-700/60">
-        {atLabel && (
-          <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-3">At {atLabel}</p>
-        )}
-        <VerdictCard
-          bay={bay}
-          evaluation={evaluation}
-          evaluationPending={evalLoading}
-        />
-      </div>
-
-      {plannerActive && bay.hasRules && !evalLoading && evaluation && (
-        <div className="px-5 py-4 shrink-0 border-b border-gray-200/60 dark:border-gray-700/60">
-          {/*
-            When no restriction is active (often overnight), show Unlimited and (if available)
-            the next restriction start time from `evaluation.warning.starts_at`.
-          */}
-          {(() => {
-            const noActiveRestriction = evaluation?.verdict === 'yes' && !evaluation?.active_restriction
-            const stayLimitLabel = noActiveRestriction
-              ? 'Unlimited'
-              : (formatStayLimitShort(evaluation?.active_restriction?.max_stay_mins) ?? '-')
-            const leaveByLabel = noActiveRestriction
-              ? (formatLeaveByClock(evaluation?.warning?.starts_at) ?? '-')
-              : (formatLeaveByClock(evaluation?.active_restriction?.expires_at) ?? '-')
-
-            return (
-              <>
-          <div className="flex justify-between gap-4 text-sm py-1.5">
-            <span className="text-gray-500 dark:text-gray-400 shrink-0">Stay limit:</span>
-            <span className="font-semibold text-gray-900 dark:text-gray-100 text-right tabular-nums">
-              {stayLimitLabel}
-            </span>
-          </div>
-          <div className="flex justify-between gap-4 text-sm py-1.5">
-            <span className="text-gray-500 dark:text-gray-400 shrink-0">Leave by:</span>
-            <span className="font-semibold text-gray-900 dark:text-gray-100 text-right">
-              {leaveByLabel}
-            </span>
-          </div>
-              </>
-            )
-          })()}
-        </div>
-      )}
-
-      <div className="px-5 py-5 border-b border-gray-200/60 dark:border-gray-700/60 shrink-0">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <div
-              className="text-[10px] font-bold uppercase tracking-wider mb-1.5"
-              style={{ color: cols.border }}
-            >
-              {badgeLabel}
-            </div>
-            <div className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-white mb-1.5">
-              {bayDisplayName}
-            </div>
-            {missingStreetNote && (
-              <div className="text-xs text-gray-400 dark:text-gray-500 mb-1.5">{missingStreetNote}</div>
-            )}
-            {(bay.name?.trim() || walkStr) && (
-              <div className="text-xs text-gray-400 dark:text-gray-500">
-                {bay.name?.trim() ? <span>#{bay.id}</span> : null}
-                {bay.name?.trim() && walkStr ? <span> · {walkStr}</span> : null}
-                {!bay.name?.trim() && walkStr ? <span>{walkStr}</span> : null}
-              </div>
-            )}
-            <div className="mt-3">
-              {hasRuleInfo ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-[#35338c]/30 bg-[#35338c]/5 px-2 py-0.5 text-[10px] font-semibold text-[#35338c] dark:border-[#a3a1e6]/40 dark:bg-[#35338c]/20 dark:text-[#a3a1e6]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#35338c] dark:bg-[#a3a1e6]" />
-                  Rules on file
-                </span>
+            ) : <span />}
+            {debouncedPlanner && !plannerBackdatedError && (
+              !mapBaysAtPlannedTime ? (
+                <button
+                  type="button"
+                  onClick={() => onShowAllBaysAtThisTime?.(debouncedPlanner)}
+                  className="text-xs font-semibold text-brand dark:text-brand-light hover:underline cursor-pointer text-right"
+                >
+                  Apply this time to the map →
+                </button>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-300" />
-                  Rules not on file
-                </span>
-              )}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => onResetPlannerToLive?.()}
+                  className="text-xs font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 cursor-pointer"
+                >
+                  Using this time on the map · Undo
+                </button>
+              )
+            )}
           </div>
-          {feedUpdatedStr && (
-            <div className="text-[11px] font-semibold text-brand-dark dark:text-brand-light bg-brand-50 dark:bg-brand-900/40 border border-brand/25 rounded-full px-3 py-1.5 whitespace-nowrap self-start">
-              Updated {feedUpdatedStr}
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       <div className="px-5 pt-5 pb-8 flex-1 space-y-4">
         <div className="flex items-center gap-3 bg-surface-secondary rounded-xl px-4 py-3">
           <div className={cn('w-3 h-3 rounded-full shrink-0', spotDotColor)} />
           <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Sensor reading
+            </div>
             <div className="text-sm font-bold text-gray-900 dark:text-white">
-              {bay.free === 1 ? 'Space looks free' : bay.free === 0 ? 'Space looks occupied' : 'Occupancy unknown'}
+              {bay.free === 1 ? 'Free' : bay.free === 0 ? 'Taken' : 'Unknown'}
             </div>
             {sensorStr && (
               <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                Sensor · {sensorStr}
+                {sensorStr}
               </div>
             )}
             {!sensorStr && (
               <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 italic">No live sensor time</div>
             )}
           </div>
-          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 text-right max-w-[45%] leading-snug">
-            {limitTypeLabel}
-          </span>
         </div>
 
         {!evalLoading && !bay.hasRules && (
