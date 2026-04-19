@@ -1,5 +1,6 @@
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import ParkingMap from './ParkingMap'
+import OnboardingOverlay from './OnboardingOverlay'
 import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import FilterChips from '../feedback/FilterChips'
@@ -55,6 +56,23 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [mapBaysAtPlannedTime, setMapBaysAtPlannedTime] = useState(false)
   /** Bump to force sheet form reset when banner or Clear resets live mode. */
   const [plannerResetNonce, setPlannerResetNonce] = useState(0)
+
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return !window.sessionStorage.getItem('melopark.onboarded')
+  })
+
+  const dismissOnboarding = useCallback(() => {
+    try {
+      window.sessionStorage.setItem('melopark.onboarded', '1')
+    } catch (_e) {}
+    setShowOnboarding(false)
+  }, [])
+
+  const handleOnboardingPick = useCallback((lm) => {
+    pickDestination(lm)
+    dismissOnboarding()
+  }, [pickDestination, dismissOnboarding])
 
   const [mapBounds, setMapBounds] = useState(null)
   const [bulkVerdictById, setBulkVerdictById] = useState({})
@@ -365,6 +383,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             </div>
           </div>
         </div>
+
+        {showOnboarding && (
+          <OnboardingOverlay onPick={handleOnboardingPick} onSkip={dismissOnboarding} />
+        )}
 
         {selectedBay && (
           <BayDetailSheet
