@@ -246,6 +246,9 @@ export default function BayDetailSheet({
   const showApiNote = dataSource === 'api_fallback'
 
   const atLabel = debouncedPlanner ? formatAtDateTime(debouncedPlanner.arrivalIso) : null
+  const topSpaceLabel =
+    bay.free === 1 ? 'Space free' : bay.free === 0 ? 'Space occupied' : 'Space status unknown'
+  const topLocationLabel = bay.name?.trim() || 'Location unavailable'
 
   return (
     <div
@@ -265,10 +268,13 @@ export default function BayDetailSheet({
             className="text-[10px] font-bold uppercase tracking-wider"
             style={{ color: cols.border }}
           >
-            {badgeLabel}
+            {topSpaceLabel}
           </div>
           <div className="truncate text-base font-extrabold tracking-tight text-gray-900 dark:text-white">
-            {bayDisplayName}
+            Bay #{bay.id}
+          </div>
+          <div className="truncate text-xs font-medium text-gray-500 dark:text-gray-400">
+            {topLocationLabel}
           </div>
         </div>
         <button
@@ -329,11 +335,28 @@ export default function BayDetailSheet({
             const leaveByLabel = noActiveRestriction
               ? (formatLeaveByClock(evaluation?.warning?.starts_at) ?? '-')
               : (formatLeaveByClock(evaluation?.active_restriction?.expires_at) ?? '-')
+            const verdictLine = evaluation?.verdict === 'yes'
+              ? 'Yes, you can park here'
+              : evaluation?.verdict === 'no'
+                ? 'No, you cannot park here'
+                : null
             return (
               <>
                 <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   {atLabel ? `At ${atLabel}` : 'Right now'}
                 </div>
+                {verdictLine && (
+                  <div
+                    className={cn(
+                      'mb-2 rounded-lg px-3 py-1.5 text-sm font-semibold',
+                      evaluation?.verdict === 'yes'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-red-600 text-white',
+                    )}
+                  >
+                    {verdictLine}
+                  </div>
+                )}
                 <div className="flex justify-between gap-4 text-sm py-1.5">
                   <span className="text-gray-500 dark:text-gray-400 shrink-0">Zone type</span>
                   <span className="font-semibold text-gray-900 dark:text-gray-100 text-right">
