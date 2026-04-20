@@ -65,14 +65,20 @@ The bronze data has several known quality issues this script fixes:
    - CoM uses 'Unoccupied' and 'Present'
    - We normalise to 'Absent' and 'Present' for consistency
 
-JOIN STRATEGY (CORRECT PATH — no street name available)
---------------------------------------------------------
-    sensors.bay_id  <->  restrictions.bay_id
-    LEFT JOIN from sensors (keep all sensors even with no restriction data)
-WARNINGS:
-  The restrictions dataset has NO street name column.
-  Do NOT filter by street name — it will return zero results.
-  Correct flow: GPS lat/lon -> nearest sensor -> bay_id -> restrictions
+JOIN STRATEGY (coverage beyond direct deviceid overlap)
+---------------------------------------------------------
+    Primary: sensors.bay_id LEFT JOIN restrictions.bay_id (deviceid = kerbsideid).
+
+    CoM publishes restrictions for far fewer device ids than live sensors.
+    After the direct join, we **expand** ``restrictions_long`` using
+    ``parking_bays.parquet`` (``roadsegmentdescription`` + lat/lon):
+
+      1. Street — clone slots from one representative restriction bay per street
+         onto every sensor bay on that street that lacks a direct row.
+      2. Nearest — remaining bays copy slots from the closest restriction bay
+         within 75 m (requires scipy).
+
+    See ``backend/app/services/restriction_coverage.py``.
 
 HOW TO RUN
 ----------
@@ -102,6 +108,7 @@ DATE   : 13th, April 2026
 import argparse
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -169,6 +176,34 @@ def load_bronze(filename: str) -> pd.DataFrame:
     return df
 
 
+def _normalise_str_series(series: pd.Series) -> pd.Series:
+    return series.astype(str).str.strip()
+
+
+def _find_column_by_tokens(df: pd.DataFrame, required_tokens: list[str], any_tokens: list[str] | None = None) -> str | None:
+    for col in df.columns:
+        lower = col.lower()
+        if all(token in lower for token in required_tokens):
+            if any_tokens is None or any(token in lower for token in any_tokens):
+                return col
+    return None
+
+
+def _parse_duration_from_sign_code(code: str) -> int | None:
+    if not code:
+        return None
+    c = str(code).strip().upper()
+    if c == "QP":
+        return 15
+    if c.startswith("LZ"):
+        m = re.search(r"LZ\s*(\d+)", c)
+        return int(m.group(1)) if m else None
+    m = re.search(r"(\d+(?:\.\d+)?)P", c)
+    if m:
+        return int(float(m.group(1)) * 60)
+    return None
+
+
 # ─── SENSOR CLEANING ────────────────────────────────────────────────────────
 
 def clean_sensors(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
@@ -230,13 +265,28 @@ def clean_sensors(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
         log.info("  Dropped %d duplicate bay_id rows (kept latest)", dup_count)
 
     # 4. Extract lat/lon from nested location dictionary
-    # CoM API returns location as: {'lat': -37.814, 'lon': 144.965}
+    # CoM API returns location as dict, but parquet round-trips may persist JSON strings.
+    def _location_to_mapping(val):
+        if isinstance(val, dict):
+            return val
+        if isinstance(val, str) and val.strip().startswith("{"):
+            try:
+                parsed = json.loads(val)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                return None
+        return None
+
+    loc_map = df["location"].apply(_location_to_mapping)
     df["lat"] = df["location"].apply(
         lambda x: x.get("lat") if isinstance(x, dict) else None
     )
     df["lon"] = df["location"].apply(
         lambda x: x.get("lon") if isinstance(x, dict) else None
     )
+    df["lat"] = df["lat"].where(df["lat"].notna(), loc_map.apply(lambda x: x.get("lat") if isinstance(x, dict) else None))
+    df["lon"] = df["lon"].where(df["lon"].notna(), loc_map.apply(lambda x: x.get("lon") if isinstance(x, dict) else None))
 
     # 5. Validate coordinates — filter to Melbourne CBD bounding box
     df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
@@ -583,6 +633,102 @@ def clean_addresses(df_raw: pd.DataFrame, verbose: bool = False) -> tuple[pd.Dat
     return addresses_df, streets_df
 
 
+def build_segment_restrictions(verbose: bool = False) -> pd.DataFrame:
+    """Build restrictions via segment chain: bays -> zones_to_segments -> sign_plates."""
+    log.info("--- Building segment-chain restrictions ---")
+    bays = load_bronze("parking_bays.parquet").copy()
+    zones = load_bronze("zones_to_segments.parquet").copy()
+    signs = load_bronze("sign_plates.parquet").copy()
+
+    if verbose:
+        log.info("  zones_to_segments columns: %s", list(zones.columns))
+        log.info("  sign_plates columns: %s", list(signs.columns))
+
+    # 1) bays: bay_id + roadsegmentid
+    if "kerbsideid" not in bays.columns or "roadsegmentid" not in bays.columns:
+        raise KeyError("parking_bays.parquet must include kerbsideid and roadsegmentid")
+    bays["bay_id"] = _normalise_str_series(bays["kerbsideid"])
+    bays["roadsegmentid"] = _normalise_str_series(bays["roadsegmentid"])
+    bays = bays[(bays["bay_id"] != "") & (bays["roadsegmentid"] != "")]
+    bays = bays[~bays["bay_id"].isin(["nan", "none"]) & ~bays["roadsegmentid"].isin(["nan", "none"])]
+    bays = bays[["bay_id", "roadsegmentid"]].drop_duplicates()
+
+    # 2) zones_to_segments: detect segment + zone columns
+    seg_col = _find_column_by_tokens(zones, ["segment", "id"])
+    zone_col = _find_column_by_tokens(zones, [], ["zone", "parking"])
+    if seg_col is None or zone_col is None:
+        raise KeyError(f"Could not detect segment/zone columns in zones_to_segments.parquet. Columns={list(zones.columns)}")
+    zones = zones.rename(columns={seg_col: "segment_id", zone_col: "parkingzone"})
+    zones["segment_id"] = _normalise_str_series(zones["segment_id"])
+    zones["parkingzone"] = _normalise_str_series(zones["parkingzone"])
+    zones = zones[(zones["segment_id"] != "") & (zones["parkingzone"] != "")]
+    zones = zones[~zones["segment_id"].isin(["nan", "none"]) & ~zones["parkingzone"].isin(["nan", "none"])]
+    zones = zones[["segment_id", "parkingzone"]].drop_duplicates()
+
+    bay_zones = bays.merge(zones, left_on="roadsegmentid", right_on="segment_id", how="inner")
+
+    # 3) sign_plates: detect zone + restriction display columns
+    sign_zone_col = _find_column_by_tokens(signs, [], ["zone", "parking"])
+    code_col = _find_column_by_tokens(signs, ["code"], ["display", "restrict", "sign"]) or _find_column_by_tokens(signs, ["display"], ["code", "restrict", "sign"])
+    if sign_zone_col is None or code_col is None:
+        raise KeyError(f"Could not detect parking zone or restriction code columns in sign_plates.parquet. Columns={list(signs.columns)}")
+    signs = signs.rename(columns={sign_zone_col: "parkingzone", code_col: "display_code"})
+    signs["parkingzone"] = _normalise_str_series(signs["parkingzone"])
+    signs["display_code"] = _normalise_str_series(signs["display_code"])
+    signs = signs[(signs["parkingzone"] != "") & (signs["display_code"] != "")]
+    signs = signs[~signs["parkingzone"].isin(["nan", "none"]) & ~signs["display_code"].isin(["nan", "none"])]
+
+    # Optional time/day columns if present
+    fromday_col = _find_column_by_tokens(signs, ["from", "day"])
+    today_col = _find_column_by_tokens(signs, ["to", "day"]) or _find_column_by_tokens(signs, ["today"])
+    start_col = _find_column_by_tokens(signs, ["start", "time"])
+    end_col = _find_column_by_tokens(signs, ["end", "time"])
+    has_time_data = all(c is not None for c in [fromday_col, today_col, start_col, end_col])
+    if not has_time_data:
+        log.warning("Sign plate day/time columns not found. Using conservative defaults (Mon-Fri 07:30-18:30).")
+
+    joined = bay_zones.merge(signs, on="parkingzone", how="inner")
+
+    code_map = {
+        "FP1P": "1P FREE",
+        "MP2P": "2P MTR",
+        "MP1P": "1P MTR",
+        "MP4P": "4P MTR",
+        "LZ30": "LZ 30MINS",
+        "QP": "P/15MINS",
+        "FP": "FREE",
+    }
+
+    rows: list[dict] = []
+    for _, row in joined.iterrows():
+        display_code = str(row["display_code"]).strip().upper()
+        typedesc = code_map.get(display_code, display_code)
+        duration = _parse_duration_from_sign_code(display_code)
+        rows.append({
+            "bay_id": row["bay_id"],
+            "slot_num": 1,
+            "typedesc": typedesc,
+            "fromday": int(row[fromday_col]) if has_time_data and pd.notna(row[fromday_col]) else 1,
+            "today": int(row[today_col]) if has_time_data and pd.notna(row[today_col]) else 5,
+            "starttime": str(row[start_col]).strip() if has_time_data and pd.notna(row[start_col]) else "07:30",
+            "endtime": str(row[end_col]).strip() if has_time_data and pd.notna(row[end_col]) else "18:30",
+            "duration_mins": duration,
+            "disabilityext_mins": None,
+        })
+
+    segment_df = pd.DataFrame(rows)
+    if len(segment_df) == 0:
+        return segment_df
+
+    segment_df = segment_df.drop_duplicates(subset=["bay_id", "typedesc"], keep="first").reset_index(drop=True)
+    log.info(
+        "  Segment restrictions built: %d rows across %d bays",
+        len(segment_df),
+        segment_df["bay_id"].nunique(),
+    )
+    return segment_df
+
+
 # ─── JOIN ────────────────────────────────────────────────────────────────────
 
 def join_silver(
@@ -657,6 +803,9 @@ def write_metadata(
     merged: pd.DataFrame,
     addresses: pd.DataFrame | None = None,
     streets: pd.DataFrame | None = None,
+    coverage_stats: dict | None = None,
+    segment_restrictions: pd.DataFrame | None = None,
+    combined_restrictions: pd.DataFrame | None = None,
 ) -> None:
     """
     Write silver layer metadata JSON for audit and downstream use.
@@ -678,8 +827,9 @@ def write_metadata(
             "Duration values are in MINUTES. Do NOT multiply by 60.",
             "location column is a dict — lat/lon extracted before coordinate validation.",
             "Restrictions melted from wide (description1..8) to long (one row per slot).",
-            "No street name in restrictions — use GPS lat/lon → nearest sensor → bay_id.",
+            "Segment-chain restrictions can be merged from sign plates via zones_to_segments.",
         ],
+        "restriction_coverage": coverage_stats or {},
         "datasets": {
             "sensors_clean": {
                 "rows":    len(sensors),
@@ -693,6 +843,14 @@ def write_metadata(
                 "rows":        len(merged),
                 "columns":     list(merged.columns),
                 "unique_bays": int(merged["bay_id"].nunique()),
+            },
+            "segment_restrictions_long": {
+                "rows": 0 if segment_restrictions is None else len(segment_restrictions),
+                "columns": [] if segment_restrictions is None else list(segment_restrictions.columns),
+            },
+            "combined_restrictions_long": {
+                "rows": len(restrictions) if combined_restrictions is None else len(combined_restrictions),
+                "columns": list(restrictions.columns) if combined_restrictions is None else list(combined_restrictions.columns),
             },
         },
     }
@@ -743,8 +901,33 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     sensors_clean     = clean_sensors(sensors_raw, verbose)
     restrictions_long = melt_restrictions(restrictions_raw, verbose)
 
+    segment_rest = None
+    try:
+        segment_rest = build_segment_restrictions(verbose=verbose)
+    except FileNotFoundError as e:
+        log.warning("Segment chain data not available: %s", e)
+        log.warning("Run fetch_bronze.py with zones_to_segments and sign_plates first.")
+    except KeyError as e:
+        log.warning("Segment chain column mapping failed: %s", e)
+
+    if segment_rest is not None and len(segment_rest) > 0:
+        combined_restrictions = pd.concat([restrictions_long, segment_rest], ignore_index=True)
+        combined_restrictions = combined_restrictions.drop_duplicates(
+            subset=["bay_id", "typedesc"],
+            keep="first",
+        )
+        log.info(
+            "Combined restrictions: %d rows (%d direct + %d segment)",
+            len(combined_restrictions),
+            len(restrictions_long),
+            len(segment_rest),
+        )
+    else:
+        combined_restrictions = restrictions_long
+        log.info("Using direct restrictions only: %d rows", len(combined_restrictions))
+
     # Join
-    merged = join_silver(sensors_clean, restrictions_long)
+    merged = join_silver(sensors_clean, combined_restrictions)
 
     addresses_clean = None
     streets_clean = None
@@ -760,6 +943,8 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         log.info("Would write:")
         log.info("  data/silver/sensors_clean.parquet      (%d rows)", len(sensors_clean))
         log.info("  data/silver/restrictions_long.parquet   (%d rows)", len(restrictions_long))
+        if segment_rest is not None:
+            log.info("  data/silver/segment_restrictions_long.parquet (%d rows)", len(segment_rest))
         log.info("  data/silver/merged.parquet              (%d rows)", len(merged))
         if addresses_clean is not None and streets_clean is not None:
             log.info("  data/silver/addresses_clean.parquet (%d rows)", len(addresses_clean))
@@ -775,6 +960,11 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     restrictions_long.to_parquet(restrictions_path, index=False, engine="pyarrow")
     log.info("Saved restrictions_long.parquet  (%d rows)", len(restrictions_long))
 
+    if segment_rest is not None:
+        seg_path = SILVER_DIR / "segment_restrictions_long.parquet"
+        segment_rest.to_parquet(seg_path, index=False, engine="pyarrow")
+        log.info("Saved segment_restrictions_long.parquet  (%d rows)", len(segment_rest))
+
     merged_path = SILVER_DIR / "merged.parquet"
     merged.to_parquet(merged_path, index=False, engine="pyarrow")
     log.info("Saved merged.parquet             (%d rows)", len(merged))
@@ -786,13 +976,15 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         streets_clean.to_parquet(street_path, index=False, engine="pyarrow")
         log.info("Saved addresses_clean.parquet (%d rows)", len(addresses_clean))
         log.info("Saved streets_clean.parquet   (%d rows)", len(streets_clean))
-
     write_metadata(
         sensors_clean,
         restrictions_long,
         merged,
         addresses=addresses_clean,
         streets=streets_clean,
+        coverage_stats=None,
+        segment_restrictions=segment_rest,
+        combined_restrictions=combined_restrictions,
     )
 
     log.info("=" * 60)
