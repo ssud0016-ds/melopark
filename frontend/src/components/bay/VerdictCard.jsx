@@ -79,7 +79,7 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
     headlineText = "We can't tell if you can park here"
   } else if (hasRealVerdict) {
     verdictWord = verdict === 'yes' ? 'YES' : 'NO'
-    headlineText = isAvailable ? 'You can park here' : 'Cannot park here'
+    headlineText = isAvailable ? 'Yes, you can park here' : 'No, you cannot park here'
   } else {
     verdictWord = '?'
     headlineText = "We can't tell if you can park here"

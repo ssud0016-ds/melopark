@@ -10,22 +10,22 @@ import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams
 import { fetchEvaluateBulk } from '../../services/apiBays'
 import { formatAtDateTime, formatDurationLabel } from '../../utils/plannerTime'
 
-function MapTimeBanner({ arrivalIso, durationMins, onDismiss }) {
-  return (
-    <button
-      type="button"
-      onClick={onDismiss}
-      className="flex w-full min-w-0 items-center justify-center gap-2 rounded-full border border-amber-200/90 bg-amber-50 px-3 py-1.5 text-left text-xs font-semibold text-amber-800 shadow-card dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-100 cursor-pointer hover:bg-amber-100/90 dark:hover:bg-amber-900/40 transition-colors"
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 text-amber-700 dark:text-amber-200" aria-hidden>
-        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
-        <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-      </svg>
-      <span className="min-w-0 truncate">
-        Showing bays at {formatAtDateTime(arrivalIso)} · {formatDurationLabel(durationMins)} stay
-      </span>
-    </button>
-  )
+function toLocalDateTimeInputValue(iso) {
+  const d = iso ? new Date(iso) : new Date()
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const da = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${y}-${m}-${da}T${hh}:${mm}`
+}
+
+function splitLocalDateTimeParts(iso) {
+  const dt = toLocalDateTimeInputValue(iso)
+  if (!dt) return { date: '', time: '' }
+  const [date, time] = dt.split('T')
+  return { date: date || '', time: time || '' }
 }
 
 export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry }) {
@@ -40,7 +40,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     pickDestination,
     clearDestination,
     showLimitedBays,
-    setShowLimitedBays,
     setBaysRef,
     getVisibleBays,
     getProximityBays,
@@ -69,13 +68,20 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setShowOnboarding(false)
   }, [])
 
-  const handleOnboardingPick = useCallback((lm) => {
+  const handleOnboardingPick = useCallback((lm, arrivalIso = null) => {
     pickDestination(lm)
+    if (arrivalIso) {
+      setPlannerArrivalIso(arrivalIso)
+      setPlannerDurationMins(60)
+      setMapBaysAtPlannedTime(true)
+    }
     dismissOnboarding()
   }, [pickDestination, dismissOnboarding])
 
   const [mapBounds, setMapBounds] = useState(null)
   const [bulkVerdictById, setBulkVerdictById] = useState({})
+  const [showArrivePicker, setShowArrivePicker] = useState(false)
+  const [filterCollapsed, setFilterCollapsed] = useState(true)
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
 
@@ -177,15 +183,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  const tsStr = lastUpdated
-    ? lastUpdated.toLocaleTimeString('en-AU', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      })
-    : '–'
-
   const handlePickLandmark = useCallback((lm) => pickDestination(lm), [pickDestination])
 
   const handleMapReady = useCallback((map) => {
@@ -208,11 +205,32 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const rightInsetPx = 14 + desktopSheetReservePx
   /** Keep search + filters the same max width as the default map view (do not stretch when bay sheet opens). */
   const TOOLBAR_MAX_PX = 560
+  const FILTER_RIGHT_RESERVE_PX = isMobile ? 0 : (selectedBay ? 76 : 24)
+  const ZOOM_GROUP_WIDTH_PX = 72
 
-  const showMapTimeBanner = mapBaysAtPlannedTime && plannerArrivalIso && plannerDurationMins != null
+  const activeFilterLabel = useMemo(() => {
+    if (activeFilter === 'all') return 'All bays'
+    if (activeFilter === 'available') return 'Available'
+    if (activeFilter === 'trap') return 'Caution'
+    if (activeFilter === 'lt1h') return 'Less than 1h parking'
+    if (activeFilter === '1h') return '1h parking'
+    if (activeFilter === '2h') return '2h parking'
+    if (activeFilter === '3h') return '3h parking'
+    if (activeFilter === '4h') return '4h parking'
+    return 'All bays'
+  }, [activeFilter])
+
+  const { date: arriveDate, time: arriveTime } = splitLocalDateTimeParts(plannerArrivalIso)
+
+  const updateArriveBy = useCallback((nextDate, nextTime) => {
+    if (!nextDate || !nextTime) return
+    setPlannerArrivalIso(`${nextDate}T${nextTime}:00`)
+    setPlannerDurationMins((prev) => (prev == null ? 60 : prev))
+    setMapBaysAtPlannedTime(true)
+  }, [])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden">
       <div className="relative min-h-0 w-full flex-1 overflow-hidden">
         <ParkingMap
           bays={bays}
@@ -280,16 +298,21 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 }
           }
         >
-          <div className="flex items-center gap-2.5 w-full pointer-events-auto">
-            <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
-            <div className="flex flex-col gap-1">
+          <div
+            className="flex items-center gap-2 w-full pointer-events-auto"
+            style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
+          >
+            <div className="min-w-0 flex-1 max-w-[580px]">
+              <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
+            </div>
+            <div className="flex flex-row gap-1">
               {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
                 <button
                   key={label}
                   type="button"
                   onClick={() => zoomBy(delta)}
                   aria-label={delta > 0 ? 'Zoom in' : 'Zoom out'}
-                  className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-gray-200/60 bg-white font-sans text-lg font-semibold text-gray-700 shadow-card transition-colors hover:bg-gray-50 dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
+                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-gray-200/60 bg-white font-sans text-base font-semibold text-gray-700 shadow-card transition-colors hover:bg-gray-50 dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
                 >
                   {label}
                 </button>
@@ -297,35 +320,83 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             </div>
           </div>
 
-          <div className="w-full pointer-events-auto min-w-0">
+          <div
+            className="w-full pointer-events-auto"
+            style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
+          >
+            <div
+              className="mt-1 rounded-lg border border-gray-200/80 bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-card backdrop-blur-[1px] dark:border-gray-700/70 dark:bg-surface-dark-secondary/85 dark:text-gray-100"
+              style={{ width: `calc(100% - ${ZOOM_GROUP_WIDTH_PX}px)`, maxWidth: 'calc(580px - 72px)' }}
+            >
+              Currently showing: <span className="text-brand dark:text-brand-100">{activeFilterLabel}</span>
+              {' · '}Date: <span className="text-brand dark:text-brand-100">{arriveDate || '-'}</span>
+              {' · '}Time: <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
+            </div>
+          </div>
+
+        </div>
+
+        <div
+          className="absolute top-5 z-[500] pointer-events-auto"
+          style={{ right: rightInsetPx }}
+        >
+          <div className="relative flex items-center gap-2">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowArrivePicker((v) => {
+                    const next = !v
+                    if (next) setFilterCollapsed(true)
+                    return next
+                  })
+                }
+                aria-expanded={showArrivePicker}
+                aria-label={showArrivePicker ? 'Hide arrive by picker' : 'Show arrive by picker'}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200/80 bg-white/95 text-gray-600 shadow-card transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-200 dark:hover:bg-surface-dark"
+              >
+                <span aria-hidden className="text-[12px] leading-none">🕒</span>
+              </button>
+            </div>
             <FilterChips
               activeFilter={activeFilter}
               onFilterChange={setActiveFilter}
-              showLimitedBays={showLimitedBays}
-              onToggleLimitedBays={setShowLimitedBays}
+              collapsed={filterCollapsed}
+              onToggleCollapsed={(nextCollapsed) => {
+                if (!nextCollapsed) setShowArrivePicker(false)
+                setFilterCollapsed(nextCollapsed)
+              }}
             />
+            {showArrivePicker && (
+              <div className="absolute right-0 top-[calc(100%+8px)] z-[700] w-[min(280px,calc(100vw-24px))] rounded-xl border border-gray-200/90 bg-white/98 p-2 shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/98">
+                <div className="flex flex-col gap-2">
+                  <label className="rounded-lg border border-gray-200/80 bg-white px-2 py-1.5 dark:border-gray-700 dark:bg-surface-dark-secondary">
+                    <span className="mb-1 block text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Date
+                    </span>
+                    <input
+                      type="date"
+                      value={arriveDate}
+                      onChange={(e) => updateArriveBy(e.target.value, arriveTime)}
+                      className="h-8 w-full rounded-md border border-gray-200/80 bg-white px-2 py-0.5 text-xs font-semibold text-gray-800 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100"
+                    />
+                  </label>
+                  <label className="rounded-lg border border-gray-200/80 bg-white px-2 py-1.5 dark:border-gray-700 dark:bg-surface-dark-secondary">
+                    <span className="mb-1 block text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Time
+                    </span>
+                    <input
+                      type="time"
+                      value={arriveTime}
+                      onChange={(e) => updateArriveBy(arriveDate, e.target.value)}
+                      className="h-8 w-full rounded-md border border-gray-200/80 bg-white px-2 py-0.5 text-xs font-semibold text-gray-800 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
-
-          {showMapTimeBanner && (
-            <div className="w-full pointer-events-auto min-w-0 mt-0.5">
-              <MapTimeBanner
-                arrivalIso={plannerArrivalIso}
-                durationMins={plannerDurationMins}
-                onDismiss={resetPlannerToLive}
-              />
-            </div>
-          )}
         </div>
-
-        {!selectedBay && (
-          <div
-            className="absolute top-3.5 z-[500] flex items-center gap-1.5 rounded-full border border-brand bg-brand px-3 py-1.5 text-xs font-medium text-white shadow-card dark:border-brand-300/80 dark:bg-brand-50 dark:text-brand-900"
-            style={{ right: rightInsetPx }}
-          >
-            <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-white/85 dark:bg-brand-700" />
-            <span title="Last data refresh">Updated {tsStr}</span>
-          </div>
-        )}
 
         {destination && (
           <div
@@ -345,7 +416,16 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </div>
         )}
 
-        <div className="absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-3.5 py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col">
+        <div
+          className="group absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-3.5 py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col cursor-help"
+          aria-label="Verified bays are bays with parking rule data available in MeloPark"
+        >
+          <div className="pointer-events-none absolute bottom-full left-0 mb-2 hidden w-64 rounded-lg border border-brand-800/80 bg-brand px-3 py-2.5 text-xs text-white shadow-card-lg group-hover:block dark:border-brand-300/70 dark:bg-surface-dark-secondary dark:text-gray-100">
+            <div className="font-semibold text-white dark:text-white">What are verified bays?</div>
+            <div className="mt-1 leading-relaxed">
+              Verified bays have parking rule data available in MeloPark. Tap a bay to view its parking rules and limits.
+            </div>
+          </div>
           <span className="text-sm font-semibold text-white dark:text-brand-900">
             {verifiedCount} verified bay{verifiedCount !== 1 ? 's' : ''}
           </span>
@@ -364,24 +444,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             Verified bays
           </div>
           {[
-            ['bg-[#a3ec48]', 'Available (green)'],
-            ['bg-[#FFB382]', 'Caution (orange)'],
-            ['bg-[#ed6868]', 'Occupied (red)'],
+            ['bg-[#a3ec48]', 'Available parking spots'],
+            ['bg-[#FFB382]', 'Caution: Tow Away / Loading Zone'],
+            ['bg-[#ed6868]', 'Parking spots occupied'],
           ].map(([bg, label]) => (
             <div key={label} className="mb-1 flex items-center gap-1.5 text-xs text-white/95 dark:text-brand-900">
               <div className={`${bg} h-2.5 w-2.5 shrink-0 rounded-full`} />
               {label}
             </div>
           ))}
-          <div className="mt-2 border-t border-white/20 pt-1.5 dark:border-brand-800/20">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
-              Sensor only
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-white/75 dark:text-brand-900/70">
-              <div className="h-2 w-2 shrink-0 rounded-full bg-gray-400/60" />
-              Occupancy only, check signs
-            </div>
-          </div>
         </div>
 
         {showOnboarding && (
