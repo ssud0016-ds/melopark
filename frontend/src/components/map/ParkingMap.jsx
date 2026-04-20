@@ -329,10 +329,13 @@ export default function ParkingMap({
               <Popup>
                 <div className="min-w-[130px]">
                   <strong>
-                    {c.available} free of {c.total} bays
+                    {c.available}/{c.total} available parking spots
                   </strong>
                   <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-                    Tap cluster to zoom into bays
+                    Counts are available/total for this zoom level.
+                  </div>
+                  <div className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                    Tap cluster to zoom into bays.
                   </div>
                 </div>
               </Popup>
@@ -415,35 +418,40 @@ export default function ParkingMap({
           <Marker position={[destLatLng.lat, destLatLng.lng]} icon={destIcon} interactive={false} />
         )}
 
-        {zoomLevel < CLUSTER_ZOOM_CUTOFF && (
-          <div
-            className="pointer-events-none absolute z-[450] rounded-full border border-brand bg-white/95 px-3 py-1 text-xs font-semibold text-brand shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
-            style={
-              isMobile
-                ? {
-                    left: '14px',
-                    right: '220px',
-                    bottom: destination ? '108px' : '86px',
-                    maxWidth: 'calc(100% - 234px)',
-                    whiteSpace: showLimitedBays ? 'nowrap' : 'normal',
-                    overflow: showLimitedBays ? 'hidden' : 'visible',
-                    textOverflow: showLimitedBays ? 'ellipsis' : 'clip',
-                  }
-                : {
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    bottom: destination ? '118px' : '18px',
-                    width: 'max-content',
-                    maxWidth: 'calc(100% - 440px)',
-                    whiteSpace: showLimitedBays ? 'nowrap' : 'normal',
-                  }
-            }
-          >
-            {showLimitedBays
-              ? 'Zoom in to see individual parking bays and tap a bay to see its rule info'
-              : 'Zoom in to see individual parking bays'}
-          </div>
-        )}
+        <div
+          className="pointer-events-none absolute z-[450] rounded-xl border border-brand bg-white/95 px-3 py-1.5 text-xs font-semibold text-brand shadow-card text-center dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
+          style={
+            isMobile
+              ? {
+                  left: '14px',
+                  right: '220px',
+                  bottom: destination ? '108px' : '86px',
+                  maxWidth: 'calc(100% - 234px)',
+                  whiteSpace: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'nowrap' : 'normal') : 'normal',
+                  overflow: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'hidden' : 'visible') : 'visible',
+                  textOverflow: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'ellipsis' : 'clip') : 'clip',
+                }
+              : {
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  bottom: destination ? '118px' : '18px',
+                  width: 'max-content',
+                  maxWidth: 'calc(100% - 440px)',
+                  whiteSpace: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'nowrap' : 'normal') : 'normal',
+                }
+          }
+        >
+          {zoomLevel < CLUSTER_ZOOM_CUTOFF ? (
+            <>
+              <div>Zoom in to see individual parking bays.</div>
+              <div className="mt-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300">
+                Cluster numbers show available/total bays and change as you zoom.
+              </div>
+            </>
+          ) : (
+            <div>Tap a parking spot to view its rules.</div>
+          )}
+        </div>
       </MapContainer>
     </div>
   )
