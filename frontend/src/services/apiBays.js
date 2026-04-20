@@ -28,6 +28,9 @@
  *   spots           – Always 1; each CoM sensor monitors a single kerbside bay
  *   free            – 0 or 1 from sensor (real)
  *   bayType         – Raw CoM type string, e.g. "Loading Zone", "Timed", "Other"
+ *   hasRules        – True for live bays: rule truth comes from `/api/bays/{id}/evaluate`
+ *                     (DB-first with API fallback), not the sparse `/api/parking`
+ *                     `has_restriction_data` enrichment flag.
  *   sensorLastUpdated – Timestamp from CoM sensor feed (real)
  *   source          – "live" when from API, "demo" when from static fallback
  */
@@ -55,7 +58,9 @@ export function mapApiRecordToBay(record) {
     spots: 1,                           // CoM model: 1 sensor = 1 kerbside bay
     free: isFree ? 1 : 0,
     bayType,                            // raw CoM type string (real external API)
-    hasRules: !!record.has_restriction_data,
+    // All live bays are rule-evaluable via /api/bays/{id}/evaluate.
+    // Keep this true so UI does not treat most live bays as "sensor-only".
+    hasRules: true,
     sensorLastUpdated: record.last_updated ?? null,
     source: 'live',
   }
