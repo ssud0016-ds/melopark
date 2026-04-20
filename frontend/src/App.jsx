@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import TopBar from './components/layout/TopBar'
-import SiteFooter from './components/layout/SiteFooter'
 import AboutPage from './components/home/AboutPage'
 import AttributionPage from './components/legal/AttributionPage'
 import TermsPage from './components/legal/TermsPage'
@@ -39,8 +38,6 @@ export default function App() {
 
         {page === 'terms' && <TermsPage onNavigate={setPage} />}
       </div>
-
-      <SiteFooter onNavigate={setPage} />
     </div>
   )
 }

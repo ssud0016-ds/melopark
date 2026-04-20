@@ -10,6 +10,40 @@ import {
 } from '../utils/mapGeo'
 import { SNAP_PEEK } from '../components/layout/BottomSheet'
 
+function extractParkingMinutes(bay) {
+  const raw = String(bay?.bayType || '').toUpperCase()
+  if (!raw || raw === 'OTHER') return null
+
+  // Match minute formats: "30M", "30 MIN", "30 MINS", "45 MINUTE(S)"
+  const minMatch = raw.match(/(\d+)\s*(?:M|MIN|MINS|MINUTE|MINUTES)\b/)
+  if (minMatch) {
+    const mins = Number(minMatch[1])
+    return Number.isFinite(mins) ? mins : null
+  }
+
+  // Match hour formats: "1P", "2 H", "3 HR", "4 HOUR(S)"
+  const hourMatch = raw.match(/(\d+)\s*(?:P|H|HR|HRS|HOUR|HOURS)\b/)
+  if (hourMatch) {
+    const hrs = Number(hourMatch[1])
+    return Number.isFinite(hrs) ? hrs * 60 : null
+  }
+
+  // Match fractional P formats: "1/2P", "1 / 2 P", "1/4P"
+  const fracPMatch = raw.match(/(\d+)\s*\/\s*(\d+)\s*P\b/)
+  if (fracPMatch) {
+    const num = Number(fracPMatch[1])
+    const den = Number(fracPMatch[2])
+    if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
+      return Math.round((num / den) * 60)
+    }
+  }
+
+  // Match common textual halves if they appear in some feeds.
+  if (raw.includes('HALF HOUR')) return 30
+
+  return null
+}
+
 export function useMapState() {
   const [selectedBayId, _setSelectedBayId] = useState(null)
   const [activeFilter, setActiveFilter] = useState('all')
@@ -57,6 +91,13 @@ export function useMapState() {
         if (activeFilter === 'all') return true
         if (activeFilter === 'available') return b.type === 'available'
         if (activeFilter === 'trap') return b.type === 'trap'
+        const mins = extractParkingMinutes(b)
+        if (mins == null) return false
+        if (activeFilter === 'lt1h') return mins < 60
+        if (activeFilter === '1h') return mins === 60
+        if (activeFilter === '2h') return mins === 120
+        if (activeFilter === '3h') return mins === 180
+        if (activeFilter === '4h') return mins === 240
         return true
       })
     },
