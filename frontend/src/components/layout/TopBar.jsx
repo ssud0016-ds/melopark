@@ -37,7 +37,7 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
 
   return (
     <nav
-      className="fixed top-0 inset-x-0 z-50 h-16 overflow-visible bg-white dark:bg-surface-dark border-b
+      className="fixed top-0 inset-x-0 z-[1000] h-16 overflow-visible bg-white dark:bg-surface-dark border-b
                  border-gray-200/60 dark:border-gray-700/60 shadow-sm px-3 sm:px-4 md:px-6
                  flex items-center gap-2 sm:gap-3"
     >
@@ -82,7 +82,13 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
 
       {/* Right – live badge + theme toggle */}
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-        <div className="hidden sm:flex items-center gap-2 rounded-full border border-brand bg-brand px-3.5 py-1.5 text-xs font-medium text-white dark:border-brand-300/80 dark:bg-brand-50 dark:text-brand-900">
+        <div className="group relative hidden sm:flex items-center gap-2 rounded-full border border-brand bg-brand px-3.5 py-1.5 text-xs font-medium text-white dark:border-brand-300/80 dark:bg-brand-50 dark:text-brand-900">
+          <div className="pointer-events-none absolute right-0 top-[calc(100%+6px)] hidden w-60 rounded-lg border border-brand-800/80 bg-brand px-3 py-2 text-xs text-white shadow-card-lg group-hover:block dark:border-brand-300/70 dark:bg-surface-dark-secondary dark:text-gray-100">
+            <div className="font-semibold text-white dark:text-white">Live update info</div>
+            <div className="mt-1 leading-relaxed">
+              This map refreshes live parking bay data approximately every 8 seconds.
+            </div>
+          </div>
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/85 animate-pulse-dot dark:bg-brand-700" />
           Live CBD&nbsp;{time}
         </div>
