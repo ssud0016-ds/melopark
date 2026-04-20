@@ -570,6 +570,20 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
         all_rest = pd.read_parquet(rest_long_path)
         log.info("Loaded restrictions_long.parquet → %d rows", len(all_rest))
 
+    seg_rest_path = SILVER_DIR / "segment_restrictions_long.parquet"
+    if seg_rest_path.exists():
+        seg_rest = pd.read_parquet(seg_rest_path)
+        log.info("Loaded segment_restrictions_long.parquet: %d rows", len(seg_rest))
+        all_rest = pd.concat([all_rest, seg_rest], ignore_index=True)
+        all_rest = all_rest.drop_duplicates(subset=["bay_id", "typedesc"], keep="first")
+        log.info(
+            "Combined restrictions for DB: %d rows, %d bays",
+            len(all_rest),
+            all_rest["bay_id"].nunique(),
+        )
+    else:
+        log.warning("segment_restrictions_long.parquet not found — direct restrictions only")
+
     # Normalise dtypes
     all_rest["bay_id"] = all_rest["bay_id"].astype(str)
     for col in ("fromday", "today"):
@@ -748,6 +762,10 @@ def build_gold(
 
     df = pd.read_parquet(merged_path)
     log.info("Loaded merged.parquet  →  %d rows, %d columns", len(df), len(df.columns))
+    bays_with_data = df[df["typedesc"].notna()]["bay_id"].nunique()
+    log.info("Bays with restriction data in merged: %d", bays_with_data)
+    if bays_with_data < 100:
+        log.warning("Low coverage — re-run clean_to_silver.py with updated bronze data")
 
     # ── Drop rows with no typedesc (sensors with no restriction data) ────
     no_typedesc = df["typedesc"].isnull()
@@ -773,7 +791,8 @@ def build_gold(
         "  Rule categories: %s",
         df["rule_category"].value_counts().to_dict(),
     )
-    log.info("  Strict restrictions: %d", df["is_strict"].sum())
+    strict_count = int(df["is_strict"].sum()) if len(df) > 0 else 0
+    log.info("  Strict restrictions: %d", strict_count)
 
     # ── Enrichment 3: is_active_now() ───────────────────────────────────
     log.info("Applying is_active_now() at current time…")
@@ -836,7 +855,7 @@ def build_gold(
     log.info("  Unique bays:          %d", gold["bay_id"].nunique())
     log.info("  Restrictions active:  %d", gold["is_active_now"].sum())
 
-    if verbose:
+    if verbose and "typedesc" in gold.columns:
         log.info("\nActive restrictions by typedesc:\n%s",
                  gold[gold["is_active_now"]]["typedesc"].value_counts().head(15).to_string())
 
