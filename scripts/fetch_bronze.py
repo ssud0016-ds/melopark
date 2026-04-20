@@ -33,6 +33,7 @@ Output:
 
 import argparse
 import json
+import io
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,6 +52,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BASE_DIR = ROOT / "data" / "bronze"
 
 API_BASE = "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets"
+EXPORT_BASE = "https://data.melbourne.vic.gov.au/api/v2/catalog/datasets"
 
 DATASETS = {
     "sensors": {
@@ -67,6 +69,17 @@ DATASETS = {
         "dataset_id": "on-street-parking-bays",
         "description": "Spatial polygon boundaries for each physical bay",
         "output_file": "parking_bays.parquet",
+        "use_csv_export": True,
+    },
+    "zones_to_segments": {
+        "dataset_id": "parking-zones-linked-to-street-segments",
+        "description": "Parking zone to street segment mapping",
+        "output_file": "zones_to_segments.parquet",
+    },
+    "sign_plates": {
+        "dataset_id": "sign-plates-located-in-each-parking-zone",
+        "description": "Sign plate restrictions per parking zone",
+        "output_file": "sign_plates.parquet",
     },
     "addresses": {
         "dataset_id": "street-addresses",
@@ -116,7 +129,17 @@ def fetch_dataset(name: str, config: dict) -> list[dict]:
     return all_records
 
 
-def main(datasets_filter: list[str] | None = None) -> None:
+def fetch_csv_export(dataset_id: str) -> list[dict]:
+    """Download full dataset via CSV export endpoint (bypasses 10k offset cap)."""
+    url = f"{EXPORT_BASE}/{dataset_id}/exports/csv"
+    resp = requests.get(url, params={"delimiter": ","}, timeout=120)
+    resp.raise_for_status()
+    df = pd.read_csv(io.StringIO(resp.text))
+    log.info("  CSV export: %d rows, %d columns", len(df), len(df.columns))
+    return df.to_dict(orient="records")
+
+
+def main(selected_datasets: list[str] | None = None):
     BASE_DIR.mkdir(parents=True, exist_ok=True)
     fetched_at = datetime.now(timezone.utc)
     log.info("Fetching bronze data at %s", fetched_at.isoformat())
@@ -132,22 +155,24 @@ def main(datasets_filter: list[str] | None = None) -> None:
         "notes": [
             "Bronze data is raw - no transformations applied.",
             "Sensors use kerbsideid, restrictions use bayid + deviceid.",
-            "deviceid (restrictions) = kerbsideid (sensors) — the correct join key.",
+            "deviceid (restrictions) = kerbsideid (sensors) — direct join key.",
+            "Coverage is improved through segment chain: bays -> zones_to_segments -> sign_plates.",
             "Restrictions dataset has NO street name column.",
+            "Large datasets may require CSV export to bypass API offset limits.",
         ],
     }
 
-    items = DATASETS.items()
-    if datasets_filter is not None:
-        bad = [k for k in datasets_filter if k not in DATASETS]
-        if bad:
-            raise SystemExit(f"Unknown dataset(s): {bad}. Choose from: {list(DATASETS)}")
-        items = [(k, DATASETS[k]) for k in datasets_filter]
+    dataset_items = DATASETS.items()
+    if selected_datasets:
+        dataset_items = [(name, DATASETS[name]) for name in selected_datasets]
 
-    for name, config in items:
+    for name, config in dataset_items:
         try:
             log.info("Fetching %s (%s) …", name, config["description"])
-            records = fetch_dataset(name, config)
+            if config.get("use_csv_export"):
+                records = fetch_csv_export(config["dataset_id"])
+            else:
+                records = fetch_dataset(name, config)
 
             df = _sanitize_bronze_df(pd.DataFrame(records))
             out_path = BASE_DIR / config["output_file"]
@@ -174,14 +199,14 @@ def main(datasets_filter: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Fetch CoM bronze datasets to data/bronze/")
+    parser = argparse.ArgumentParser(
+        description="Fetch MeloPark bronze datasets from CoM Open Data API."
+    )
     parser.add_argument(
-        "--dataset",
-        action="append",
-        dest="datasets",
-        metavar="NAME",
-        choices=list(DATASETS.keys()),
-        help="Fetch only this dataset (can be repeated). Default: all.",
+        "--datasets",
+        nargs="+",
+        choices=["sensors", "restrictions", "bays", "zones_to_segments", "sign_plates"],
+        help="Optional subset of datasets to fetch.",
     )
     args = parser.parse_args()
-    main(datasets_filter=args.datasets)
+    main(selected_datasets=args.datasets)

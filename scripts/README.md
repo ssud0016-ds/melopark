@@ -40,14 +40,18 @@ python scripts/build_gold.py --export-csv
 ## Dataset Join Keys
 
 ```
-sensors.bay_id <->  restrictions.bay_id    works
-sensors.marker_id  <->  parking_bays.marker_id   works
-restrictions.bay_id  <->  parking_bays   NO DIRECT JOIN
+OLD (direct — ~72 bays, ~2.2%):
+  sensors.kerbsideid = restrictions.deviceid
+
+NEW (segment chain — ~3,162 bays, ~95.6%):
+  sensors.kerbsideid -> parking_bays.kerbsideid -> roadsegmentid
+  roadsegmentid      -> zones_to_segments.segment_id -> parkingzone
+  parkingzone        -> sign_plates.parkingzone -> restriction display codes
+  restriction display codes -> bay_restrictions typedesc rows
 ```
 
-> **Critical:** The restrictions dataset has **no street name column**.
-> `WHERE description LIKE '%Swanston%'` returns zero results.
-> The correct flow is: `GPS lat/lon -> nearest sensor -> bay_id -> restrictions`
+> **Critical:** `parking_bays` must use CSV export fetch (`/exports/csv`) because API offset pagination caps at 10,000 rows.
+> The dataset has ~23,864 rows, so paginated fetch truncates coverage.
 
 ---
 
@@ -83,9 +87,13 @@ data/
 │   ├── sensors.parquet
 │   ├── restrictions.parquet
 │   ├── parking_bays.parquet
+│   ├── zones_to_segments.parquet
+│   ├── sign_plates.parquet
 │   └── fetch_metadata.json
 ├── silver/
 │   ├── sensors_clean.parquet
+│   ├── restrictions_long.parquet
+│   ├── segment_restrictions_long.parquet
 │   ├── merged.parquet
 │   └── clean_metadata.json
 └── gold/
