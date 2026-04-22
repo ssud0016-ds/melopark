@@ -2,6 +2,7 @@
 
 import httpx
 from fastapi import APIRouter, HTTPException
+from starlette.requests import Request
 
 from app.services.parking_service import (
     SensorCacheEmptyError,
