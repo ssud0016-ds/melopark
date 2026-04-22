@@ -1,7 +1,7 @@
 """Parking data endpoints."""
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.services.parking_service import (
     SensorCacheEmptyError,

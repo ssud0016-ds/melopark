@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -27,6 +27,7 @@ _DEFAULT_DURATION = 60  # minutes
 )
 @limiter.limit("30/minute")
 def evaluate_bay(
+    request: Request,
     bay_id: str,
     arrival_iso: Optional[str] = Query(
         default=None,
@@ -61,6 +62,7 @@ def evaluate_bay(
 )
 @limiter.limit("15/minute")
 def evaluate_bulk(
+    request: Request,
     bbox: str = Query(
         ...,
         description="Bounding box as south,west,north,east (e.g. -37.82,144.95,-37.80,144.97).",
