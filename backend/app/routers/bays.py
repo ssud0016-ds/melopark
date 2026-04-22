@@ -10,6 +10,11 @@ from app.core.db import get_db
 from app.schemas.bay import BayEvaluation, BayVerdictBrief
 from app.services.restriction_evaluator import evaluate_bay_at, evaluate_bays_in_bbox
 
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(prefix="/api/bays", tags=["bays"])
 
 _DEFAULT_DURATION = 60  # minutes
@@ -20,6 +25,7 @@ _DEFAULT_DURATION = 60  # minutes
     response_model=BayEvaluation,
     summary="Evaluate parking legality for a single bay",
 )
+@limiter.limit("30/minute")
 def evaluate_bay(
     bay_id: str,
     arrival_iso: Optional[str] = Query(
@@ -53,6 +59,7 @@ def evaluate_bay(
     response_model=list[BayVerdictBrief],
     summary="Bulk-evaluate all bays within a bounding box",
 )
+@limiter.limit("15/minute")
 def evaluate_bulk(
     bbox: str = Query(
         ...,
