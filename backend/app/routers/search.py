@@ -8,10 +8,15 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.db import get_db
 
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(prefix="/api/search", tags=["search"])
 
 
 @router.get("", summary="Search addresses, streets, and landmarks")
+@limiter.limit("30/minute")
 def search_places(
     q: str = Query(..., min_length=2, max_length=100, description="Free-text query"),
     limit: int = Query(8, ge=1, le=20, description="Maximum number of rows"),

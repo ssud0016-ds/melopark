@@ -9,11 +9,17 @@ from app.services.parking_service import (
     fetch_raw_parking_bays,
 )
 
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(prefix="/api/parking", tags=["parking"])
 
 
 @router.get("", summary="Cleaned parking bays for frontend use")
-async def get_parking_bays():
+@limiter.limit("30/minute")
+async def get_parking_bays(request: Request):
     """Return simplified, frontend-ready parking bay records.
 
     Each record contains bay_id, lat, lng, status (free/occupied/unknown),
@@ -39,7 +45,8 @@ async def get_parking_bays():
 
 
 @router.get("/raw")
-async def get_raw_parking_bays():
+@limiter.limit("30/minute")
+async def get_raw_parking_bays(request: Request):
     """Return raw parking bay data (from cache) as-is from the upstream source."""
     try:
         data = await fetch_raw_parking_bays()
