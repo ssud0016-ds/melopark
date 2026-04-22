@@ -1,6 +1,6 @@
 """Search endpoints backed by the search_index table."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/search", tags=["search"])
 @router.get("", summary="Search addresses, streets, and landmarks")
 @limiter.limit("30/minute")
 def search_places(
+    request: Request,
     q: str = Query(..., min_length=2, max_length=100, description="Free-text query"),
     limit: int = Query(8, ge=1, le=20, description="Maximum number of rows"),
     db: Session = Depends(get_db),

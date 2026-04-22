@@ -14,8 +14,7 @@ class Settings(BaseSettings):
 
     ENVIRONMENT: str = "development"
     DATABASE_URL: str = "postgresql://user:pass@localhost:5432/melopark"
-    CORS_ORIGINS = https://melopark.vercel.app
-
+    
     # Comma-separated list, e.g. "http://localhost:5173,https://your.vercel.app"
     CORS_ORIGINS: str = "*"
 
