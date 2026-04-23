@@ -45,7 +45,7 @@ GOLD LAYER SCHEMA (output columns)
     disabilityext_mins  int     Extended time for disability permit (minutes)
     plain_english       str     Human-readable translation of the sign
     is_active_now       bool    True if restriction is active right now
-    is_strict           bool    True for clearway/tow/loading/no-stopping  [Epic 2]
+    is_strict           bool    True for clearway/tow/loading/no-stopping/disabled  [Epic 2]
     rule_category       str     timed|clearway|loading|no_standing|disabled|free|other  [Epic 2]
 
 POSTGRES TABLES (--write-db)
@@ -387,8 +387,10 @@ def classify_rule(typedesc: str) -> tuple[bool, str]:
     free          FREE
     other         BUS, TAXI, PERMIT, broken data, anything unrecognised
 
-    ``is_strict`` is True for clearway, no_standing, loading — categories
-    where any passenger vehicle would be illegally parked.
+    ``is_strict`` is True for clearway, no_standing, loading, and disabled —
+    categories where any non-permitted passenger vehicle would be illegally
+    parked. A mid-stay activation of a disabled-bay window must therefore
+    raise a strict warning so the driver can leave before the change.
 
     The order matters: "LZ 30MINS" must hit *loading* before the generic
     *timed* regex can match on "MINS".
@@ -418,8 +420,11 @@ def classify_rule(typedesc: str) -> tuple[bool, str]:
     # ── 4. Disability permit ─────────────────────────────────────────
     # "2P DIS M-SAT", "P DIS AOT", "2PDis AOT", "DISABILITY",
     # "DISABLE", "Disabled Only"
+    # is_strict=True (Bug 7 fix): a non-permitted driver occupying a
+    # disabled-only bay is illegally parked, and a mid-stay activation
+    # must trigger a strict warning in _find_strict_starting_during_stay.
     if re.search(r"DIS(?:AB|\b)|DISABLE", td):
-        return False, "disabled"
+        return True, "disabled"
 
     # ── 5. Timed parking (MUST come after strict categories) ─────────
     # Standard hour:  "2P", "4P MTR", "1P SUN", "1.5P"
