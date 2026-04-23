@@ -15,12 +15,14 @@ from __future__ import annotations
 import logging
 from datetime import datetime, time, timedelta
 from typing import Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from app.models.bay import Bay, BayRestriction
 
 logger = logging.getLogger(__name__)
+_MELBOURNE_TZ = ZoneInfo("Australia/Melbourne")
 
 # Priority order: lower number = stricter.  When multiple restrictions are
 # active simultaneously the most restrictive one governs the verdict.
@@ -45,6 +47,7 @@ _NO_DATA_RESULT_TEMPLATE = {
     "active_restriction": None,
     "warning": None,
     "data_source": "unknown",
+    "data_coverage": "none",
 }
 
 
@@ -64,6 +67,8 @@ def _evaluate_from_bay_type(bay_id: str, bay_type: str) -> dict:
         "bay_id": bay_id,
         "warning": None,
         "data_source": "api_fallback",
+        # Tier-2 fallback answers with rules but never has live sensor status.
+        "data_coverage": "rules_only",
     }
 
     if bay_type == "Loading Zone":
@@ -114,22 +119,9 @@ def _evaluate_from_bay_type(bay_id: str, bay_type: str) -> dict:
             },
         }
 
-    if bay_type == "Timed":
-        return {
-            **base,
-            "verdict": "unknown",
-            "reason": (
-                "Timed parking bay — we know a time limit applies but we don't have the "
-                "exact hours or duration in our database yet. Check posted signage."
-            ),
-            "active_restriction": {
-                "typedesc": "Timed Parking",
-                "rule_category": "timed",
-                "plain_english": "Timed parking applies. Check posted signage for exact hours and duration.",
-                "max_stay_mins": None,
-                "expires_at": None,
-            },
-        }
+    # "Timed" guessing retired 2026-04 — metered bays not in the DB fall
+    # through to the "unknown — check signage" template below rather than
+    # returning a string-match guess.  See restriction_lookup_service._map_type_desc.
 
     # "Other" or anything unrecognised
     return {**base, **_NO_DATA_RESULT_TEMPLATE, "bay_id": bay_id}
@@ -160,6 +152,40 @@ def _time_to_minutes(t: time) -> int:
     return t.hour * 60 + t.minute
 
 
+def _normalise_arrival_to_melbourne_naive(arrival: datetime) -> datetime:
+    """Convert tz-aware arrivals to Melbourne local naive datetime.
+
+    Downstream restriction logic compares naive datetime fields against DB times,
+    so we normalise only at boundaries and leave internal evaluation unchanged.
+    """
+    if arrival.tzinfo is None:
+        return arrival
+    return arrival.astimezone(_MELBOURNE_TZ).replace(tzinfo=None)
+
+
+def _to_melbourne_iso(dt: datetime) -> str:
+    """Serialize naive Melbourne-local datetime with explicit Melbourne offset."""
+    return dt.replace(tzinfo=_MELBOURNE_TZ).isoformat()
+
+
+def _effective_end_mins(start: time, end: time, fromday: int, today: int) -> int:
+    """Return the active-window end as minutes-from-midnight.
+
+    Treat an ``end`` of ``00:00`` as end-of-day (1440) when the row is a
+    wrap-day rule (``fromday != today``) or when ``end < start`` — both of
+    these signal "midnight = end of window", which CoM represents literally
+    as ``00:00``.  Plain same-day rules with ``end = 00:00`` are meaningless
+    and still return 0 so they correctly match nothing.
+    """
+    start_mins = _time_to_minutes(start)
+    end_mins = _time_to_minutes(end)
+    if end_mins == 0 and (fromday != today or start_mins > 0):
+        return 1440
+    if end_mins < start_mins:
+        return 1440
+    return end_mins
+
+
 # ── Single-restriction helpers ──────────────────────────────────────────────
 
 def is_restriction_active_at(r: BayRestriction, dt: datetime) -> bool:
@@ -169,7 +195,7 @@ def is_restriction_active_at(r: BayRestriction, dt: datetime) -> bool:
         return False
     now_mins = dt.hour * 60 + dt.minute
     start_mins = _time_to_minutes(r.starttime)
-    end_mins = _time_to_minutes(r.endtime)
+    end_mins = _effective_end_mins(r.starttime, r.endtime, r.fromday, r.today)
     return start_mins <= now_mins < end_mins
 
 
@@ -216,7 +242,7 @@ def _find_strict_starting_during_stay(
     return {
         "type": r.rule_category,
         "typedesc": r.typedesc,
-        "starts_at": starts_at.isoformat(),
+        "starts_at": _to_melbourne_iso(starts_at),
         "minutes_into_stay": int((starts_at - arrival).total_seconds() / 60),
         "description": r.plain_english,
     }
@@ -306,7 +332,7 @@ def _verdict_for_restriction(
                 None,
                 None,
             )
-        expires_at = (arrival + timedelta(minutes=max_stay)).isoformat()
+        expires_at = _to_melbourne_iso(arrival + timedelta(minutes=max_stay))
         if duration_mins <= max_stay:
             return (
                 "yes",
@@ -355,6 +381,8 @@ def evaluate_bay_at(
     """
     from app.services.restriction_lookup_service import get_cached_bay_type
 
+    arrival = _normalise_arrival_to_melbourne_naive(arrival)
+
     # ── Tier 1: DB lookup ────────────────────────────────────────────────
     bay = db.query(Bay).filter(Bay.bay_id == bay_id).first()
 
@@ -376,6 +404,7 @@ def evaluate_bay_at(
             "active_restriction": None,
             "warning": None,
             "data_source": "unknown",
+            "data_coverage": "none",
         }
 
     logger.debug(
@@ -398,8 +427,14 @@ def _evaluate_from_db(
     duration_mins: int,
 ) -> dict:
     """Run the full time-window evaluation against DB restriction rows."""
+    from app.services.parking_service import has_live_sensor
+
     active = [r for r in restrictions if is_restriction_active_at(r, arrival)]
     governing = _pick_governing_restriction(active)
+
+    # "full" when the bay is in the live sensor cache, else "rules_only" — the
+    # DB verdict is valid either way; the tag is for UI rendering.
+    data_coverage = "full" if has_live_sensor(bay_id) else "rules_only"
 
     if governing is None:
         # Outside all restriction windows — legal at this moment; wording
@@ -412,6 +447,7 @@ def _evaluate_from_db(
             "active_restriction": None,
             "warning": warning,
             "data_source": "db",
+            "data_coverage": data_coverage,
         }
 
     verdict, reason, max_stay, expires_at = _verdict_for_restriction(
@@ -437,6 +473,7 @@ def _evaluate_from_db(
         "active_restriction": active_restriction,
         "warning": warning,
         "data_source": "db",
+        "data_coverage": data_coverage,
     }
 
 
@@ -455,7 +492,20 @@ def evaluate_bays_bulk(
     """
     from app.services.restriction_lookup_service import get_cached_bay_type
 
-    bays = db.query(Bay).filter(Bay.bay_id.in_(bay_ids)).all()
+    arrival = _normalise_arrival_to_melbourne_naive(arrival)
+
+    # Defensive: drop NULL-geometry bays from bulk/map responses — they can't
+    # render as markers.  NULL-geom bays are still addressable via
+    # evaluate_bay_at for shareable/bookmarked URLs.
+    bays = (
+        db.query(Bay)
+        .filter(
+            Bay.bay_id.in_(bay_ids),
+            Bay.lat.isnot(None),
+            Bay.lon.isnot(None),
+        )
+        .all()
+    )
     bay_map = {b.bay_id: b for b in bays}
 
     restrictions = (
@@ -522,6 +572,11 @@ def evaluate_bays_in_bbox(
             Bay.lat <= north,
             Bay.lon >= west,
             Bay.lon <= east,
+            # Defensive: range filter above already excludes NULLs (a NULL
+            # comparison evaluates to NULL, which is falsy in WHERE), but
+            # explicit is clearer for future readers.
+            Bay.lat.isnot(None),
+            Bay.lon.isnot(None),
         )
         .all()
     )

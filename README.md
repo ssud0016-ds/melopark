@@ -122,6 +122,11 @@ Interactive docs:
 - Selected bay panel: `fetchBayEvaluation()` -> `GET /api/bays/{bay_id}/evaluate`
 - Planned-time map recolor: `fetchEvaluateBulk()` -> `GET /api/bays/evaluate-bulk`
 
+Planner time contract:
+- Planner date/time input is Melbourne-local by product contract.
+- Naive `arrival_iso` (no offset) is interpreted by backend as Melbourne time.
+- Offset-aware `arrival_iso` (e.g. `+10:00`, `+11:00`) is respected as exact instant.
+
 ## Data pipeline architecture
 
 Pipeline scripts are in `scripts/` and follow Bronze -> Silver -> Gold stages:

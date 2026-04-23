@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/bays", tags=["bays"])
 
 _DEFAULT_DURATION = 60  # minutes
+_MELBOURNE_TZ = ZoneInfo("Australia/Melbourne")
 
 
 @router.get(
@@ -48,9 +50,11 @@ def evaluate_bay(
 
     If ``arrival_iso`` is omitted the evaluation uses the current time.
     """
-    arrival = datetime.now()
+    arrival = datetime.now(_MELBOURNE_TZ)
     if arrival_iso is not None:
         arrival = datetime.fromisoformat(arrival_iso)
+        if arrival.tzinfo is None:
+            arrival = arrival.replace(tzinfo=_MELBOURNE_TZ)
 
     return evaluate_bay_at(bay_id, arrival, duration_mins, db)
 
@@ -93,8 +97,10 @@ def evaluate_bulk(
         )
     south, west, north, east = parts
 
-    arrival = datetime.now()
+    arrival = datetime.now(_MELBOURNE_TZ)
     if arrival_iso is not None:
         arrival = datetime.fromisoformat(arrival_iso)
+        if arrival.tzinfo is None:
+            arrival = arrival.replace(tzinfo=_MELBOURNE_TZ)
 
     return evaluate_bays_in_bbox(south, west, north, east, arrival, duration_mins, db)
