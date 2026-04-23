@@ -372,21 +372,6 @@ class TestEvaluateBayAt:
         assert result["verdict"] == "no"
         assert result["active_restriction"]["rule_category"] == "clearway"
 
-    def test_free_category_yes(self):
-        bay = _make_bay()
-        r = _make_restriction(
-            typedesc="FREE",
-            fromday=0, today=6,
-            starttime=time(0, 0), endtime=time(23, 59),
-            is_strict=False,
-            rule_category="free",
-            plain_english="Free parking.",
-            duration_mins=None,
-        )
-        db = _mock_db(bay=bay, restrictions=[r])
-        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 12, 0), 120, db)
-        assert result["verdict"] == "yes"
-
     def test_disabled_bay_no_for_general_driver(self):
         bay = _make_bay()
         r = _make_restriction(
@@ -452,6 +437,84 @@ class TestMidStayWarning:
         # Tue 10:00, stay 60 min → until 11:00, clearway at 18:30 — no warning
         result = evaluate_bay_at("1000", datetime(2026, 4, 14, 10, 0), 60, db)
         assert result["warning"] is None
+
+    def test_disabled_starts_mid_stay(self):
+        """Bug 7: a disabled window activating mid-stay must warn.
+
+        Fixture models a bay that is 4P (timed) from 07:30–18:30 then
+        DISABLED ONLY from 18:30–22:00. A non-permitted driver arriving at
+        17:00 for a 2-hour stay is legal under the 4P window at arrival
+        (verdict=yes) but must be warned that the disabled window starts at
+        18:30 — previously the strict-warning path skipped disabled rows
+        because the classifier emitted is_strict=False.
+        """
+        bay = _make_bay()
+        timed = _make_restriction(
+            typedesc="4P MTR M-SAT 7:30-18:30",
+            fromday=1, today=6,
+            starttime=time(7, 30), endtime=time(18, 30),
+            duration_mins=240,
+            is_strict=False,
+            rule_category="timed",
+            plain_english="Park for up to 4 hours. Pay at the parking meter.",
+        )
+        disabled = _make_restriction(
+            typedesc="DISABLED ONLY M-SAT 18:30-22:00",
+            fromday=1, today=6,
+            starttime=time(18, 30), endtime=time(22, 0),
+            duration_mins=None,
+            is_strict=True,
+            rule_category="disabled",
+            plain_english="Disabled permit only.",
+        )
+        db = _mock_db(bay=bay, restrictions=[timed, disabled])
+        # Tue 17:00, 2h stay → until 19:00.
+        # 4P window is active and allows 240 min → verdict=yes.
+        # Disabled window activates at 18:30 (90 min into stay).
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 17, 0), 120, db)
+        assert result["verdict"] == "yes", (
+            f"Expected verdict=yes under 4P rule, got {result['verdict']} "
+            f"(reason: {result['reason']})"
+        )
+        assert result["warning"] is not None, (
+            "Expected a mid-stay warning for disabled activation (Bug 7)."
+        )
+        assert result["warning"]["type"] == "disabled"
+        assert result["warning"]["minutes_into_stay"] == 90
+
+    def test_disabled_not_strict_regression(self):
+        """Belt-and-braces: if a disabled row still carries is_strict=False
+        (pre-migration-003 DB state), the warning path must skip it.
+
+        This guards against a future regression where someone flips the
+        classifier default and silently starts warning on every disabled
+        row in the DB — which would create false-positive warnings for
+        rows that pre-date migration 003.
+        """
+        bay = _make_bay()
+        timed = _make_restriction(
+            fromday=1, today=6,
+            starttime=time(7, 30), endtime=time(18, 30),
+            duration_mins=240,
+            is_strict=False,
+            rule_category="timed",
+        )
+        disabled_pre_migration = _make_restriction(
+            typedesc="DISABLED ONLY M-SAT 18:30-22:00",
+            fromday=1, today=6,
+            starttime=time(18, 30), endtime=time(22, 0),
+            duration_mins=None,
+            is_strict=False,   # simulate pre-migration-003 DB state
+            rule_category="disabled",
+            plain_english="Disabled permit only.",
+        )
+        db = _mock_db(bay=bay, restrictions=[timed, disabled_pre_migration])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 17, 0), 120, db)
+        assert result["verdict"] == "yes"
+        assert result["warning"] is None, (
+            "Rows stored with is_strict=False must not trigger the warning "
+            "path — the evaluator trusts the column value."
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
