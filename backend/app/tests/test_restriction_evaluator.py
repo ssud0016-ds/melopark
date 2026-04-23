@@ -9,13 +9,15 @@ Covers:
   - Multiple overlapping restrictions (strictest governs)
 """
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from app.services.restriction_evaluator import (
     _day_in_range,
+    _effective_end_mins,
     _find_strict_starting_during_stay,
     _pick_governing_restriction,
     _to_com_day,
@@ -174,6 +176,106 @@ class TestIsRestrictionActiveAt:
         assert is_restriction_active_at(r, sat) is True
         assert is_restriction_active_at(r, sun) is True
         assert is_restriction_active_at(r, wed) is False
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Timezone normalisation (Bug 1)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestTimezoneNormalisation:
+    @patch("app.services.parking_service.has_live_sensor", return_value=False)
+    def test_utc_aware_arrival_normalises_to_melbourne_window(self, _mock_sensor):
+        bay = _make_bay()
+        r = _make_restriction(fromday=0, today=6)
+        db = _mock_db(bay=bay, restrictions=[r])
+
+        # 02:00 UTC = 12:00 Melbourne (AEST) on this date.
+        arrival = datetime(2026, 4, 14, 2, 0, tzinfo=timezone.utc)
+        result = evaluate_bay_at("1000", arrival, 60, db)
+        assert result["verdict"] == "yes"
+        assert result["active_restriction"] is not None
+        assert result["active_restriction"]["rule_category"] == "timed"
+
+    @patch("app.services.parking_service.has_live_sensor", return_value=False)
+    def test_aedt_aware_arrival_remains_active_at_local_noon(self, _mock_sensor):
+        bay = _make_bay()
+        r = _make_restriction(fromday=0, today=6)
+        db = _mock_db(bay=bay, restrictions=[r])
+
+        melbourne = ZoneInfo("Australia/Melbourne")
+        arrival = datetime(2026, 1, 14, 12, 0, tzinfo=melbourne)  # AEDT (+11:00)
+        result = evaluate_bay_at("1000", arrival, 60, db)
+        assert result["verdict"] == "yes"
+        assert result["active_restriction"] is not None
+        assert result["active_restriction"]["rule_category"] == "timed"
+
+    @patch("app.services.parking_service.has_live_sensor", return_value=False)
+    def test_naive_melbourne_local_arrival_behaviour_unchanged(self, _mock_sensor):
+        bay = _make_bay()
+        r = _make_restriction(fromday=0, today=6)
+        db = _mock_db(bay=bay, restrictions=[r])
+
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 12, 0), 60, db)
+        assert result["verdict"] == "yes"
+        assert result["active_restriction"] is not None
+        assert result["active_restriction"]["rule_category"] == "timed"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TZ-aware output fields (Bug 2)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestExpiresAtIsTzAware:
+    @patch("app.services.parking_service.has_live_sensor", return_value=False)
+    def test_timed_expires_at_includes_melbourne_offset(self, _mock_sensor):
+        bay = _make_bay()
+        r = _make_restriction(
+            fromday=1,
+            today=5,
+            starttime=time(7, 30),
+            endtime=time(18, 30),
+            duration_mins=120,
+            rule_category="timed",
+            is_strict=False,
+        )
+        db = _mock_db(bay=bay, restrictions=[r])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 10, 0), 60, db)
+
+        expires_at = result["active_restriction"]["expires_at"]
+        parsed = datetime.fromisoformat(expires_at)
+        assert parsed.tzinfo is not None
+        assert parsed.utcoffset() in (timedelta(hours=10), timedelta(hours=11))
+
+    @patch("app.services.parking_service.has_live_sensor", return_value=False)
+    def test_warning_starts_at_includes_melbourne_offset(self, _mock_sensor):
+        bay = _make_bay()
+        timed = _make_restriction(
+            typedesc="2P MTR M-F 7:30-16:30",
+            fromday=1,
+            today=5,
+            starttime=time(7, 30),
+            endtime=time(16, 30),
+            duration_mins=120,
+            is_strict=False,
+            rule_category="timed",
+        )
+        clearway = _make_restriction(
+            typedesc="NO STOPPING M-F 4:30PM-6:30PM",
+            fromday=1,
+            today=5,
+            starttime=time(16, 30),
+            endtime=time(18, 30),
+            is_strict=True,
+            rule_category="clearway",
+            plain_english="No stopping — tow-away zone.",
+        )
+        db = _mock_db(bay=bay, restrictions=[timed, clearway])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 15, 0), 120, db)
+
+        starts_at = result["warning"]["starts_at"]
+        parsed = datetime.fromisoformat(starts_at)
+        assert parsed.tzinfo is not None
+        assert parsed.utcoffset() in (timedelta(hours=10), timedelta(hours=11))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -430,3 +532,150 @@ class TestEvaluateBaysBulk:
         out = evaluate_bays_bulk(["1000"], datetime(2026, 4, 14, 12, 0), 60, db)
         assert len(out) == 1
         assert out[0]["verdict"] == "no"
+
+
+# ── End-of-day endtime (audit finding B1) ────────────────────────────────────
+
+class TestEndOfDayEndtime:
+    def test_single_day_end_at_midnight_treated_as_end_of_day(self):
+        """A Mon-only rule 22:00→00:00 should cover 23:00 on that Monday."""
+        r = _make_restriction(
+            fromday=1, today=1,
+            starttime=time(22, 0), endtime=time(0, 0),
+        )
+        # 2026-04-13 is a Monday; 23:00 is inside the window.
+        assert is_restriction_active_at(r, datetime(2026, 4, 13, 23, 0)) is True
+        assert _effective_end_mins(time(22, 0), time(0, 0), 1, 1) == 1440
+
+    def test_wrap_day_sat_to_sun_end_at_midnight_treated_as_end_of_day(self):
+        """SAT→SUN rule 22:00→00:00 should be active at 23:30 on Saturday."""
+        r = _make_restriction(
+            fromday=6, today=0,
+            starttime=time(22, 0), endtime=time(0, 0),
+        )
+        # 2026-04-18 is a Saturday.
+        assert is_restriction_active_at(r, datetime(2026, 4, 18, 23, 30)) is True
+        assert _effective_end_mins(time(22, 0), time(0, 0), 6, 0) == 1440
+
+    def test_normal_end_time_unchanged(self):
+        """Sanity: a normal 07:00→09:00 window yields end_mins = 540, not 1440."""
+        assert _effective_end_mins(time(7, 0), time(9, 0), 1, 5) == 540
+        r = _make_restriction(
+            fromday=1, today=5,
+            starttime=time(7, 0), endtime=time(9, 0),
+        )
+        # 09:30 on a Monday — just past the window.
+        assert is_restriction_active_at(r, datetime(2026, 4, 13, 9, 30)) is False
+        # 08:00 on a Monday — inside.
+        assert is_restriction_active_at(r, datetime(2026, 4, 13, 8, 0)) is True
+
+
+# ── Timed fallback retired 2026-04 (audit finding D2) ────────────────────────
+
+class TestMeteredFallbackRetired:
+    @patch("app.services.restriction_lookup_service.get_cached_bay_type")
+    def test_metered_bay_not_in_db_returns_unknown(self, mock_bay_type):
+        """Metered bays without DB rows used to return a 'Timed' guess from the
+        API-cache fallback.  The fallback is now retired — the contract is
+        'unknown — check signage' so users never act on a string-match guess.
+        """
+        mock_bay_type.return_value = "Timed"
+        bay = _make_bay(has_data=False)
+        db = _mock_db(bay=bay, restrictions=[])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 12, 0), 60, db)
+        assert result["verdict"] == "unknown"
+        assert "signage" in result["reason"].lower()
+        assert result["active_restriction"] is None
+
+
+# ── data_coverage field (audit finding F2) ───────────────────────────────────
+
+class TestDataCoverageField:
+    @patch("app.services.parking_service.has_live_sensor")
+    def test_evaluate_full_coverage_sensor_plus_db_rules(self, mock_sensor):
+        mock_sensor.return_value = True
+        bay = _make_bay(has_data=True)
+        r = _make_restriction()
+        db = _mock_db(bay=bay, restrictions=[r])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 12, 0), 60, db)
+        assert result["data_source"] == "db"
+        assert result["data_coverage"] == "full"
+
+    @patch("app.services.parking_service.has_live_sensor")
+    def test_evaluate_rules_only_no_sensor(self, mock_sensor):
+        mock_sensor.return_value = False
+        bay = _make_bay(has_data=True)
+        r = _make_restriction()
+        db = _mock_db(bay=bay, restrictions=[r])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 12, 0), 60, db)
+        assert result["data_source"] == "db"
+        assert result["data_coverage"] == "rules_only"
+
+    @patch("app.services.restriction_lookup_service.get_cached_bay_type")
+    def test_evaluate_api_fallback_sets_rules_only(self, mock_bay_type):
+        mock_bay_type.return_value = "Loading Zone"
+        bay = _make_bay(has_data=False)
+        db = _mock_db(bay=bay, restrictions=[])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 12, 0), 60, db)
+        assert result["data_source"] == "api_fallback"
+        assert result["data_coverage"] == "rules_only"
+
+    def test_evaluate_unknown_sets_none(self):
+        db = _mock_db(bay=None)
+        result = evaluate_bay_at("9999", datetime(2026, 4, 14, 12, 0), 60, db)
+        assert result["data_source"] == "unknown"
+        assert result["data_coverage"] == "none"
+
+
+# ── NULL-geometry defensive filter (audit finding F2) ────────────────────────
+
+class TestNullGeometryHandling:
+    def test_bulk_excludes_null_geometry_bays(self):
+        """A NULL-geom bay_id passed to evaluate_bays_bulk must be dropped —
+        the SQL filter excludes rows where lat/lon IS NULL so bay_map will
+        not include it, and the for-loop `continue`s past missing bays.
+        """
+        from app.models.bay import Bay, BayRestriction
+
+        db = MagicMock()
+        bay_query = MagicMock()
+        captured_filters: list = []
+
+        def bay_filter(*args, **kwargs):
+            captured_filters.extend(args)
+            nxt = MagicMock()
+            nxt.all.return_value = []  # simulate the SQL filter dropping NULL-geom rows
+            return nxt
+
+        bay_query.filter.side_effect = bay_filter
+        restriction_query = MagicMock()
+        restriction_query.filter.return_value.all.return_value = []
+
+        def query_side_effect(model):
+            if model is Bay:
+                return bay_query
+            if model is BayRestriction:
+                return restriction_query
+            return MagicMock()
+
+        db.query.side_effect = query_side_effect
+
+        out = evaluate_bays_bulk(["null_geom_bay"], datetime(2026, 4, 14, 12, 0), 60, db)
+        assert out == []
+        # Confirm the bay query included an IS NOT NULL filter clause.
+        rendered = " ".join(str(f) for f in captured_filters).lower()
+        assert "is not null" in rendered or "isnot" in rendered or "lat" in rendered
+
+    @patch("app.services.parking_service.has_live_sensor")
+    def test_single_bay_null_geometry_still_answers(self, mock_sensor):
+        """/evaluate must still answer for NULL-geom bays so shareable URLs work."""
+        mock_sensor.return_value = False
+        bay = _make_bay(has_data=True)
+        bay.lat = None
+        bay.lon = None
+        r = _make_restriction()
+        db = _mock_db(bay=bay, restrictions=[r])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 12, 0), 60, db)
+        assert result["verdict"] in ("yes", "no")
+        assert result["data_source"] == "db"
+        assert result["data_coverage"] == "rules_only"

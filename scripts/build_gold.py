@@ -535,6 +535,20 @@ def _get_database_url() -> str:
     return _resolve_database_url(url)
 
 
+def dedup_restrictions_for_db(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop only exact restriction-window duplicates for DB loads.
+
+    Using bay_id + typedesc alone collapses valid weekday/weekend windows that
+    share the same sign code. Keep each unique time-window row.
+    """
+    dedup_keys = ["bay_id", "slot_num", "fromday", "today", "starttime", "endtime"]
+    available_keys = [k for k in dedup_keys if k in df.columns]
+    if len(available_keys) < len(dedup_keys):
+        missing = sorted(set(dedup_keys) - set(available_keys))
+        raise KeyError(f"Missing dedup columns for DB restriction load: {missing}")
+    return df.drop_duplicates(subset=available_keys, keep="first")
+
+
 def write_to_postgres(gold: pd.DataFrame) -> None:
     """Write the ``bays`` and ``bay_restrictions`` tables to Postgres.
 
@@ -575,7 +589,6 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
         seg_rest = pd.read_parquet(seg_rest_path)
         log.info("Loaded segment_restrictions_long.parquet: %d rows", len(seg_rest))
         all_rest = pd.concat([all_rest, seg_rest], ignore_index=True)
-        all_rest = all_rest.drop_duplicates(subset=["bay_id", "typedesc"], keep="first")
         log.info(
             "Combined restrictions for DB: %d rows, %d bays",
             len(all_rest),
@@ -653,6 +666,13 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
         log.info("  Restriction-only bays (no geometry): %d", len(rest_only_ids))
 
     bays_df = all_geo.copy()
+    bays_df["bay_id"] = bays_df["bay_id"].astype(str).str.strip()
+    bays_df = bays_df[
+        bays_df["bay_id"].notna()
+        & (bays_df["bay_id"] != "")
+        & (bays_df["bay_id"].str.lower() != "nan")
+        & (bays_df["bay_id"].str.lower() != "none")
+    ].copy()
     bays_df["has_restriction_data"] = bays_df["bay_id"].isin(restriction_bay_ids)
 
     has_data = bays_df["has_restriction_data"].sum()
@@ -668,6 +688,13 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
         "plain_english", "is_strict", "rule_category",
     ]
     rest_df = all_rest[[c for c in rest_cols if c in all_rest.columns]].copy()
+    rest_df["bay_id"] = rest_df["bay_id"].astype(str).str.strip()
+    rest_df = rest_df[
+        rest_df["bay_id"].notna()
+        & (rest_df["bay_id"] != "")
+        & (rest_df["bay_id"].str.lower() != "nan")
+        & (rest_df["bay_id"].str.lower() != "none")
+    ].copy()
 
     # Drop rows missing required day/time fields
     rest_df = rest_df.dropna(subset=["fromday", "today"])
@@ -679,6 +706,9 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
         if null_count > 0:
             log.warning("  %d rows with unparseable %s (will be dropped)", null_count, col)
     rest_df = rest_df.dropna(subset=["starttime", "endtime"])
+    before_dedup = len(rest_df)
+    rest_df = dedup_restrictions_for_db(rest_df)
+    log.info("bay_restrictions dedup: %d -> %d rows", before_dedup, len(rest_df))
 
     log.info("bay_restrictions prepared: %d rows", len(rest_df))
 
