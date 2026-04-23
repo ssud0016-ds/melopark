@@ -240,7 +240,18 @@ export default function BayDetailSheet({
 
   const backendWarn = evaluation?.warning?.description ?? null
   const warnLine = backendWarn ? firstSentence(String(backendWarn)) : null
-  const hasRuleInfo = Boolean(bay.hasRules)
+  const coverage = evaluation?.data_coverage ?? null
+  const coverageBadge = evalLoading
+    ? (
+      bay.hasRules
+        ? { tone: 'strong', label: 'Full rules available' }
+        : { tone: 'mute', label: 'Sensor only — check the sign' }
+    )
+    : coverage === 'full'
+      ? { tone: 'strong', label: 'Live status + rules' }
+      : coverage === 'rules_only'
+        ? { tone: 'weak', label: 'Rules only — no live status' }
+        : { tone: 'mute', label: 'No data — check signage' }
 
   const dataSource = evaluation?.data_source ?? null
   const showApiNote = dataSource === 'api_fallback'
@@ -301,17 +312,27 @@ export default function BayDetailSheet({
               </div>
             )}
             <div className="mt-2">
-              {hasRuleInfo ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-[#35338c]/30 bg-[#35338c]/5 px-2 py-0.5 text-[10px] font-semibold text-[#35338c] dark:border-[#a3a1e6]/40 dark:bg-[#35338c]/20 dark:text-[#a3a1e6]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#35338c] dark:bg-[#a3a1e6]" />
-                  Full rules available
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-300" />
-                  Sensor only — check the sign
-                </span>
-              )}
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                  coverageBadge.tone === 'strong' &&
+                    'border border-[#35338c]/30 bg-[#35338c]/5 text-[#35338c] dark:border-[#a3a1e6]/40 dark:bg-[#35338c]/20 dark:text-[#a3a1e6]',
+                  coverageBadge.tone === 'weak' &&
+                    'border border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700/40 dark:bg-blue-900/20 dark:text-blue-300',
+                  coverageBadge.tone === 'mute' &&
+                    'border border-gray-300 bg-gray-50 text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300',
+                )}
+              >
+                <span
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    coverageBadge.tone === 'strong' && 'bg-[#35338c] dark:bg-[#a3a1e6]',
+                    coverageBadge.tone === 'weak' && 'bg-blue-500 dark:bg-blue-300',
+                    coverageBadge.tone === 'mute' && 'bg-gray-400 dark:bg-gray-300',
+                  )}
+                />
+                {coverageBadge.label}
+              </span>
             </div>
           </div>
           {feedUpdatedStr && (
@@ -423,6 +444,9 @@ export default function BayDetailSheet({
 
         {checkTimeExpanded && (
           <div className="mt-3 flex flex-col gap-3">
+            <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+              Times are Melbourne time (AEST/AEDT).
+            </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
@@ -567,7 +591,7 @@ export default function BayDetailSheet({
           </div>
         </div>
 
-        {!evalLoading && !bay.hasRules && (
+        {!evalLoading && coverage === 'none' && (
           <div className="px-4 py-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
             <div className="flex items-start gap-2.5">
               <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="shrink-0 text-gray-400 mt-0.5">
@@ -579,7 +603,7 @@ export default function BayDetailSheet({
                   No rule text for this bay
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-1">
-                  Sensor data only – confirm rules on street signs before parking.
+                  Sensor only — check the sign.
                 </p>
                 <p className="text-[11px] text-[#35338c] dark:text-[#a3a1e6] font-medium mt-1.5">
                   Gold ring on the map = full rule data.

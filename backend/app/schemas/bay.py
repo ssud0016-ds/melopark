@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -12,12 +12,14 @@ class ActiveRestriction(BaseModel):
     rule_category: str
     plain_english: str
     max_stay_mins: Optional[int] = None
+    # ISO-8601 datetime string with Australia/Melbourne offset (+10:00/+11:00)
     expires_at: Optional[str] = None
 
 
 class StrictWarning(BaseModel):
     type: str
     typedesc: Optional[str]
+    # ISO-8601 datetime string with Australia/Melbourne offset (+10:00/+11:00)
     starts_at: str
     minutes_into_stay: int
     description: str
@@ -33,6 +35,11 @@ class BayEvaluation(BaseModel):
     # "api_fallback" = DB had no data; answered from CoM restriction API cache
     # "unknown" = no data source had useful information
     data_source: str = "db"
+    # UI rendering hint:
+    #   "full"       = show occupancy + rules (sensor status + DB verdict)
+    #   "rules_only" = show rules with "no live status" (DB/API verdict, no sensor)
+    #   "none"       = show "check signage" (no verdict, no sensor)
+    data_coverage: Literal["full", "rules_only", "none"] = "none"
 
 
 class BayVerdictBrief(BaseModel):

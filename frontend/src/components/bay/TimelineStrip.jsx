@@ -1,4 +1,5 @@
 import { cn } from '../../utils/cn'
+import { formatLeaveByClock } from '../../utils/plannerTime'
 
 /**
  * Shows the current rule state and sensor status for a parking bay.
@@ -44,10 +45,11 @@ export default function TimelineStrip({ activeRestriction, verdict, sensorFree }
       })
     }
 
-    if (activeRestriction.expires_at) {
+    const leaveBy = formatLeaveByClock(activeRestriction.expires_at)
+    if (leaveBy) {
       items.push({
-        time: 'Restriction Expires',
-        desc: activeRestriction.expires_at,
+        time: 'Leave by',
+        desc: leaveBy,
         on: true,
       })
     }
