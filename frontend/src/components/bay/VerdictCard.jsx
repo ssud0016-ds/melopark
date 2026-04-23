@@ -45,8 +45,10 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
   const isUnknown = verdict === 'unknown'
   const restriction = evaluation?.active_restriction ?? null
   const dataSource = evaluation?.data_source ?? null
+  const coverage = evaluation?.data_coverage ?? null
   const hasRealData = dataSource === 'db' || dataSource === 'api_fallback'
-  const noRestrictionData = !evaluationPending && !restriction && !hasRealData
+  const noRestrictionData =
+    !evaluationPending && (coverage === 'none' || (!restriction && !hasRealData))
   const NO_DATA_FALLBACK = 'Restriction data not available – check signage on site'
 
   // ── Visual type (colour) ────────────────────────────────────────────────
@@ -100,14 +102,14 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
   /** Prefer evaluated rule; never show coarse API bay type when rules say "yes" with no active window. */
   const limitVal = (() => {
     if (restriction?.typedesc) return restriction.typedesc
-    if (hasRealVerdict && verdict === 'yes' && hasRealData && !restriction) {
+    if (hasRealVerdict && verdict === 'yes' && coverage !== 'none' && !restriction) {
       return 'None active at this time'
     }
     if (!hasRealVerdict || isUnknown) {
       if (bay.bayType !== 'Other') return bay.bayType
       return '\u2013'
     }
-    if (hasRealData && verdict === 'yes') return 'None active'
+    if (coverage !== 'none' && verdict === 'yes') return 'None active'
     return '\u2013'
   })()
 
@@ -119,7 +121,7 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
     if (restriction?.plain_english) {
       const extra = plainEnglishBeyondReason(restriction.plain_english, reasonStr)
       appliesVal = extra ?? '\u2013'
-    } else if (hasRealData && verdict === 'yes') {
+    } else if (coverage !== 'none' && verdict === 'yes') {
       appliesVal =
         'No restriction windows from our data apply at this time — always confirm on posted signs.'
     } else {
