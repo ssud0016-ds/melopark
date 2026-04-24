@@ -47,6 +47,31 @@ _refresh_task_lock = asyncio.Lock()
 # Ensures at most one upstream HTTP fetch at a time (background loop + on-demand).
 _upstream_fetch_lock = asyncio.Lock()
 
+# Lazily-rebuilt set of bay_ids present in _sensor_cache.  Used by the restriction
+# evaluator to tag BayEvaluation.data_coverage ("full" vs "rules_only").
+# Regenerated whenever _sensor_cache_ts_mono changes so the check stays cheap.
+_sensor_ids: set[str] = set()
+_sensor_ids_built_for_ts: float = -1.0
+
+
+def has_live_sensor(bay_id: str) -> bool:
+    """Return True if *bay_id* currently has a row in the live sensor cache.
+
+    Synchronous, dict-lookup-cheap.  Safe to call from SQLAlchemy handlers.
+    Rebuilds a set-of-ids from the list cache only when a new refresh has
+    landed (tracked by _sensor_cache_ts_mono), so the common case is O(1).
+    Returns False when the cache is empty.
+    """
+    global _sensor_ids, _sensor_ids_built_for_ts
+    if _sensor_cache_ts_mono != _sensor_ids_built_for_ts:
+        _sensor_ids = {
+            str(r.get("kerbsideid"))
+            for r in _sensor_cache
+            if r.get("kerbsideid") is not None
+        }
+        _sensor_ids_built_for_ts = _sensor_cache_ts_mono
+    return str(bay_id) in _sensor_ids
+
 
 async def _fetch_via_exports(client: httpx.AsyncClient) -> list[dict]:
     """Fetch all records in one request via the /exports/json endpoint.
