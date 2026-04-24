@@ -88,6 +88,7 @@ from datetime import datetime, time as dt_time, timezone
 from pathlib import Path
 
 import pandas as pd
+import yaml
 
 # ─── LOGGING ────────────────────────────────────────────────────────────────
 
@@ -554,6 +555,54 @@ def dedup_restrictions_for_db(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop_duplicates(subset=available_keys, keep="first")
 
 
+def load_manual_overrides() -> pd.DataFrame:
+    """Load hand-verified bay restrictions from data/manual_bay_restrictions.yaml.
+
+    Returns an empty DataFrame (with correct columns) if the file is absent or
+    has no entries. These rows are merged into all_rest before the dedup step
+    and take priority over segment-inherited rows for the same bay.
+    """
+    path = ROOT / "data" / "manual_bay_restrictions.yaml"
+    _cols = [
+        "bay_id", "slot_num", "typedesc", "fromday", "today",
+        "starttime", "endtime", "duration_mins", "disabilityext_mins",
+        "plain_english", "is_strict", "rule_category",
+    ]
+    empty = pd.DataFrame(columns=_cols)
+    if not path.exists():
+        return empty
+    with path.open() as fh:
+        entries = yaml.safe_load(fh) or []
+    if not entries:
+        return empty
+
+    rows: list[dict] = []
+    for entry in entries:
+        bay_id = str(entry["bay_id"])
+        for r in entry.get("restrictions", []):
+            is_strict = bool(r.get("is_strict", False))
+            rule_category = str(r.get("rule_category", "other"))
+            rows.append({
+                "bay_id": bay_id,
+                "slot_num": None,  # assigned after merge
+                "typedesc": str(r["typedesc"]),
+                "fromday": int(r["fromday"]),
+                "today": int(r["today"]),
+                "starttime": str(r["starttime"]),
+                "endtime": str(r["endtime"]),
+                "duration_mins": r.get("duration_mins"),
+                "disabilityext_mins": None,
+                "plain_english": translate_sign(str(r["typedesc"])),
+                "is_strict": is_strict,
+                "rule_category": rule_category,
+            })
+    if not rows:
+        return empty
+    df = pd.DataFrame(rows)
+    log.info("Manual overrides loaded: %d rows for %d bays", len(df), df["bay_id"].nunique())
+    return df
+
+
 def write_to_postgres(gold: pd.DataFrame) -> None:
     """Write the ``bays`` and ``bay_restrictions`` tables to Postgres.
 
@@ -619,6 +668,38 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
         all_rest["is_strict"] = classified.apply(lambda t: t[0])
         all_rest["rule_category"] = classified.apply(lambda t: t[1])
 
+    # ── Track B: merge manual overrides (highest priority after segment rest) ─
+    manual_df = load_manual_overrides()
+    manual_bay_ids: set[str] = set()
+    if not manual_df.empty:
+        manual_df["bay_id"] = manual_df["bay_id"].astype(str)
+        manual_bay_ids = set(manual_df["bay_id"].unique())
+        # Drop any segment-inherited rows for these bays so manual wins.
+        all_rest = all_rest[~(
+            all_rest["bay_id"].isin(manual_bay_ids)
+            & ~all_rest["bay_id"].isin(set(
+                pd.read_parquet(SILVER_DIR / "restrictions_long.parquet")["bay_id"].astype(str).unique()
+                if (SILVER_DIR / "restrictions_long.parquet").exists() else []
+            ))
+        )]
+        all_rest = pd.concat([all_rest, manual_df], ignore_index=True)
+        log.info("After manual overrides: %d rows across %d bays", len(all_rest), all_rest["bay_id"].nunique())
+
+    # ── Track A: load signage gap flags ──────────────────────────────────
+    gap_path = SILVER_DIR / "signage_gap_flags.parquet"
+    if gap_path.exists():
+        gap_df = pd.read_parquet(gap_path)
+        signage_gap_bay_ids: set[str] = set(gap_df["bay_id"].astype(str).unique())
+        # Bays covered by manual overrides are no longer considered gapped.
+        signage_gap_bay_ids -= manual_bay_ids
+        log.info(
+            "Signage gap flags: %d bays flagged (-%d covered by manual overrides)",
+            len(signage_gap_bay_ids), len(manual_bay_ids & signage_gap_bay_ids | set()),
+        )
+    else:
+        signage_gap_bay_ids = set()
+        log.info("signage_gap_flags.parquet not found — re-run clean_to_silver.py to generate")
+
     restriction_bay_ids = set(all_rest["bay_id"].unique())
     log.info(
         "Full restrictions: %d rows across %d unique bays",
@@ -679,6 +760,7 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
         & (bays_df["bay_id"].str.lower() != "none")
     ].copy()
     bays_df["has_restriction_data"] = bays_df["bay_id"].isin(restriction_bay_ids)
+    bays_df["has_signage_gap"] = bays_df["bay_id"].isin(signage_gap_bay_ids)
 
     has_data = bays_df["has_restriction_data"].sum()
     log.info(

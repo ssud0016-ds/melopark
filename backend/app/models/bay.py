@@ -12,6 +12,7 @@ class Bay(Base):
     lat = Column(Float, nullable=True)
     lon = Column(Float, nullable=True)
     has_restriction_data = Column(Boolean, nullable=False, default=False)
+    has_signage_gap = Column(Boolean, nullable=False, default=False)
 
 
 class BayRestriction(Base):

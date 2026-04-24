@@ -204,6 +204,45 @@ def _parse_duration_from_sign_code(code: str) -> int | None:
     return None
 
 
+# Sign-plate codes that describe BAY-SPECIFIC signage, not street-wide rules.
+# These must NOT be fanned out across every bay on a segment.
+# LZ* = Loading Zone; DP* = Disability Parking; CL = Clearway (kept — applies to whole block).
+SEGMENT_EXCLUDE_PREFIXES = ("LZ", "DP")
+
+
+_DAY_MAP = {"SUN": 0, "MON": 1, "TUE": 2, "WED": 3, "THU": 4, "FRI": 5, "SAT": 6}
+
+
+def _parse_restriction_days(days_str: object) -> tuple[int, int] | None:
+    """Parse a sign-plate day-range string into (fromday, today).
+
+    Handles 'Mon-Fri', 'Sat', 'Sat-Sun', 'Mon-Sun', etc. Day numbering matches
+    the existing restrictions dataset: Sunday=0 … Saturday=6.
+    """
+    if days_str is None:
+        return None
+    s = str(days_str).strip()
+    if not s or s.lower() in {"nan", "none"}:
+        return None
+    parts = [p.strip().upper()[:3] for p in s.replace("–", "-").split("-")]
+    if len(parts) == 1 and parts[0] in _DAY_MAP:
+        d = _DAY_MAP[parts[0]]
+        return (d, d)
+    if len(parts) == 2 and parts[0] in _DAY_MAP and parts[1] in _DAY_MAP:
+        return (_DAY_MAP[parts[0]], _DAY_MAP[parts[1]])
+    return None
+
+
+def _normalise_time_str(value: object) -> str | None:
+    """Normalise '07:30:00' or '07:30' -> 'HH:MM'."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s or s.lower() in {"nan", "none"}:
+        return None
+    return s[:5] if len(s) >= 5 else s
+
+
 # ─── SENSOR CLEANING ────────────────────────────────────────────────────────
 
 def clean_sensors(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
@@ -440,22 +479,34 @@ def melt_restrictions(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFra
     )
 
     # Melt wide → long (one row per restriction slot)
-    # CoM uses description1..8 for the sign code (not typedesc1..8)
+    # CoM provides both ``typedesc{N}`` (authoritative sign-code category, e.g. "1P")
+    # and ``description{N}`` (free-text sign copy).  The upstream feed occasionally
+    # leaks ISO timestamps (e.g. "0001-01-08T02:00:00+00:00") into descriptionN for
+    # some slots, so prefer typedescN and only fall back to descriptionN when empty.
     slot_records = []
 
     for _, row in df.iterrows():
         for slot_num in range(1, N_SLOTS + 1):
-            typedesc = row.get(f"description{slot_num}")
+            typedesc = row.get(f"typedesc{slot_num}")
+            if pd.isnull(typedesc) or str(typedesc).strip() == "":
+                typedesc = row.get(f"description{slot_num}")
 
             # Skip empty slots
             if pd.isnull(typedesc) or str(typedesc).strip() == "":
                 continue
 
+            typedesc_str = str(typedesc).strip()
+            if re.match(r"^\d{4}-\d{2}-\d{2}T", typedesc_str):
+                raise ValueError(
+                    f"typedesc looks like an ISO timestamp for "
+                    f"bay_id={row['bay_id']} slot={slot_num}: {typedesc_str}"
+                )
+
             slot_records.append({
                 "bay_id":             row["bay_id"],
                 "restriction_bayid":  row["restriction_bayid"],
                 "slot_num":           slot_num,
-                "typedesc":           str(typedesc).strip(),
+                "typedesc":           typedesc_str,
                 "fromday":            int(row.get(f"fromday{slot_num}")) if pd.notna(row.get(f"fromday{slot_num}")) else None,
                 "today":              int(row.get(f"today{slot_num}"))   if pd.notna(row.get(f"today{slot_num}"))   else None,
                 "starttime":          str(row.get(f"starttime{slot_num}")).strip() if pd.notna(row.get(f"starttime{slot_num}")) else None,
@@ -633,7 +684,7 @@ def clean_addresses(df_raw: pd.DataFrame, verbose: bool = False) -> tuple[pd.Dat
     return addresses_df, streets_df
 
 
-def build_segment_restrictions(verbose: bool = False) -> pd.DataFrame:
+def build_segment_restrictions(verbose: bool = False) -> tuple[pd.DataFrame, set[str]]:
     """Build restrictions via segment chain: bays -> zones_to_segments -> sign_plates."""
     log.info("--- Building segment-chain restrictions ---")
     bays = load_bronze("parking_bays.parquet").copy()
@@ -678,13 +729,28 @@ def build_segment_restrictions(verbose: bool = False) -> pd.DataFrame:
     signs = signs[(signs["parkingzone"] != "") & (signs["display_code"] != "")]
     signs = signs[~signs["parkingzone"].isin(["nan", "none"]) & ~signs["display_code"].isin(["nan", "none"])]
 
-    # Optional time/day columns if present
-    fromday_col = _find_column_by_tokens(signs, ["from", "day"])
-    today_col = _find_column_by_tokens(signs, ["to", "day"]) or _find_column_by_tokens(signs, ["today"])
-    start_col = _find_column_by_tokens(signs, ["start", "time"])
-    end_col = _find_column_by_tokens(signs, ["end", "time"])
-    has_time_data = all(c is not None for c in [fromday_col, today_col, start_col, end_col])
-    if not has_time_data:
+    # Detect real day/time columns. The CoM sign-plates schema uses literal names
+    # `restriction_days`, `time_restrictions_start`, `time_restrictions_finish` — the
+    # old token-search heuristic missed `restriction_days` and the "finish" suffix,
+    # so every rule was silently defaulted. Literal lookups first, token fallback second.
+    days_col = (
+        "restriction_days" if "restriction_days" in signs.columns
+        else _find_column_by_tokens(signs, ["restriction", "day"])
+        or _find_column_by_tokens(signs, ["day"])
+    )
+    start_col = (
+        "time_restrictions_start" if "time_restrictions_start" in signs.columns
+        else _find_column_by_tokens(signs, ["start"])
+    )
+    end_col = (
+        "time_restrictions_finish" if "time_restrictions_finish" in signs.columns
+        else _find_column_by_tokens(signs, ["finish"])
+        or _find_column_by_tokens(signs, ["end"])
+    )
+    has_time_data = all(c is not None for c in [days_col, start_col, end_col])
+    if has_time_data:
+        log.info("  Sign plate time columns: days=%s start=%s end=%s", days_col, start_col, end_col)
+    else:
         log.warning("Sign plate day/time columns not found. Using conservative defaults (Mon-Fri 07:30-18:30).")
 
     joined = bay_zones.merge(signs, on="parkingzone", how="inner")
@@ -699,34 +765,65 @@ def build_segment_restrictions(verbose: bool = False) -> pd.DataFrame:
         "FP": "FREE",
     }
 
+    # Bay-specific codes (loading zone, disabled parking) must not be fanned out
+    # across the whole segment — they point at individual bays only.
+    skipped_bay_specific = 0
+    signage_gap_bays: set[str] = set()  # bay_ids that lost an LZ/DP designation
+
     rows: list[dict] = []
     for _, row in joined.iterrows():
         display_code = str(row["display_code"]).strip().upper()
+        if any(display_code.startswith(p) for p in SEGMENT_EXCLUDE_PREFIXES):
+            skipped_bay_specific += 1
+            signage_gap_bays.add(str(row["bay_id"]))
+            continue
+
         typedesc = code_map.get(display_code, display_code)
         duration = _parse_duration_from_sign_code(display_code)
+
+        day_range = _parse_restriction_days(row[days_col]) if has_time_data else None
+        start_val = _normalise_time_str(row[start_col]) if has_time_data else None
+        end_val = _normalise_time_str(row[end_col]) if has_time_data else None
+
         rows.append({
             "bay_id": row["bay_id"],
-            "slot_num": 1,
+            # slot_num assigned incrementally per bay below
+            "slot_num": None,
             "typedesc": typedesc,
-            "fromday": int(row[fromday_col]) if has_time_data and pd.notna(row[fromday_col]) else 1,
-            "today": int(row[today_col]) if has_time_data and pd.notna(row[today_col]) else 5,
-            "starttime": str(row[start_col]).strip() if has_time_data and pd.notna(row[start_col]) else "07:30",
-            "endtime": str(row[end_col]).strip() if has_time_data and pd.notna(row[end_col]) else "18:30",
+            "fromday": day_range[0] if day_range is not None else 1,
+            "today": day_range[1] if day_range is not None else 5,
+            "starttime": start_val if start_val else "07:30",
+            "endtime": end_val if end_val else "18:30",
             "duration_mins": duration,
             "disabilityext_mins": None,
         })
 
+    if skipped_bay_specific:
+        log.info("  Skipped %d bay-specific rule rows (LZ*, DP*) — not safe to fan out", skipped_bay_specific)
+
     segment_df = pd.DataFrame(rows)
     if len(segment_df) == 0:
-        return segment_df
+        return segment_df, signage_gap_bays
 
-    segment_df = segment_df.drop_duplicates(subset=["bay_id", "typedesc"], keep="first").reset_index(drop=True)
+    segment_df = segment_df.drop_duplicates(
+        subset=["bay_id", "typedesc", "fromday", "today", "starttime", "endtime"],
+        keep="first",
+    ).reset_index(drop=True)
+
+    # Each rule on a bay needs its own slot_num for the downstream schema
+    segment_df["slot_num"] = segment_df.groupby("bay_id").cumcount() + 1
+
+    # Bays that received rules via segment inheritance but still have an
+    # unresolved LZ/DP plate are only partially covered.
+    # Exclude bays that got non-LZ/DP rules from the signage_gap set — they
+    # still need the flag because the LZ/DP plate remains unassigned.
     log.info(
-        "  Segment restrictions built: %d rows across %d bays",
+        "  Segment restrictions built: %d rows across %d bays (%d bays have unresolved LZ/DP)",
         len(segment_df),
         segment_df["bay_id"].nunique(),
+        len(signage_gap_bays),
     )
-    return segment_df
+    return segment_df, signage_gap_bays
 
 
 # ─── JOIN ────────────────────────────────────────────────────────────────────
@@ -902,8 +999,9 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     restrictions_long = melt_restrictions(restrictions_raw, verbose)
 
     segment_rest = None
+    signage_gap_bays: set[str] = set()
     try:
-        segment_rest = build_segment_restrictions(verbose=verbose)
+        segment_rest, signage_gap_bays = build_segment_restrictions(verbose=verbose)
     except FileNotFoundError as e:
         log.warning("Segment chain data not available: %s", e)
         log.warning("Run fetch_bronze.py with zones_to_segments and sign_plates first.")
@@ -911,16 +1009,21 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         log.warning("Segment chain column mapping failed: %s", e)
 
     if segment_rest is not None and len(segment_rest) > 0:
-        combined_restrictions = pd.concat([restrictions_long, segment_rest], ignore_index=True)
-        combined_restrictions = combined_restrictions.drop_duplicates(
-            subset=["bay_id", "typedesc"],
-            keep="first",
+        # Direct (bay-specific) rules always win over segment-derived (street-level)
+        # rules for the same bay. The two sources use different typedesc formats
+        # (direct embeds day+time, segment is a bare code), so string-level
+        # drop_duplicates can't match them — exclude at the bay level instead.
+        direct_bays = set(restrictions_long["bay_id"].astype(str))
+        segment_to_add = segment_rest[~segment_rest["bay_id"].astype(str).isin(direct_bays)]
+        combined_restrictions = pd.concat(
+            [restrictions_long, segment_to_add], ignore_index=True
         )
         log.info(
-            "Combined restrictions: %d rows (%d direct + %d segment)",
+            "Combined restrictions: %d rows (%d direct + %d segment, %d segment rows suppressed by direct-rule priority)",
             len(combined_restrictions),
             len(restrictions_long),
-            len(segment_rest),
+            len(segment_to_add),
+            len(segment_rest) - len(segment_to_add),
         )
     else:
         combined_restrictions = restrictions_long
@@ -945,6 +1048,7 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         log.info("  data/silver/restrictions_long.parquet   (%d rows)", len(restrictions_long))
         if segment_rest is not None:
             log.info("  data/silver/segment_restrictions_long.parquet (%d rows)", len(segment_rest))
+        log.info("  data/silver/signage_gap_flags.parquet  (%d bays)", len(signage_gap_bays))
         log.info("  data/silver/merged.parquet              (%d rows)", len(merged))
         if addresses_clean is not None and streets_clean is not None:
             log.info("  data/silver/addresses_clean.parquet (%d rows)", len(addresses_clean))
@@ -964,6 +1068,11 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         seg_path = SILVER_DIR / "segment_restrictions_long.parquet"
         segment_rest.to_parquet(seg_path, index=False, engine="pyarrow")
         log.info("Saved segment_restrictions_long.parquet  (%d rows)", len(segment_rest))
+
+    gap_df = pd.DataFrame({"bay_id": sorted(signage_gap_bays)})
+    gap_path = SILVER_DIR / "signage_gap_flags.parquet"
+    gap_df.to_parquet(gap_path, index=False, engine="pyarrow")
+    log.info("Saved signage_gap_flags.parquet  (%d bays with unresolved LZ/DP)", len(gap_df))
 
     merged_path = SILVER_DIR / "merged.parquet"
     merged.to_parquet(merged_path, index=False, engine="pyarrow")
