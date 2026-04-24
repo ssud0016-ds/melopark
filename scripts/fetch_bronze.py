@@ -205,7 +205,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--datasets",
         nargs="+",
-        choices=["sensors", "restrictions", "bays", "zones_to_segments", "sign_plates"],
+        choices=list(DATASETS.keys()),
         help="Optional subset of datasets to fetch.",
     )
     args = parser.parse_args()

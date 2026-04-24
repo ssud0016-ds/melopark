@@ -56,6 +56,12 @@ describe('BayDetailSheet coverage badge', () => {
     expect(await screen.findByText('Sensor only — check the sign.')).toBeInTheDocument()
     expect(screen.queryByText('Full rules available')).not.toBeInTheDocument()
   })
+
+  it('shows amber badge and warning banner for partial_signage coverage', async () => {
+    renderSheetWithCoverage('partial_signage')
+    expect(await screen.findByText('Check bay sign — sign type not captured')).toBeInTheDocument()
+    expect(await screen.findByText('Sign type not captured')).toBeInTheDocument()
+  })
 })
 
 describe('BayDetailSheet planner time contract', () => {

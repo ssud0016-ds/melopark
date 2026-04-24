@@ -53,12 +53,13 @@ def _make_restriction(**overrides) -> MagicMock:
     return m
 
 
-def _make_bay(bay_id="1000", has_data=True) -> MagicMock:
+def _make_bay(bay_id="1000", has_data=True, has_signage_gap=False) -> MagicMock:
     b = MagicMock()
     b.bay_id = bay_id
     b.lat = -37.81
     b.lon = 144.96
     b.has_restriction_data = has_data
+    b.has_signage_gap = has_signage_gap
     return b
 
 
@@ -688,6 +689,36 @@ class TestDataCoverageField:
         result = evaluate_bay_at("9999", datetime(2026, 4, 14, 12, 0), 60, db)
         assert result["data_source"] == "unknown"
         assert result["data_coverage"] == "none"
+
+    @patch("app.services.parking_service.has_live_sensor")
+    def test_partial_signage_no_sensor(self, mock_sensor):
+        """has_signage_gap=True + no sensor → partial_signage."""
+        mock_sensor.return_value = False
+        bay = _make_bay(has_data=True, has_signage_gap=True)
+        r = _make_restriction()
+        db = _mock_db(bay=bay, restrictions=[r])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 12, 0), 60, db)
+        assert result["data_coverage"] == "partial_signage"
+
+    @patch("app.services.parking_service.has_live_sensor")
+    def test_partial_signage_overrides_sensor(self, mock_sensor):
+        """has_signage_gap=True takes priority even when live sensor present."""
+        mock_sensor.return_value = True
+        bay = _make_bay(has_data=True, has_signage_gap=True)
+        r = _make_restriction()
+        db = _mock_db(bay=bay, restrictions=[r])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 12, 0), 60, db)
+        assert result["data_coverage"] == "partial_signage"
+
+    @patch("app.services.parking_service.has_live_sensor")
+    def test_no_partial_signage_when_gap_false(self, mock_sensor):
+        """has_signage_gap=False + no sensor → rules_only, not partial_signage."""
+        mock_sensor.return_value = False
+        bay = _make_bay(has_data=True, has_signage_gap=False)
+        r = _make_restriction()
+        db = _mock_db(bay=bay, restrictions=[r])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 12, 0), 60, db)
+        assert result["data_coverage"] == "rules_only"
 
 
 # ── NULL-geometry defensive filter (audit finding F2) ────────────────────────
