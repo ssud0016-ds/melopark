@@ -674,14 +674,7 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
     if not manual_df.empty:
         manual_df["bay_id"] = manual_df["bay_id"].astype(str)
         manual_bay_ids = set(manual_df["bay_id"].unique())
-        # Drop any segment-inherited rows for these bays so manual wins.
-        all_rest = all_rest[~(
-            all_rest["bay_id"].isin(manual_bay_ids)
-            & ~all_rest["bay_id"].isin(set(
-                pd.read_parquet(SILVER_DIR / "restrictions_long.parquet")["bay_id"].astype(str).unique()
-                if (SILVER_DIR / "restrictions_long.parquet").exists() else []
-            ))
-        )]
+        # Manual overrides are additive; let dedup_restrictions_for_db handle any overlaps.
         all_rest = pd.concat([all_rest, manual_df], ignore_index=True)
         log.info("After manual overrides: %d rows across %d bays", len(all_rest), all_rest["bay_id"].nunique())
 

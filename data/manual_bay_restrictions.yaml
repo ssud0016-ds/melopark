@@ -1,0 +1,42 @@
+# Manual bay restriction overrides.
+#
+# Purpose: supply accurate LZ/DP rules for individually-verified bays whose
+# kerbsideid falls outside CoM's on-street-car-park-bay-restrictions feed
+# (deviceid range 17,465–30,791). Each entry is backed by physical inspection
+# or a reliable user report.
+#
+# These rows are merged into all_rest in build_gold.py BEFORE the dedup step,
+# after segment_restrictions_long. They take priority over segment-inherited
+# rows for the same bay but yield to any direct CoM bay-specific row that
+# appears in restrictions_long for the same bay.
+#
+# When CoM publishes a full-coverage restrictions export, entries here that are
+# now covered upstream should be removed.
+#
+# Schema per restriction row:
+#   typedesc       str   Raw sign code (e.g. "LZ 30MINS", "DISABLED ONLY")
+#   fromday        int   CoM convention: 0=Sun 1=Mon … 6=Sat
+#   today          int   (same convention; wrap-around supported)
+#   starttime      str   "HH:MM"
+#   endtime        str   "HH:MM"
+#   duration_mins  int|null  null = no time limit
+#   rule_category  str   loading | disabled | timed | clearway | no_standing | other
+#   is_strict      bool  true for loading/disabled/clearway/no_standing
+
+- bay_id: "60956"
+  verified_by: "user_report"
+  verified_date: "2026-04-24"
+  notes: >
+    Flinders Lane between Exhibition Street and Russell Street.
+    Sign_plates parkingzones 7412 and 7446 carry LZ30 Mon-Fri 07:00-16:00
+    but clean_to_silver.py skips LZ* during segment inheritance.
+    User confirmed physical signage matches this schedule.
+  restrictions:
+    - typedesc: "LZ 30MINS"
+      fromday: 1
+      today: 5
+      starttime: "07:00"
+      endtime: "16:00"
+      duration_mins: 30
+      rule_category: "loading"
+      is_strict: true
