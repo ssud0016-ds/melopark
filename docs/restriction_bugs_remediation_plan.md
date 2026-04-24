@@ -5,8 +5,8 @@ restriction translation feature (pipeline → DB → API → frontend). Grouped 
 priority so the highest user-visible breakage is fixed first, and one fix per
 PR so blast radius stays small.
 
-**Status at 2026-04-23:** Bugs 1–8 have shipped. Bug 9 remains, gated on an
-audit of the LZ/DP coverage gap.
+**Status at 2026-04-24:** Bugs 1–8 have shipped. Bug 9 in progress — audit
+complete, Option 3 (banner + manual override + CoM data request) selected.
 
 Historical snapshot (pre-remediation): 12,442 `bay_restrictions` rows across
 8,816 bays in RDS, 5,667 restriction rows present in gold parquet silently
@@ -30,7 +30,7 @@ Quick numbers from the 2026-04-22 verification run:
 |---|-----|-------|----------|---------|--------|
 | 8 | `drop_duplicates(subset=["bay_id","typedesc"])` drops time-window rows | pipeline (build_gold) | 🔴 root cause of weekend-only / "Unlimited" for 694+ bays | S | ✅ done |
 | 1 | Router `datetime.now()` TZ-naïve | backend | 🔴 "Unlimited" during Melbourne daytime on UTC Lambda | S | ✅ done |
-| 9 | Loading-zone / disabled-bay designation silently dropped during segment inheritance | pipeline (clean_to_silver) | 🟠 LZ/DP rules missing for bays not in CoM's bay-specific feed (e.g. bay 60956) | M (needs data-source decision) | 🟡 audit pending |
+| 9 | Loading-zone / disabled-bay designation silently dropped during segment inheritance | pipeline (clean_to_silver) | 🟠 LZ/DP rules missing for bays not in CoM's bay-specific feed (e.g. bay 60956) | M | 🔵 in progress — Option 3 (banner + manual override + CoM request) |
 | 2 | `expires_at` emitted as naïve ISO | backend + frontend contract | 🟠 wrong "leave-by" clock shown | S | ✅ done |
 | 3 | Raw ISO string rendered in Timeline | frontend | 🟠 unformatted timestamp visible to user | XS | ✅ done |
 | 4 | `data_coverage` field is dead on client | frontend | 🟡 UI lies about rule availability | S | ✅ done |
@@ -165,175 +165,177 @@ FROM bay_restrictions WHERE bay_id = '57923' ORDER BY slot_num;
 
 ## Bug 9 — Loading-zone / disabled-bay coverage gap during segment inheritance
 
-**Root cause:** `scripts/clean_to_silver.py:775` inside
-`build_segment_restrictions_long` intentionally skips every sign-plate row whose
-`display_code` starts with `LZ` (loading zone) or `DP` (disabled parking):
+**Root cause:** `scripts/clean_to_silver.py:775` intentionally skips sign-plate
+rows whose `display_code` starts with `LZ` or `DP` during segment inheritance.
+The guard is correct for mixed-restriction segments — fanning an LZ plate across
+all 2P bays on a segment would create false positives. But for bays whose
+`kerbsideid` is outside CoM's bay-specific feed (deviceids 17,465–30,791),
+segment inheritance is the *only* route into the pipeline, so those bays silently
+lose their LZ/DP designation.
 
-```python
-# scripts/clean_to_silver.py
-SEGMENT_EXCLUDE_PREFIXES = ("LZ", "DP")          # line 210
-...
-for _, row in joined.iterrows():
-    display_code = str(row["display_code"]).strip().upper()
-    if any(display_code.startswith(p) for p in SEGMENT_EXCLUDE_PREFIXES):
-        skipped_bay_specific += 1               # line 775–777
-        continue
-```
-
-The guard exists for a good reason — an `LZ30` plate identifies a specific
-bay, and fanning it across every bay on the segment would wrongly mark dozens
-of regular 2P bays as loading zones. But for any bay whose `kerbsideid` does
-**not** appear in CoM's bay-specific `on-street-car-park-bay-restrictions`
-feed, the segment inheritance step is the only path into the pipeline — and
-segment inheritance deliberately drops LZ/DP. Those bays therefore receive
-their timed-meter rules but lose their loading-zone / disabled-parking
-designation entirely.
-
-**Verified evidence — bay 60956 (Flinders Lane between Exhibition and Russell):**
+**Verified evidence — bay 60956 (Flinders Lane, Exhibition → Russell):**
 
 | Source | Content |
 |--------|---------|
-| `sign_plates.parquet` (parkingzone 7412, 7446 on segment 20123) | `LZ30 Mon-Fri 07:00-16:00`, `MP2P Mon-Fri 16:00-19:00`, `MP2P Mon-Fri 19:00-22:00`, `MP2P Sat-Sun 07:00-22:00` |
-| CoM upstream `on-street-car-park-bay-restrictions` (deviceid=60956) | 0 rows (deviceid range in feed is 17,465–30,791) |
-| `silver/restrictions_long.parquet` (bay_id=60956) | 0 rows |
-| `silver/segment_restrictions_long.parquet` (bay_id=60956) | 3 rows — all `2P MTR`, **LZ30 row silently dropped at `clean_to_silver.py:775`** |
-| RDS `bay_restrictions` (bay_id='60956') | 3 rows — all `2P MTR`, no loading-zone row |
+| `sign_plates.parquet` (zones 7412, 7446) | `LZ30 Mon-Fri 07:00-16:00`, `MP2P Mon-Fri 16:00-19:00`, `MP2P Mon-Fri 19:00-22:00`, `MP2P Sat-Sun 07:00-22:00` |
+| CoM upstream bay-specific restrictions (deviceid=60956) | 0 rows — outside 17,465–30,791 range |
+| `silver/segment_restrictions_long.parquet` | 3 rows, all `2P MTR` — LZ30 dropped at line 775 |
+| RDS `bay_restrictions` | 3 rows, all `2P MTR`, no loading-zone row |
 
-This matches the user-reported schedule exactly except for the missing
-`Mon-Fri 07:00-16:00 Loading Zone` slot. The LZ data exists in our bronze
-layer but is discarded by design before it can reach the bay.
-
-**Scope:** `sign_plates.parquet` currently holds 189 LZ rows (loading zones)
-and an unknown number of DP rows (disabled parking) keyed by `parkingzone`.
-Up to 4,834 RDS bays fall outside CoM's bay-specific deviceid range and
-therefore depend entirely on segment inheritance for all their rules — every
-LZ/DP sign plate attached to those bays' parkingzones is invisible to them.
-Exact affected-bay count will be computed during the audit step below.
-
-### Why this is distinct from Bug 8
-
-Bug 8 drops _duplicate rows that made it into gold_. Bug 9 drops _source rows
-before they ever reach gold_. Fixing Bug 8 alone will not recover any LZ/DP
-rule for bay 60956 because the row is absent from silver already. Both fixes
-are required.
-
-### Considered options (see audit findings below)
-
-- **Option A (retired):** narrow the `SEGMENT_EXCLUDE_PREFIXES` guard so
-  LZ/DP plates fan out across segments whose parkingzones are _uniformly_
-  LZ/DP. The audit below shows this affects zero parkingzones in the
-  current dataset — every LZ/DP zone co-hosts a timed-meter plate — so
-  this path would recover nothing.
-- **Option B (selected):** continue skipping LZ/DP during segment
-  inheritance, but flag the affected bays with
-  `data_coverage='partial_signage'` so the UI can surface a "verify
-  signage" banner.
+**Why this is distinct from Bug 8:** Bug 8 dropped rows that reached gold.
+Bug 9 drops rows before they reach silver. Fixing Bug 8 alone does not help bay 60956.
 
 ### Audit (completed 2026-04-23)
 
 Script: `scripts/audit/lz_dp_coverage_gap.py`
 Output: `docs/audits/lz_dp_coverage_gap_2026-04-23.csv` (193 rows).
 
-**Findings:**
-
 | Metric | Value |
 |--------|-------|
 | LZ/DP sign-plate rows in bronze | 191 (189 LZ* + 2 DP*) |
 | Distinct parkingzones with ≥ 1 LZ/DP plate | 187 |
-| Parkingzones that are *uniformly* LZ/DP (Option A target) | **0** |
-| Segments that are *uniformly* LZ/DP across all their zones | **0** |
-| Bays sitting on an LZ/DP-touched segment | 1,820 |
-| …of which have no direct CoM restriction row (rely on segment inheritance) | 1,796 (98.7%) |
+| Parkingzones uniformly LZ/DP (Option A would target) | **0** |
+| Bays on LZ/DP-touched segments | 1,820 |
+| …with no direct CoM restriction row | 1,796 (98.7%) |
 
-**Interpretation.** Every parkingzone that carries an LZ/DP plate also
-carries at least one timed-meter plate (e.g. `LZ30 Mon-Fri 07:00-16:00`
-alongside `MP2P Mon-Fri 16:00-19:00` on zone 7412). The uniformity
-hypothesis behind Option A does not hold anywhere in the dataset — the LZ
-plate always describes a _subset_ of bays on the zone, with the remaining
-bays governed by the timed rule.
+Every LZ/DP parkingzone co-hosts a timed-meter plate (e.g. zone 7412 = `LZ30`
++ `MP2P`). The "fan out when zone is uniform" heuristic recovers zero bays.
 
-**Decision:** Option A is retired. Ship **Option B** — emit
-`data_coverage='partial_signage'` for the 1,796 affected bays and render a
-"loading/disabled zone possible — verify signage" banner in the frontend.
+### Data availability research (2026-04-24)
 
-### Change set (Option B)
+Investigated whether any CoM or Vic Gov dataset could map individual bays to
+sign plates via spatial join or direct key:
 
-1. **`scripts/clean_to_silver.py`** — continue skipping LZ/DP during
-   segment inheritance (no behaviour change), but additionally record a
-   per-bay flag ``has_unassigned_lz_dp_in_zone`` for bays whose
-   parkingzones contain ≥ 1 LZ/DP plate. Written to a new silver artefact
-   `signage_gap_flags.parquet` keyed by `bay_id`.
-2. **`scripts/build_gold.py`** — join the flag onto `bays` and
-   propagate `has_signage_gap: bool` into `bay_restrictions`' parent bay
-   row (or a new `bay_flags` table, TBD at implementation time).
-3. **`app/schemas/bay.py`** — extend the `data_coverage` Literal to
-   include `"partial_signage"`.
-4. **`app/services/restriction_evaluator.py`** — when the bay has
-   `has_signage_gap=True` and the normal verdict path would have returned
-   `"rules_only"` or `"full"`, return `"partial_signage"` instead (keep the
-   verdict/active_restriction/warning fields unchanged).
-5. **`frontend/src/components/bay/BayDetailSheet.jsx`** +
-   `VerdictCard.jsx` — add a new badge variant for `partial_signage`:
-   "Some signage not captured — check the bay for a loading or disabled
-   zone sign before parking."
+| Dataset | Geometry | Sign-plate link |
+|---------|----------|-----------------|
+| `sign-plates-located-in-each-parking-zone` | null (no coordinates) | parkingzone only |
+| `on-street-parking-bays` | Point (bay lat/lon) | no sign reference |
+| `parking-zones-linked-to-street-segments` | null | no sign reference |
+| Dedicated loading-zone dataset | Not published | — |
+
+**Conclusion:** No public dataset bridges kerbsideid to individual sign plates.
+The coverage gap is a CoM data-publication gap, not a pipeline gap we can solve
+with a smarter join.
+
+### Decision — Option 3 (selected 2026-04-24)
+
+Three parallel tracks:
+
+**Track A — Option B banner (protects all 1,796 affected bays immediately):**
+Flag bays on LZ/DP-touched segments with `data_coverage='partial_signage'`.
+Frontend renders "Check sign — loading or disabled zone possible in this area."
+No false positives: verdict and active_restriction fields are unchanged.
+
+**Track B — Manual override file (accurate rules for individually-verified bays):**
+`data/manual_bay_restrictions.yaml` checked into repo. Pipeline loads it after
+silver merge as a highest-priority override. Seed with bay 60956 as first entry.
+Scales by human verification effort; entries backed by physical inspection.
+
+**Track C — CoM data request (long-term systemic fix):**
+File a request with CoM for a full export of `on-street-car-park-bay-restrictions`
+covering all kerbsideids, not just 17,465–30,791. When received, import replaces
+both the Track A banner and Track B overrides for affected bays.
+
+### Change set
+
+**Track A — pipeline + backend + frontend**
+
+1. **`scripts/clean_to_silver.py`** — after the segment-inheritance loop,
+   build a `signage_gap_flags` set: bay_ids whose parkingzones held ≥ 1 LZ/DP
+   plate that was skipped. Write to `data/silver/signage_gap_flags.parquet`
+   (`bay_id` column only).
+2. **`scripts/build_gold.py`** — load `signage_gap_flags.parquet`; add
+   `has_signage_gap BOOLEAN DEFAULT FALSE` column to the `bays` table; set
+   `TRUE` for flagged bays during `write_to_postgres`.
+3. **`scripts/migrations/005_add_has_signage_gap.sql`** — `ALTER TABLE bays
+   ADD COLUMN IF NOT EXISTS has_signage_gap BOOLEAN NOT NULL DEFAULT FALSE;`
+4. **`app/schemas/bay.py`** — extend `data_coverage` Literal:
+   `"full" | "rules_only" | "partial_signage" | "none"`.
+5. **`app/services/restriction_evaluator.py`** — after resolving
+   `data_coverage`, override to `"partial_signage"` when
+   `bay.has_signage_gap` is `True` and coverage would have been `"full"` or
+   `"rules_only"`. Verdict/active_restriction/warning unchanged.
+6. **`frontend/src/components/bay/BayDetailSheet.jsx`** +
+   **`VerdictCard.jsx`** — add `partial_signage` badge variant:
+   amber tone, label "Check sign — loading/disabled zone possible."
+
+**Track B — manual override**
+
+1. **`data/manual_bay_restrictions.yaml`** — new file, format:
+   ```yaml
+   # Hand-verified bay restrictions. Each entry backed by physical inspection.
+   # Loaded by build_gold.py after silver merge; takes precedence over segment
+   # inheritance but yields to direct CoM bay-specific rows.
+   - bay_id: "60956"
+     verified_by: "user_report"
+     verified_date: "2026-04-24"
+     restrictions:
+       - typedesc: "LZ 30MINS"
+         fromday: 1
+         today: 5
+         starttime: "07:00"
+         endtime: "16:00"
+         duration_mins: 30
+         rule_category: "loading"
+         is_strict: true
+   ```
+2. **`scripts/build_gold.py`** — load and merge manual overrides before
+   dedup step. Override rows get `slot_num` assigned after existing slots so
+   they don't collide. A bay present in the override file is NOT flagged
+   `has_signage_gap` (the gap is considered filled).
+
+**Track C — CoM data request**
+
+File via: https://data.melbourne.vic.gov.au/pages/contact-us/
+
+Request text (draft):
+> We are building a parking guidance app using CoM open data. The dataset
+> `on-street-car-park-bay-restrictions` only contains deviceids 17,465–30,791,
+> but `on-street-parking-bay-sensors` contains kerbsideids outside this range
+> (e.g. 60956) that have active sensors but no restriction data. Could CoM
+> provide an updated export covering all kerbsideids, or confirm whether a
+> complete bay-restrictions dataset is available?
+
+When CoM data arrives: run pipeline, verify bay 60956 now has LZ row via
+`restrictions_long` (not via manual override), remove bay 60956 entry from
+`manual_bay_restrictions.yaml`, retire Track B if coverage is complete.
 
 ### Tests
 
-- Pipeline: fixture with a parkingzone holding `LZ30 Mon-Fri 07:00-16:00`
-  + `MP2P Mon-Fri 16:00-19:00` and two bays on the zone; assert both bays
-  emerge from the silver/gold step with `has_signage_gap=True`.
-- Backend: evaluator returns `data_coverage='partial_signage'` for a bay
-  with that flag, whether or not a governing restriction applies at
-  arrival.
-- Frontend: RTL test renders the new banner variant for a
-  `partial_signage` bay.
+- **Pipeline (Track A):** fixture with one parkingzone holding `LZ30 Mon-Fri
+  07:00-16:00` + `MP2P Mon-Fri 16:00-19:00` and two bays. Assert both bay_ids
+  appear in `signage_gap_flags.parquet`.
+- **Pipeline (Track B):** load `manual_bay_restrictions.yaml` with one entry;
+  assert the override row appears in the merged restriction DataFrame before the
+  dedup step.
+- **Backend (Track A):** evaluator returns `data_coverage='partial_signage'`
+  for a bay with `has_signage_gap=True`, regardless of which verdict branch runs.
+- **Backend regression:** bay with `has_signage_gap=False` keeps its existing
+  `data_coverage` value unchanged.
+- **Frontend:** RTL test renders amber badge "Check sign — loading/disabled zone
+  possible" for a bay with `data_coverage='partial_signage'`.
 
-### Acceptance criteria
-
-- Bay 60956 returns `data_coverage='partial_signage'` on Wed 10:00
-  Melbourne time.
-- Post-deploy, the BayDetailSheet banner on bay 60956 reads "Some signage
-  not captured — check the bay for a loading or disabled zone sign".
-- No regression — bays not on LZ/DP-touched segments keep returning
-  `data_coverage='full'` or `'rules_only'` as today.
-
-### Tests
-
-- Pipeline unit test (once Option A lands): a fixture segment with two
-  parkingzones, both holding only LZ30 plates for Mon-Fri 07:00-16:00, plus
-  two bays on that segment. Assert both bays emerge from
-  `build_segment_restrictions_long` with an LZ30 row.
-- Regression: a fixture segment with one LZ plate + one MP2P plate on the
-  same parkingzone must still skip the LZ row (current behaviour preserved).
-- Regression for bay 60956: after the fix, gold must contain ≥ 4 rows for
-  60956, including `typedesc='LZ 30MINS'` (or the chosen display) with
-  `fromday=1, today=5, starttime='07:00', endtime='16:00'`.
-
-### Verification queries (post-reload, if Option A ships)
+### Verification queries (post Track A deploy)
 
 ```sql
--- 1. LZ row count exists at all (baseline currently 0–few hundred in RDS)
-SELECT COUNT(*) FROM bay_restrictions
- WHERE typedesc ILIKE 'LZ%' OR typedesc ILIKE 'LOADING%';
--- Expected: several hundred (≥ the 189 source plates × bays-per-segment).
+-- Flagged bays exist
+SELECT COUNT(*) FROM bays WHERE has_signage_gap = TRUE;
+-- Expected: ~1,796
 
--- 2. Bay 60956 spot-check
-SELECT slot_num, typedesc, fromday, today, starttime, endtime
-  FROM bay_restrictions WHERE bay_id = '60956' ORDER BY slot_num;
--- Expected: ≥ 4 rows including the Mon-Fri 07:00-16:00 loading zone slot.
+-- Bay 60956 is flagged
+SELECT bay_id, has_signage_gap FROM bays WHERE bay_id = '60956';
+-- Expected: has_signage_gap = TRUE (until Track B or C fills the gap)
 ```
 
 ### Acceptance criteria
 
-- Audit CSV committed under `docs/audits/lz_dp_coverage_gap_2026-04-xx.csv`
-  and the A/B decision recorded in this plan.
-- If Option A ships: bay 60956 returns an `active_restriction` with
-  `rule_category='loading'` at Wed 10:00 Melbourne time.
-- If Option B ships: bay 60956 returns `data_coverage='partial_signage'` (or
-  equivalent) and the frontend renders the "check signage" banner alongside
-  the inherited 2P rules.
-- No regression — no bay that currently shows 2P suddenly shows LZ unless
-  every plate on its parkingzone set is LZ.
+- Bay 60956 returns `data_coverage='partial_signage'` on Wed 10:00 Melbourne time.
+- BayDetailSheet shows amber "Check sign" banner for bay 60956.
+- Manual override entry for bay 60956 present in `data/manual_bay_restrictions.yaml`.
+- Bay 60956 evaluator returns `active_restriction.rule_category='loading'` on
+  Wed 10:00 once the manual override is loaded (Track B).
+- No regression — bays without `has_signage_gap` keep existing `data_coverage`.
+- CoM contact filed with request reference noted here once sent.
 
 ---
 
@@ -703,28 +705,36 @@ no warning.
 
 ## Sequencing
 
-Bugs 1–8 have shipped. Bug 9 audit is complete (2026-04-23): Option A is
-retired (zero uniform parkingzones), Option B is the path forward.
+Bugs 1–8 have shipped. Bug 9 audit complete (2026-04-23). Option 3 selected
+(2026-04-24): three parallel tracks.
 
 ```
-Now
-  PR A ─ Bug 9 pipeline  flag bays on LZ/DP-touched segments with
-                          has_signage_gap; propagate to bay_restrictions.
+Track A — Option B banner (user-safety, ship first)
+  PR A1 ─ pipeline   signage_gap_flags.parquet + has_signage_gap in bays table
+                      + migration 005_add_has_signage_gap.sql
+  PR A2 ─ backend    data_coverage Literal += 'partial_signage';
+                      evaluator emits it when has_signage_gap=True
+  PR A3 ─ frontend   amber "Check sign" badge in BayDetailSheet + VerdictCard
+  Dependency: A1 → A2 → A3
 
-Next
-  PR B ─ Bug 9 backend   extend data_coverage Literal to include
-                          'partial_signage'; emit it when bay has the
-                          signage-gap flag.
+Track B — Manual override (accurate rules for verified bays, parallel with A)
+  PR B1 ─ pipeline   data/manual_bay_restrictions.yaml schema + build_gold.py
+                      loader + bay 60956 as first seeded entry
+  Can ship independently of Track A; no DB schema change needed.
 
-Then
-  PR C ─ Bug 9 frontend  new badge/banner variant for 'partial_signage'
-                          in BayDetailSheet + VerdictCard.
+Track C — CoM data request (long-term, async)
+  File request at data.melbourne.vic.gov.au/pages/contact-us/
+  Draft text in Bug 9 change set above.
+  When data arrives: pipeline re-run retires both Track A flags and Track B
+  overrides for covered bays.
 ```
 
 ### Dependency graph
 
 ```
-Bug 9 audit ───► PR A (pipeline flag) ───► PR B (backend) ───► PR C (frontend)
+Bug 9 audit ─┬─► PR A1 ──► PR A2 ──► PR A3   (banner, sequential)
+             └─► PR B1                         (manual override, independent)
+                 (async) CoM request ──────────► retire A+B when data lands
 ```
 
 ### Completed work (reference)
