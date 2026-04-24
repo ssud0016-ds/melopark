@@ -315,14 +315,6 @@ def _verdict_for_restriction(
             None,
         )
 
-    if cat == "free":
-        return (
-            "yes",
-            f"Free parking — no time limit during these hours. {r.plain_english}",
-            None,
-            None,
-        )
-
     if cat == "timed":
         max_stay = r.duration_mins
         if max_stay is None:
@@ -393,7 +385,8 @@ def evaluate_bay_at(
             .all()
         )
         if restrictions:
-            return _evaluate_from_db(bay_id, restrictions, arrival, duration_mins)
+            has_signage_gap = getattr(bay, "has_signage_gap", False) or False
+            return _evaluate_from_db(bay_id, restrictions, arrival, duration_mins, has_signage_gap)
 
     # ── Tier 2: external API cache fallback ──────────────────────────────
     if bay is None:
@@ -425,6 +418,7 @@ def _evaluate_from_db(
     restrictions: list[BayRestriction],
     arrival: datetime,
     duration_mins: int,
+    has_signage_gap: bool = False,
 ) -> dict:
     """Run the full time-window evaluation against DB restriction rows."""
     from app.services.parking_service import has_live_sensor
@@ -432,9 +426,15 @@ def _evaluate_from_db(
     active = [r for r in restrictions if is_restriction_active_at(r, arrival)]
     governing = _pick_governing_restriction(active)
 
-    # "full" when the bay is in the live sensor cache, else "rules_only" — the
-    # DB verdict is valid either way; the tag is for UI rendering.
-    data_coverage = "full" if has_live_sensor(bay_id) else "rules_only"
+    # "full"            = live sensor present
+    # "partial_signage" = bay on LZ/DP-touched zone but plate not in DB
+    # "rules_only"      = DB verdict, no live sensor
+    if has_signage_gap:
+        data_coverage = "partial_signage"
+    elif has_live_sensor(bay_id):
+        data_coverage = "full"
+    else:
+        data_coverage = "rules_only"
 
     if governing is None:
         # Outside all restriction windows — legal at this moment; wording

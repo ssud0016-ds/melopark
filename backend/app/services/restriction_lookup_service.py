@@ -49,7 +49,17 @@ _cache_lock = asyncio.Lock()
 
 
 def _map_type_desc(raw: Optional[str]) -> str:
-    """Map a raw TypeDesc value to a frontend-friendly bay_type category."""
+    """Map a raw TypeDesc value to a frontend-friendly bay_type category.
+
+    Only absolute-restriction categories are mapped — these come directly from
+    CoM's native typedesc1 tags ("Disabled", "Loading Zone", "No Standing") and
+    don't drift.
+
+    Timed/meter guessing retired 2026-04: the tier-1 DB path covers 97.3% of
+    bays with validated per-slot rules from build_gold, so the remaining sliver
+    of metered bays not in the DB now routes to "unknown — check signage"
+    rather than returning a string-match guess.
+    """
     if not raw:
         return "Other"
     t = raw.lower()
@@ -59,8 +69,6 @@ def _map_type_desc(raw: Optional[str]) -> str:
         return "Loading Zone"
     if "no standing" in t:
         return "No Standing"
-    if "meter" in t:
-        return "Timed"
     return "Other"
 
 

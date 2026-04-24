@@ -251,7 +251,9 @@ export default function BayDetailSheet({
       ? { tone: 'strong', label: 'Live status + rules' }
       : coverage === 'rules_only'
         ? { tone: 'weak', label: 'Rules only — no live status' }
-        : { tone: 'mute', label: 'No data — check signage' }
+        : coverage === 'partial_signage'
+          ? { tone: 'amber', label: 'Check bay sign — sign type not captured' }
+          : { tone: 'mute', label: 'No data — check signage' }
 
   const dataSource = evaluation?.data_source ?? null
   const showApiNote = dataSource === 'api_fallback'
@@ -319,6 +321,8 @@ export default function BayDetailSheet({
                     'border border-[#35338c]/30 bg-[#35338c]/5 text-[#35338c] dark:border-[#a3a1e6]/40 dark:bg-[#35338c]/20 dark:text-[#a3a1e6]',
                   coverageBadge.tone === 'weak' &&
                     'border border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700/40 dark:bg-blue-900/20 dark:text-blue-300',
+                  coverageBadge.tone === 'amber' &&
+                    'border border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-600/40 dark:bg-amber-900/20 dark:text-amber-300',
                   coverageBadge.tone === 'mute' &&
                     'border border-gray-300 bg-gray-50 text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300',
                 )}
@@ -328,6 +332,7 @@ export default function BayDetailSheet({
                     'h-1.5 w-1.5 rounded-full',
                     coverageBadge.tone === 'strong' && 'bg-[#35338c] dark:bg-[#a3a1e6]',
                     coverageBadge.tone === 'weak' && 'bg-blue-500 dark:bg-blue-300',
+                    coverageBadge.tone === 'amber' && 'bg-amber-500 dark:bg-amber-300',
                     coverageBadge.tone === 'mute' && 'bg-gray-400 dark:bg-gray-300',
                   )}
                 />
@@ -607,6 +612,26 @@ export default function BayDetailSheet({
                 </p>
                 <p className="text-[11px] text-[#35338c] dark:text-[#a3a1e6] font-medium mt-1.5">
                   Gold ring on the map = full rule data.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!evalLoading && coverage === 'partial_signage' && (
+          <div className="px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40">
+            <div className="flex items-start gap-2.5">
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none" className="shrink-0 text-amber-500 mt-0.5">
+                <path d="M8 2L14.5 13.5H1.5L8 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                <line x1="8" y1="6.5" x2="8" y2="9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <circle cx="8" cy="11.5" r="0.5" fill="currentColor" stroke="currentColor" strokeWidth="0.5" />
+              </svg>
+              <div>
+                <div className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                  Sign type not captured
+                </div>
+                <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed mt-1">
+                  Rules shown are for bays on this stretch. A loading or disabled sign may apply — always check the physical sign before parking.
                 </p>
               </div>
             </div>

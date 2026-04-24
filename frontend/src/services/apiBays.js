@@ -113,7 +113,12 @@ export async function fetchParkingBays() {
  */
 /**
  * @param {string} bayId
- * @param {{ arrivalIso?: string | null, durationMins?: number | null } | null} [options] Omit or null for live (server uses now + default duration).
+ * @param {{ arrivalIso?: string | null, durationMins?: number | null } | null} [options]
+ * Omit or null for live (server uses now + default duration).
+ *
+ * Time contract:
+ *   - If `arrivalIso` includes an offset (e.g. +10:00/+11:00), backend uses that instant.
+ *   - If `arrivalIso` is naive (no offset), backend interprets it as Melbourne local time.
  */
 export async function fetchBayEvaluation(bayId, options = null) {
   if (!bayId) return null

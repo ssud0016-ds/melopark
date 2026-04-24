@@ -36,10 +36,11 @@ class BayEvaluation(BaseModel):
     # "unknown" = no data source had useful information
     data_source: str = "db"
     # UI rendering hint:
-    #   "full"       = show occupancy + rules (sensor status + DB verdict)
-    #   "rules_only" = show rules with "no live status" (DB/API verdict, no sensor)
-    #   "none"       = show "check signage" (no verdict, no sensor)
-    data_coverage: Literal["full", "rules_only", "none"] = "none"
+    #   "full"            = show occupancy + rules (sensor status + DB verdict)
+    #   "rules_only"      = show rules with "no live status" (DB/API verdict, no sensor)
+    #   "partial_signage" = rules shown but LZ/DP sign not captured — check bay sign
+    #   "none"            = show "check signage" (no verdict, no sensor)
+    data_coverage: Literal["full", "rules_only", "partial_signage", "none"] = "none"
 
 
 class BayVerdictBrief(BaseModel):
