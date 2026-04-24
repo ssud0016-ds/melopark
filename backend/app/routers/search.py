@@ -1,7 +1,6 @@
 """Search endpoints backed by the search_index table."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from starlette.requests import Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
