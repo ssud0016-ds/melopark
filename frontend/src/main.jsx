@@ -7,6 +7,18 @@ import './index.css'
 
 // #region agent log
 try {
+  if (!import.meta.env.DEV) {
+    throw new Error('Skip debug logging outside dev mode')
+  }
+
+  const isLocalDebugHost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
+  if (!isLocalDebugHost) {
+    throw new Error('Skip debug logging outside localhost')
+  }
+
   const runId = 'pre-fix'
   const endpoint = 'http://127.0.0.1:7803/ingest/fe5101a3-be05-44f1-821d-9a39dfa234b6'
   const send = (hypothesisId, message, data) => {
