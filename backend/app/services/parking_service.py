@@ -9,6 +9,19 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# DB street-name lookup cache
+#
+# The live sensor feed only provides roadsegmentdescription for ~2k bays.
+# The bays table (populated by build_gold pipeline from parking_bays.parquet)
+# has street_name for 5k+ bays.  We load a bay_id -> street_name map from
+# the DB once (lazily, on first miss) and refresh it every 10 minutes.
+# ---------------------------------------------------------------------------
+
+_street_name_cache: dict[str, str] = {}
+_street_name_cache_ts: float = 0.0
+_STREET_CACHE_TTL_SEC = 600  # 10 minutes
+
 _ODS_BASE = (
     "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets"
     "/on-street-parking-bay-sensors"
@@ -342,6 +355,8 @@ async def fetch_parking_bays() -> list[dict]:
 
     Reads sensor data from cache only; fetches restrictions lookup in parallel
     (restrictions have their own 1-hour cache in restriction_lookup_service).
+    Street names: uses sensor feed value when present, otherwise falls back to
+    the bays DB table (populated from parking_bays.parquet by the pipeline).
     """
     from app.services.restriction_lookup_service import fetch_restrictions_lookup
 
@@ -349,6 +364,9 @@ async def fetch_parking_bays() -> list[dict]:
         fetch_raw_parking_bays(),
         fetch_restrictions_lookup(),
     )
+
+    # Load street_name fallback map from DB (cached, refreshed every 10 min).
+    sn_map = _get_street_name_map()
 
     result = []
     for r in raw_records:
@@ -361,5 +379,43 @@ async def fetch_parking_bays() -> list[dict]:
         )
         bay["bay_type"] = restrictions.get(bay_id, restrictions.get(int(bay_id) if isinstance(bay_id, str) and bay_id.isdigit() else bay_id, "Other"))
         bay["has_restriction_data"] = has_rules
+
+        # Street name fallback: prefer sensor feed, then DB lookup.
+        if not bay.get("street_name") and bay_id:
+            bay["street_name"] = sn_map.get(str(bay_id))
+
         result.append(bay)
     return result
+
+
+def _get_street_name_map() -> dict[str, str]:
+    """Return a bay_id -> street_name dict from the bays DB table.
+
+    Cached in memory with a 10-minute TTL.  Returns an empty dict if the
+    DB is unreachable (graceful degradation — sensor feed names still work).
+    """
+    global _street_name_cache, _street_name_cache_ts
+
+    now = time.monotonic()
+    if _street_name_cache and (now - _street_name_cache_ts) < _STREET_CACHE_TTL_SEC:
+        return _street_name_cache
+
+    try:
+        from app.core.db import SessionLocal
+        from app.models.bay import Bay
+
+        db = SessionLocal()
+        try:
+            rows = db.query(Bay.bay_id, Bay.street_name).filter(
+                Bay.street_name.isnot(None),
+                Bay.street_name != "",
+            ).all()
+            _street_name_cache = {str(r.bay_id): r.street_name for r in rows}
+            _street_name_cache_ts = time.monotonic()
+            logger.info("Street name cache loaded: %d entries", len(_street_name_cache))
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to load street name cache from DB — using stale/empty cache")
+
+    return _street_name_cache

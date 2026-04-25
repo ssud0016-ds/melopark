@@ -19,6 +19,7 @@ import {
   DESTINATION_MAP_ZOOM,
 } from '../../utils/mapGeo'
 import { bayHeading } from '../../utils/bayLabels'
+import { combinedFillColor } from '../../utils/bayCombinedStatus'
 
 const CLUSTER_ZOOM_CUTOFF = 18
 
@@ -32,7 +33,11 @@ const VERIFIED_FILL = {
 function verifiedBayFillColor(bay, plannerMapActive, verdictByBayId) {
   if (plannerMapActive && verdictByBayId) {
     const pv = verdictByBayId[bay.id]
-    if (pv === 'yes') return VERIFIED_FILL.available
+    if (pv === 'yes') {
+      // Sensor free + rules yes = green; sensor occupied + rules yes = amber
+      if (bay.free === 0) return '#f59e0b'
+      return VERIFIED_FILL.available
+    }
     if (pv === 'no') return VERIFIED_FILL.occupied
     return '#9ca3af'
   }
@@ -46,8 +51,12 @@ function sensorOccupancyFillColor(bay) {
   return VERIFIED_FILL[t] || VERIFIED_FILL.available
 }
 
-function bayPopupStatusWord(bay) {
-  return bay.free === 1 ? 'Free' : 'Occupied'
+function bayPopupCopy(bay, verdictByBayId) {
+  const sensor = bay.free === 1 ? 'Free' : bay.free === 0 ? 'Taken' : 'Unknown'
+  const pv = verdictByBayId?.[bay.id]
+  if (pv === 'yes') return `${sensor}, rules allow`
+  if (pv === 'no') return `${sensor}, rules block`
+  return sensor
 }
 const INTERSECTION_CELL_DEG = 0.0012
 
@@ -404,9 +413,11 @@ export default function ParkingMap({
             >
               <Popup>
                 <div className="min-w-[120px] text-xs leading-snug">
-                  <div className="font-semibold text-gray-900 dark:text-gray-100">{bayHeading(bay)}</div>
+                  <div className="font-semibold text-gray-900 dark:text-gray-100">
+                    Bay #{bay.id} {bay.name ? `\u00b7 ${bay.name}` : ''}
+                  </div>
                   <div className="mt-1 text-gray-600 dark:text-gray-400">
-                    Status: {bayPopupStatusWord(bay)}
+                    {bayPopupCopy(bay, verdictByBayId)}
                   </div>
                 </div>
               </Popup>

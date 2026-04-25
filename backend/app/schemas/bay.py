@@ -41,6 +41,7 @@ class BayEvaluation(BaseModel):
     #   "partial_signage" = rules shown but LZ/DP sign not captured — check bay sign
     #   "none"            = show "check signage" (no verdict, no sensor)
     data_coverage: Literal["full", "rules_only", "partial_signage", "none"] = "none"
+    street_name: Optional[str] = None
 
 
 class BayVerdictBrief(BaseModel):
@@ -48,3 +49,4 @@ class BayVerdictBrief(BaseModel):
     lat: Optional[float]
     lon: Optional[float]
     verdict: str
+    street_name: Optional[str] = None

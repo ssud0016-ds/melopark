@@ -755,6 +755,37 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
     bays_df["has_restriction_data"] = bays_df["bay_id"].isin(restriction_bay_ids)
     bays_df["has_signage_gap"] = bays_df["bay_id"].isin(signage_gap_bay_ids)
 
+    # ── Join street_name from parking_bays bronze ────────────────────────
+    # parking_bays.parquet provides roadsegmentdescription per kerbsideid.
+    # This gives every bay a street name (not just the ~2k sensor bays).
+    if bays_path.exists():
+        sn_df = pd.read_parquet(bays_path)
+        if "kerbsideid" in sn_df.columns and "roadsegmentdescription" in sn_df.columns:
+            sn_df = sn_df[sn_df["kerbsideid"].notna()].copy()
+            sn_df["bay_id"] = sn_df["kerbsideid"].astype(str).str.strip()
+            sn_df["street_name"] = (
+                sn_df["roadsegmentdescription"]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .str.replace(r"\s+", " ", regex=True)
+            )
+            # Empty / "None" → actual NULL
+            sn_df.loc[sn_df["street_name"].isin(["", "None", "none", "nan"]), "street_name"] = None
+            sn_lookup = sn_df[["bay_id", "street_name"]].drop_duplicates("bay_id", keep="first")
+            bays_df = bays_df.merge(sn_lookup, on="bay_id", how="left")
+            filled = bays_df["street_name"].notna().sum()
+            log.info(
+                "Street names joined: %d / %d bays (%.1f%%)",
+                filled, len(bays_df), 100 * filled / max(len(bays_df), 1),
+            )
+        else:
+            bays_df["street_name"] = None
+            log.warning("parking_bays.parquet missing kerbsideid or roadsegmentdescription — no street names")
+    else:
+        bays_df["street_name"] = None
+        log.warning("parking_bays.parquet not found — no street names")
+
     has_data = bays_df["has_restriction_data"].sum()
     log.info(
         "Bays table: %d total, %d with restriction data, %d without",
