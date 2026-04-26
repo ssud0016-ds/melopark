@@ -243,6 +243,72 @@ def _normalise_time_str(value: object) -> str | None:
     return s[:5] if len(s) >= 5 else s
 
 
+def clean_bays(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
+    """Clean static parking bay geometry/reference rows for Epic 4 joins."""
+    log.info("--- Cleaning parking bays ---")
+    df = df_raw.copy()
+    initial_rows = len(df)
+
+    if "kerbsideid" not in df.columns:
+        raise KeyError("parking_bays.parquet missing kerbsideid")
+
+    df["bay_id"] = df["kerbsideid"].astype(str).str.strip()
+    df = df[
+        df["bay_id"].notna()
+        & (df["bay_id"] != "")
+        & (df["bay_id"].str.lower() != "nan")
+        & (df["bay_id"].str.lower() != "none")
+    ].copy()
+
+    lat_col = "latitude" if "latitude" in df.columns else ("lat" if "lat" in df.columns else None)
+    lon_col = "longitude" if "longitude" in df.columns else ("lon" if "lon" in df.columns else ("lng" if "lng" in df.columns else None))
+
+    if lat_col and lon_col:
+        df["lat"] = pd.to_numeric(df[lat_col], errors="coerce")
+        df["lon"] = pd.to_numeric(df[lon_col], errors="coerce")
+    else:
+        df["lat"] = pd.NA
+        df["lon"] = pd.NA
+
+    keep_cols = ["bay_id", "lat", "lon"]
+    for c in ["roadsegmentid", "roadsegmentdescription", "the_geom", "geo_shape", "geo_point_2d", "location"]:
+        if c in df.columns:
+            keep_cols.append(c)
+
+    out = df[keep_cols].drop_duplicates(subset=["bay_id"], keep="first").reset_index(drop=True)
+    log.info("  Bays: %d → %d rows", initial_rows, len(out))
+    if verbose:
+        log.info("  Bays columns kept: %s", list(out.columns))
+    return out
+
+
+def build_accessibility_join(
+    bays_clean: pd.DataFrame,
+    restrictions_long: pd.DataFrame,
+    sensors_clean: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build Epic 4 silver join: bays + restrictions + latest sensor state."""
+    log.info("--- Building accessibility_join silver output ---")
+    out = bays_clean.merge(restrictions_long, on="bay_id", how="left")
+    out = out.merge(
+        sensors_clean[["bay_id", "status", "lastupdated"]],
+        on="bay_id",
+        how="left",
+    )
+
+    td = out["typedesc"].fillna("").astype(str).str.upper()
+    out["is_disability_only"] = td.str.contains(
+        r"\bDIS\b|DISABILITY|DISABLED|\bDP\b|DISAB|DISABLE",
+        regex=True,
+    )
+    out["disabilityext_mins"] = pd.to_numeric(out.get("disabilityext_mins"), errors="coerce")
+    out["has_disability_extension"] = out["disabilityext_mins"].fillna(0) > 0
+    out["is_available_now"] = out["status"].astype(str).str.upper().eq("ABSENT")
+
+    log.info("  accessibility_join rows: %d, unique bays: %d", len(out), out["bay_id"].nunique())
+    return out.reset_index(drop=True)
+
+
 # ─── SENSOR CLEANING ────────────────────────────────────────────────────────
 
 def clean_sensors(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
@@ -993,10 +1059,12 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     # Load bronze
     sensors_raw      = load_bronze("sensors.parquet")
     restrictions_raw = load_bronze("restrictions.parquet")
+    bays_raw         = load_bronze("parking_bays.parquet")
 
     # Clean
     sensors_clean     = clean_sensors(sensors_raw, verbose)
     restrictions_long = melt_restrictions(restrictions_raw, verbose)
+    bays_clean        = clean_bays(bays_raw, verbose)
 
     segment_rest = None
     signage_gap_bays: set[str] = set()
@@ -1031,6 +1099,11 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
 
     # Join
     merged = join_silver(sensors_clean, combined_restrictions)
+    accessibility_join = build_accessibility_join(
+        bays_clean=bays_clean,
+        restrictions_long=combined_restrictions,
+        sensors_clean=sensors_clean,
+    )
 
     addresses_clean = None
     streets_clean = None
@@ -1049,6 +1122,8 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         if segment_rest is not None:
             log.info("  data/silver/segment_restrictions_long.parquet (%d rows)", len(segment_rest))
         log.info("  data/silver/signage_gap_flags.parquet  (%d bays)", len(signage_gap_bays))
+        log.info("  data/silver/bays_clean.parquet         (%d rows)", len(bays_clean))
+        log.info("  data/silver/accessibility_join.parquet (%d rows)", len(accessibility_join))
         log.info("  data/silver/merged.parquet              (%d rows)", len(merged))
         if addresses_clean is not None and streets_clean is not None:
             log.info("  data/silver/addresses_clean.parquet (%d rows)", len(addresses_clean))
@@ -1064,6 +1139,10 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     restrictions_long.to_parquet(restrictions_path, index=False, engine="pyarrow")
     log.info("Saved restrictions_long.parquet  (%d rows)", len(restrictions_long))
 
+    bays_clean_path = SILVER_DIR / "bays_clean.parquet"
+    bays_clean.to_parquet(bays_clean_path, index=False, engine="pyarrow")
+    log.info("Saved bays_clean.parquet         (%d rows)", len(bays_clean))
+
     if segment_rest is not None:
         seg_path = SILVER_DIR / "segment_restrictions_long.parquet"
         segment_rest.to_parquet(seg_path, index=False, engine="pyarrow")
@@ -1077,6 +1156,10 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     merged_path = SILVER_DIR / "merged.parquet"
     merged.to_parquet(merged_path, index=False, engine="pyarrow")
     log.info("Saved merged.parquet             (%d rows)", len(merged))
+
+    accessibility_path = SILVER_DIR / "accessibility_join.parquet"
+    accessibility_join.to_parquet(accessibility_path, index=False, engine="pyarrow")
+    log.info("Saved accessibility_join.parquet (%d rows)", len(accessibility_join))
 
     if addresses_clean is not None and streets_clean is not None:
         addr_path = SILVER_DIR / "addresses_clean.parquet"
