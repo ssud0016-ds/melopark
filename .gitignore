@@ -64,3 +64,4 @@ backend/deploy.zip
 
 # Word temp files
 ~$*.docx
+data/bronze/
