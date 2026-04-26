@@ -1,0 +1,36 @@
+"""Epic 4 accessibility endpoints."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, HTTPException, Query
+
+from app.schemas.accessibility import AccessibilityNearbyResponse
+from app.services.accessibility_service import find_nearby_disability_bays
+
+router = APIRouter(prefix="/api/accessibility", tags=["accessibility"])
+
+
+@router.get(
+    "/nearby",
+    response_model=AccessibilityNearbyResponse,
+    summary="Find nearby disability bays near destination",
+)
+def get_nearby_disability_bays(
+    lat: float = Query(..., ge=-90.0, le=90.0, description="Destination latitude"),
+    lon: float = Query(..., ge=-180.0, le=180.0, description="Destination longitude"),
+    radius_m: int = Query(500, ge=50, le=5000, description="Search radius in meters"),
+    top_n: int = Query(20, ge=1, le=100, description="Maximum bays to return"),
+    available_only: bool = Query(False, description="Return only bays currently available"),
+) -> dict:
+    """Return disability-only bays nearest to a destination point."""
+    try:
+        return find_nearby_disability_bays(
+            dest_lat=lat,
+            dest_lon=lon,
+            radius_m=radius_m,
+            top_n=top_n,
+            available_only=available_only,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
