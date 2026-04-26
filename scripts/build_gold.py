@@ -1026,6 +1026,82 @@ def build_gold(
     return gold
 
 
+def build_gold_accessibility(export_csv: bool = False, dry_run: bool = False) -> pd.DataFrame:
+    """Build Epic 4-specific gold output from silver accessibility join."""
+    src = SILVER_DIR / "accessibility_join.parquet"
+    if not src.exists():
+        raise FileNotFoundError(
+            f"Silver accessibility file not found: {src}\n"
+            "Run clean_to_silver.py first."
+        )
+
+    log.info("=" * 60)
+    log.info("MeloPark — Epic 4 Accessibility Gold Build")
+    log.info("Input:  %s", src)
+    log.info("Output: %s", GOLD_DIR)
+    log.info("=" * 60)
+
+    df = pd.read_parquet(src)
+    if "typedesc" in df.columns:
+        df["plain_english"] = df["typedesc"].apply(translate_sign)
+    else:
+        df["plain_english"] = "Restriction details not available."
+
+    if "is_disability_only" in df.columns:
+        df["is_disability_only"] = df["is_disability_only"].fillna(False).astype(bool)
+    else:
+        df["is_disability_only"] = False
+    if "has_disability_extension" in df.columns:
+        df["has_disability_extension"] = df["has_disability_extension"].fillna(False).astype(bool)
+    else:
+        df["has_disability_extension"] = False
+    if "is_available_now" in df.columns:
+        df["is_available_now"] = df["is_available_now"].fillna(False).astype(bool)
+    else:
+        df["is_available_now"] = df["status"].astype(str).str.upper().eq("ABSENT")
+
+    keep_cols = [
+        "bay_id", "lat", "lon", "status", "is_available_now", "lastupdated",
+        "slot_num", "typedesc", "plain_english",
+        "fromday", "today", "starttime", "endtime",
+        "duration_mins", "disabilityext_mins",
+        "is_disability_only", "has_disability_extension",
+    ]
+    keep_cols = [c for c in keep_cols if c in df.columns]
+    gold = df[keep_cols].copy()
+
+    # Normalise dtypes for stable API payloads
+    gold["bay_id"] = gold["bay_id"].astype(str)
+    for c in ("lat", "lon"):
+        if c in gold.columns:
+            gold[c] = pd.to_numeric(gold[c], errors="coerce")
+    for c in ("fromday", "today", "duration_mins", "disabilityext_mins"):
+        if c in gold.columns:
+            gold[c] = pd.to_numeric(gold[c], errors="coerce").astype("Int64")
+
+    log.info(
+        "Accessibility gold summary: rows=%d, unique_bays=%d, disability_rows=%d",
+        len(gold),
+        gold["bay_id"].nunique(),
+        int(gold["is_disability_only"].sum()) if "is_disability_only" in gold.columns else 0,
+    )
+
+    if dry_run:
+        log.info("DRY RUN — accessibility gold not written.")
+        return gold
+
+    out_parquet = GOLD_DIR / "gold_accessibility_bays.parquet"
+    gold.to_parquet(out_parquet, index=False, engine="pyarrow")
+    log.info("Saved gold_accessibility_bays.parquet (%d rows)", len(gold))
+
+    if export_csv:
+        out_csv = GOLD_DIR / "gold_accessibility_bays.csv"
+        gold.to_csv(out_csv, index=False)
+        log.info("Saved gold_accessibility_bays.csv (%d rows)", len(gold))
+
+    return gold
+
+
 def build_search_index(export_csv: bool = False, verbose: bool = False) -> pd.DataFrame:
     """
     Build a unified search index from landmarks + cleaned addresses + streets.
@@ -1144,5 +1220,6 @@ Test translate_sign() directly:
             write_db=args.write_db,
             verbose=args.verbose,
         )
+        build_gold_accessibility(export_csv=args.export_csv, dry_run=args.dry_run)
         if not args.dry_run:
             build_search_index(export_csv=args.export_csv, verbose=args.verbose)
