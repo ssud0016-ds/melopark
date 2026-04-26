@@ -161,3 +161,39 @@ export async function fetchEvaluateBulk(bbox, options) {
     return []
   }
 }
+
+/**
+ * Fetch nearby disability-only bays around a destination point.
+ * Backend: GET /api/accessibility/nearby
+ */
+export async function fetchAccessibilityNearby({
+  lat,
+  lon,
+  radiusM = 500,
+  topN = 20,
+  availableOnly = false,
+}) {
+  if (lat == null || lon == null) return null
+  const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+  const params = new URLSearchParams()
+  params.set('lat', String(lat))
+  params.set('lon', String(lon))
+  params.set('radius_m', String(radiusM))
+  params.set('top_n', String(topN))
+  params.set('available_only', String(Boolean(availableOnly)))
+  const url = `${base}/api/accessibility/nearby?${params.toString()}`
+
+  const res = await fetch(url)
+  if (!res.ok) {
+    let detail = ''
+    try {
+      const body = await res.json()
+      if (body?.detail != null) detail = String(body.detail)
+    } catch {
+      // ignore
+    }
+    throw new Error(`Could not load accessibility bays (${res.status})${detail ? `: ${detail}` : ''}`)
+  }
+  const data = await res.json()
+  return data && typeof data === 'object' ? data : null
+}
