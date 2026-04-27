@@ -19,11 +19,9 @@ import {
   DESTINATION_MAP_ZOOM,
 } from '../../utils/mapGeo'
 import { bayHeading } from '../../utils/bayLabels'
-import { combinedFillColor } from '../../utils/bayCombinedStatus'
-
 const CLUSTER_ZOOM_CUTOFF = 18
 
-/** Verified-dot fill colours (match map legend): green / orange / red */
+/** Bay-dot fill colours (match map legend): lime / orange / peach / red. */
 const VERIFIED_FILL = {
   available: '#a3ec48',
   trap: '#FFB382',
@@ -161,6 +159,7 @@ export default function ParkingMap({
   defaultZoom = DEFAULT_MAP_ZOOM,
   destZoom = DESTINATION_MAP_ZOOM,
   isMobile = false,
+  hideHint = false,
 }) {
   const [isDark, setIsDark] = useState(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -430,14 +429,14 @@ export default function ParkingMap({
         )}
 
         <div
-          className="pointer-events-none absolute z-[450] rounded-xl border border-brand bg-white/95 px-3 py-1.5 text-xs font-semibold text-brand shadow-card text-center dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
+          className={`pointer-events-none absolute z-[450] rounded-xl border border-brand bg-white/95 px-3 py-1.5 text-xs font-semibold text-brand shadow-card text-center dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100 ${hideHint ? 'hidden' : ''}`}
           style={
             isMobile
               ? {
                   left: '14px',
-                  right: '220px',
+                  right: '130px',
                   bottom: destination ? '108px' : '86px',
-                  maxWidth: 'calc(100% - 234px)',
+                  maxWidth: 'calc(100% - 144px)',
                   whiteSpace: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'nowrap' : 'normal') : 'normal',
                   overflow: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'hidden' : 'visible') : 'visible',
                   textOverflow: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'ellipsis' : 'clip') : 'clip',
@@ -454,10 +453,12 @@ export default function ParkingMap({
         >
           {zoomLevel < CLUSTER_ZOOM_CUTOFF ? (
             <>
-              <div>Zoom in to see individual parking bays.</div>
-              <div className="mt-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300">
-                Cluster numbers show available/total bays and change as you zoom.
-              </div>
+              <div>{isMobile ? 'Zoom in for bays' : 'Zoom in to see individual parking bays.'}</div>
+              {!isMobile && (
+                <div className="mt-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300">
+                  Cluster numbers show available/total bays and change as you zoom.
+                </div>
+              )}
             </>
           ) : (
             <div>Tap a parking spot to view its rules.</div>
