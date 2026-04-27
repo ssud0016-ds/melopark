@@ -1,0 +1,14 @@
+{
+  "pipeline_stage": "silver",
+  "epic": "epic5",
+  "cleaned_at": "2026-04-27T08:05:50.482997+00:00",
+  "qa": {
+    "clean_counts_rows": 1474806,
+    "clean_locations_rows": 137,
+    "joined_geo_rows": 1474806,
+    "unique_count_sensors": 100,
+    "unique_location_sensors": 137,
+    "matched_sensors_by_id": 100,
+    "match_rate_pct": 100.0
+  }
+}
