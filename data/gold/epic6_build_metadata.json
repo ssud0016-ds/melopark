@@ -1,0 +1,11 @@
+{
+  "pipeline_stage": "gold",
+  "epic": "epic6",
+  "built_at": "2026-04-27T08:43:46.487618+00:00",
+  "stats": {
+    "traffic_profile_rows": 4706,
+    "peak_warnings_6h_rows": 6,
+    "event_risk_rows": 0,
+    "alternative_guidance_rows": 0
+  }
+}
