@@ -1,0 +1,10 @@
+{
+  "pipeline_stage": "gold",
+  "epic": "epic5",
+  "built_at": "2026-04-27T08:05:56.523997+00:00",
+  "stats": {
+    "pressure_profile_rows": 14779,
+    "less_crowded_now_rows": 5,
+    "busy_forecast_rows": 528
+  }
+}
