@@ -1,0 +1,10 @@
+{
+  "traffic_rows_raw": 117851,
+  "traffic_rows_clean": 117851,
+  "traffic_sites_clean": 4706,
+  "venues_rows_raw": 206,
+  "venues_rows_clean": 0,
+  "events_rows_raw": 0,
+  "events_rows_clean": 0,
+  "events_joined_rows": 0
+}

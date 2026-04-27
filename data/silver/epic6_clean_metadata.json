@@ -1,0 +1,15 @@
+{
+  "pipeline_stage": "silver",
+  "epic": "epic6",
+  "cleaned_at": "2026-04-27T08:43:44.144901+00:00",
+  "qa": {
+    "traffic_rows_raw": 117851,
+    "traffic_rows_clean": 117851,
+    "traffic_sites_clean": 4706,
+    "venues_rows_raw": 206,
+    "venues_rows_clean": 0,
+    "events_rows_raw": 0,
+    "events_rows_clean": 0,
+    "events_joined_rows": 0
+  }
+}
