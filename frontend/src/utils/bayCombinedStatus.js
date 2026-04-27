@@ -119,8 +119,8 @@ export const COMBINED_COLORS = {
     text: 'text-white',
     textMuted: 'text-emerald-100',
     border: 'border-emerald-700',
-    dot: '#34d399',
-    fill: '#34d399',
+    dot: '#a3ec48',
+    fill: '#a3ec48',
   },
   red: {
     bg: 'bg-red-600',
