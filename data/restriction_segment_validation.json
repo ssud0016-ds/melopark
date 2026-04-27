@@ -1,0 +1,14 @@
+{
+  "total_sensor_bays": 3309,
+  "old_direct_join": 72,
+  "restriction_bays_in_pbays": 72,
+  "road_segments_with_restrictions": 11,
+  "sensor_segments_total": 238,
+  "sensor_segments_covered": 11,
+  "sensor_segments_uncovered": 227,
+  "sensor_bays_via_restriction_segments": 226,
+  "sensor_bays_via_sign_plates_gap": 2936,
+  "combined_coverage": 3162,
+  "combined_coverage_pct": 95.6,
+  "restriction_rows_propagated": 125
+}

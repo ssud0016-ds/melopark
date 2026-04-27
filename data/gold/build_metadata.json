@@ -1,21 +1,22 @@
 {
   "pipeline_stage": "gold",
-  "built_at": "2026-04-14T15:24:04.925531+00:00",
-  "evaluated_at": "Wednesday 2026-04-15 01:24:00",
+  "built_at": "2026-04-25T12:12:50.853810+00:00",
+  "evaluated_at": "Saturday 2026-04-25 22:12:42",
   "notes": [
     "is_active_now reflects the restriction state at build time.",
     "In production, verdicts are computed per-request by restriction_evaluator.py.",
     "plain_english, is_strict, rule_category are stable and cached in Postgres."
   ],
   "stats": {
-    "total_rows": 125,
-    "unique_bays": 72,
-    "active_restrictions": 0,
-    "strict_restrictions": 1,
+    "total_rows": 9504,
+    "unique_bays": 3063,
+    "active_restrictions": 79,
+    "strict_restrictions": 13,
     "rule_categories": {
-      "timed": 121,
-      "disabled": 3,
-      "loading": 1
+      "timed": 9372,
+      "other": 119,
+      "disabled": 8,
+      "loading": 5
     },
     "columns": [
       "bay_id",
