@@ -1,0 +1,360 @@
+id,name,sub,category,lat,lng
+1,Bourke Street Mall,"Bourke St, Melbourne CBD",landmark,-37.8136,144.9653
+2,Chinatown Melbourne,"Little Bourke St, Melbourne",landmark,-37.8118,144.9688
+3,Collins Street,"Collins St, Melbourne CBD",landmark,-37.8153,144.9634
+4,Crown Casino,"8 Whiteman St, Southbank",landmark,-37.8228,144.9575
+5,Docklands,"Harbour Esplanade, Docklands",landmark,-37.8157,144.9397
+6,Elizabeth Street,"Elizabeth St, Melbourne CBD",landmark,-37.8136,144.9601
+7,Emporium Melbourne,287 Lonsdale St,landmark,-37.812,144.9644
+8,Federation Square,Swanston St & Flinders St,landmark,-37.818,144.9691
+9,Flinders Street Station,Flinders St & Swanston St,landmark,-37.8183,144.9671
+10,GPO Melbourne,"350 Bourke St, Melbourne",landmark,-37.8131,144.9636
+11,Melbourne Central,Cnr La Trobe & Swanston St,landmark,-37.8102,144.9628
+12,Melbourne Museum,"11 Nicholson St, Carlton",landmark,-37.8033,144.9717
+13,Melbourne Town Hall,90-120 Swanston St,landmark,-37.8148,144.9665
+14,Old Melbourne Gaol,"377 Russell St, Melbourne",landmark,-37.8078,144.9654
+15,Queen Victoria Market,"513 Elizabeth St, Melbourne",landmark,-37.8076,144.9568
+16,RMIT University,"124 La Trobe St, Melbourne",landmark,-37.8083,144.9632
+17,State Library Victoria,"328 Swanston St, Melbourne",landmark,-37.8098,144.9652
+18,Swanston Street,"Swanston St, Melbourne CBD",landmark,-37.8136,144.9663
+19,A'Beckett Street,Melbourne CBD,street,-37.80957674589744,144.95981273923078
+20,Agnes Street,Melbourne CBD,street,-37.817408764375,144.980010709375
+21,Albert Coates Lane,Melbourne CBD,street,-37.81100153,144.96512585000002
+22,Albert Street,Melbourne CBD,street,-37.80990579105263,144.9791374226316
+23,Alfred Place,Melbourne CBD,street,-37.81380627222222,144.9699699311111
+24,Anthony Street,Melbourne CBD,street,-37.80910614,144.959064924
+25,Artemis Lane,Melbourne CBD,street,-37.81056341,144.966293125
+26,Aurora Lane,Melbourne CBD,street,-37.82038362846154,144.95112016153846
+27,Austral Lane,Melbourne CBD,street,-37.816314952,144.960757094
+28,Bank Place,Melbourne CBD,street,-37.81652877333333,144.96037850000002
+29,Batman Street,Melbourne CBD,street,-37.81074693785714,144.95148329785715
+30,Bennetts Lane,Melbourne CBD,street,-37.80903962,144.96778591333333
+31,Benson Walk,Melbourne CBD,street,-37.81372460666666,144.97069496666666
+32,Berkeley Street,Melbourne CBD,street,-37.805055295,144.959787335
+33,Block Arcade,Melbourne CBD,street,-37.81561850199999,144.964260178
+34,Block Place,Melbourne CBD,street,-37.815465108333335,144.96441373166667
+35,Boathouse Drive,Melbourne CBD,street,-37.81970948166667,144.97091295333334
+36,Bond Street,Melbourne CBD,street,-37.81814597,144.9627827725
+37,Boughton Place,Melbourne CBD,street,-37.811397805,144.95190030499998
+38,Bourke Street,Melbourne CBD,street,-37.814074718939395,144.96371858856062
+39,Bouverie Street,Melbourne CBD,street,-37.80561753,144.961534137
+40,Brown Alley,Melbourne CBD,street,-37.81480208,144.95544196166665
+41,Caledonian Lane,Melbourne CBD,street,-37.8122797775,144.96447541499998
+42,Campbell Arcade,Melbourne CBD,street,-37.81771247,144.966025935
+43,Capel Street,Melbourne CBD,street,-37.8063633555,144.9550790235
+44,Cardigan Street,Melbourne CBD,street,-37.805824335,144.96454516900002
+45,Carson Place,Melbourne CBD,street,-37.815026795,144.9650683725
+46,Cathedral Place,Melbourne CBD,street,-37.810858026666665,144.97718974
+47,Celestial Avenue,Melbourne CBD,street,-37.8117986,144.96621100666667
+48,Centre Place,Melbourne CBD,street,-37.81655493142858,144.96548201142858
+49,Centreway Arcade,Melbourne CBD,street,-37.81629219333333,144.96536911
+50,Charles Street,Melbourne CBD,street,-37.81742953272727,144.98122389454545
+51,Chetwynd Street,Melbourne CBD,street,-37.80613882714285,144.95216209
+52,Church Street,Melbourne CBD,street,-37.81656389,144.95733300571428
+53,City Road,Melbourne CBD,street,-37.82252433375,144.964718926875
+54,Clarendon Street,Melbourne CBD,street,-37.81551815137931,144.9759446362069
+55,Cobden Street,Melbourne CBD,street,-37.8052896,144.9573564125
+56,Cohen Place,Melbourne CBD,street,-37.81092106166667,144.96910073166666
+57,Collins Street,Melbourne CBD,street,-37.81700250272727,144.96134479581818
+58,Cook Street,Melbourne CBD,street,-37.82176202,144.96415922333333
+59,Cornell Place,Melbourne CBD,street,-37.805154865,144.96394806
+60,Coromandel Place,Melbourne CBD,street,-37.813252785,144.969223015
+61,Corrs Lane,Melbourne CBD,street,-37.811171656,144.968279941
+62,Coverlid Place,Melbourne CBD,street,-37.812082473333334,144.96842748
+63,Crossley Street,Melbourne CBD,street,-37.811409035,144.9710961675
+64,Dame Edna Place,Melbourne CBD,street,-37.8153166,144.96459065
+65,Davisons Place,Melbourne CBD,street,-37.80907928,144.96729915499998
+66,Degraves Street,Melbourne CBD,street,-37.817237211999995,144.965715122
+67,Dodds Street,Melbourne CBD,street,-37.824330026666665,144.968490405
+68,Drewery Alley,Melbourne CBD,street,-37.81098574666667,144.96381114
+69,Drewery Lane,Melbourne CBD,street,-37.811429505,144.96419965
+70,Driver Lane,Melbourne CBD,street,-37.8128959975,144.9630235025
+71,Drummond Street,Melbourne CBD,street,-37.806253095,144.967493322
+72,Dudley Street,Melbourne CBD,street,-37.8093498555,144.9520239925
+73,Dukes Walk,Melbourne CBD,street,-37.824394005,144.95145015999998
+74,Eades Place,Melbourne CBD,street,-37.806018638333335,144.95113967
+75,Eades Street,Melbourne CBD,street,-37.80955538571429,144.98090755571428
+76,Eagle Alley,Melbourne CBD,street,-37.8126353,144.95449670166667
+77,Earl Street,Melbourne CBD,street,-37.80603785666667,144.96535160777776
+78,Elizabeth Street,Melbourne CBD,street,-37.81133598,144.9618437083146
+79,Elm Tree Place,Melbourne CBD,street,-37.805799985,144.9680397825
+80,Equitable Place,Melbourne CBD,street,-37.815722102,144.963128272
+81,Evans Lane,Melbourne CBD,street,-37.80898227,144.9687403
+82,Exhibition Street,Melbourne CBD,street,-37.81177953066667,144.97045166711112
+83,Exploration Lane,Melbourne CBD,street,-37.80888896333334,144.96820328166666
+84,Fanning Street,Melbourne CBD,street,-37.822295255,144.9668329275
+85,Fawkner Street,Melbourne CBD,street,-37.82305504055555,144.96493921555555
+86,Flagstaff Lane,Melbourne CBD,street,-37.809704805,144.95200799999998
+87,Flanigan Lane,Melbourne CBD,street,-37.8109704425,144.9604222975
+88,Fleming Place,Melbourne CBD,street,-37.8157804625,144.9629008925
+89,Flinders Court,Melbourne CBD,street,-37.81775421,144.96433045666666
+90,Flinders Lane,Melbourne CBD,street,-37.81719830568182,144.96449522545456
+91,Flinders Street,Melbourne CBD,street,-37.81882414473215,144.96279495000002
+92,Flinders Street Station Concourse,Melbourne CBD,street,-37.818354025,144.96727376
+93,Francis Street,Melbourne CBD,street,-37.818219822,144.955159099
+94,Franklin Street,Melbourne CBD,street,-37.80829116941177,144.96012812911766
+95,Frederick Way,Melbourne CBD,street,-37.809938665,144.95681983999998
+96,Freshwater Place,Melbourne CBD,street,-37.82191892,144.962284738
+97,Gallaghers Place,Melbourne CBD,street,-37.81653795166667,144.956432575
+98,George Parade,Melbourne CBD,street,-37.81488112833333,144.970245675
+99,George Street,Melbourne CBD,street,-37.81508398571429,144.98421121571428
+100,Georgiana Street,Melbourne CBD,street,-37.821579709999995,144.95049607
+101,Gipps Street,Melbourne CBD,street,-37.81282596333333,144.98386987166666
+102,Godfrey Street,Melbourne CBD,street,-37.81743556799999,144.954029794
+103,Goldie Place,Melbourne CBD,street,-37.81322051666667,144.96060107666668
+104,Goldsbrough Lane,Melbourne CBD,street,-37.8154034625,144.9573961225
+105,Grant Street,Melbourne CBD,street,-37.824982934999994,144.97028785
+106,Grey Street,Melbourne CBD,street,-37.811731138333336,144.98420362333334
+107,Guests Lane,Melbourne CBD,street,-37.814703475,144.95709133999998
+108,Guildford Lane,Melbourne CBD,street,-37.81135211,144.959834932
+109,Hardware Lane,Melbourne CBD,street,-37.81365376,144.96123298
+110,Hardware Street,Melbourne CBD,street,-37.81234209,144.9606603875
+111,Harwood Place,Melbourne CBD,street,-37.81107702666667,144.97178545
+112,Hayward Lane,Melbourne CBD,street,-37.809612367,144.967110115
+113,Healeys Lane,Melbourne CBD,street,-37.81359562666666,144.95586174333334
+114,Heffernan Lane,Melbourne CBD,street,-37.81142656,144.96660053
+115,Highlander Lane,Melbourne CBD,street,-37.81957173666667,144.95800795666665
+116,Hosier Lane,Melbourne CBD,street,-37.816233715,144.96898128
+117,Hotham Street,Melbourne CBD,street,-37.81394013875,144.98420822
+118,Howard Street,Melbourne CBD,street,-37.80616213818182,144.95348177363636
+119,Howey Place,Melbourne CBD,street,-37.81503592666667,144.96533123999998
+120,Hudson Place,Melbourne CBD,street,-37.805486295,144.96851533
+121,Jane Bell Lane,Melbourne CBD,street,-37.810351238571435,144.96623829
+122,Jeffcott Street,Melbourne CBD,street,-37.811834313125,144.951844331875
+123,Jolimont Lane,Melbourne CBD,street,-37.817704346363634,144.9794154818182
+124,Jolimont Road,Melbourne CBD,street,-37.81746249,144.97875006666666
+125,Jolimont Street,Melbourne CBD,street,-37.818446465,144.98038820666667
+126,Jolimont Terrace,Melbourne CBD,street,-37.817585956,144.981925348
+127,Jones Lane,Melbourne CBD,street,-37.80977785,144.968590208
+128,Katherine Place,Melbourne CBD,street,-37.820174084,144.95657167
+129,Kavanagh Street,Melbourne CBD,street,-37.82381735235294,144.96479765882353
+130,King Street,Melbourne CBD,street,-37.813770725072466,144.95429444434782
+131,Kings Way,Melbourne CBD,street,-37.8247750475,144.9589682925
+132,Kirks Lane,Melbourne CBD,street,-37.814087786,144.96121250599998
+133,La Trobe Street,Melbourne CBD,street,-37.810588205408166,144.96040233959184
+134,Lacey Place,Melbourne CBD,street,-37.811158385,144.968797545
+135,Lansdowne Street,Melbourne CBD,street,-37.80935209,144.97846034666668
+136,Leicester Street,Melbourne CBD,street,-37.80562246,144.96009165200002
+137,Little Bourke Place,Melbourne CBD,street,-37.81005529666667,144.9715396
+138,Little Bourke Street,Melbourne CBD,street,-37.813256442674415,144.96269836534884
+139,Little Collins Street,Melbourne CBD,street,-37.81518002266667,144.96374568633334
+140,Little La Trobe Street,Melbourne CBD,street,-37.80938074214286,144.96244709571428
+141,Little Lonsdale Street,Melbourne CBD,street,-37.81114816692307,144.96234500471152
+142,Little Queen Street,Melbourne CBD,street,-37.814710175,144.95935914
+143,Liverpool Street,Melbourne CBD,street,-37.811167336,144.971373452
+144,Lonsdale Street,Melbourne CBD,street,-37.81202017903226,144.9622817247742
+145,Lygon Street,Melbourne CBD,street,-37.806088997857145,144.96601150714284
+146,Mackenzie Street,Melbourne CBD,street,-37.807574544285714,144.9669344642857
+147,Manchester Lane,Melbourne CBD,street,-37.816088378,144.965923451
+148,Mansion House Lane,Melbourne CBD,street,-37.808209984,144.950736826
+149,Manton Lane,Melbourne CBD,street,-37.81348070333333,144.95509180000002
+150,Market Lane,Melbourne CBD,street,-37.81190941375,144.96933018125
+151,Market Street,Melbourne CBD,street,-37.81819588,144.96076751333334
+152,Mcdonald Lane,Melbourne CBD,street,-37.80564436,144.966877185
+153,Mckillop Street,Melbourne CBD,street,-37.81523949,144.96169893333334
+154,Mclean Alley,Melbourne CBD,street,-37.81141221,144.96036165
+155,Melbourne Place,Melbourne CBD,street,-37.813277515555555,144.96872199777778
+156,Meyers Place,Melbourne CBD,street,-37.812104724,144.972250134
+157,Mill Place,Melbourne CBD,street,-37.81763122333333,144.96392092333335
+158,Milton Street,Melbourne CBD,street,-37.80793828444445,144.9536871422222
+159,Moore Street,Melbourne CBD,street,-37.824291242307694,144.96573331384616
+160,Morrison Place,Melbourne CBD,street,-37.80905152666667,144.97677629
+161,Niagara Lane,Melbourne CBD,street,-37.813117154,144.96146398000002
+162,Nicholson Place,Melbourne CBD,street,-37.813473825,144.95367106499998
+163,Nicholson Street,Melbourne CBD,street,-37.80710649666667,144.97350411
+164,Norval Place,Melbourne CBD,street,-37.821074955,144.95602923500002
+165,O'Connell Street,Melbourne CBD,street,-37.80549509,144.95808190833333
+166,Oliver Lane,Melbourne CBD,street,-37.8161038725,144.97012195625
+167,Olympic Boulevard,Melbourne CBD,street,-37.82391887,144.9821638125
+168,Orr Street,Melbourne CBD,street,-37.80651098333333,144.9652081066667
+169,Palmer Street,Melbourne CBD,street,-37.81754052333333,144.98052823333333
+170,Park Street,Melbourne CBD,street,-37.81265588,144.95516204571427
+171,Parliament Place,Melbourne CBD,street,-37.81123565,144.97546452666668
+172,Peel Street,Melbourne CBD,street,-37.80732403363636,144.95611279000002
+173,Power Street,Melbourne CBD,street,-37.8238158595,144.9623733425
+174,Presgrave Place,Melbourne CBD,street,-37.81494382666667,144.96554537
+175,Princes Walk,Melbourne CBD,street,-37.818668995,144.9691536375
+176,Punch Lane,Melbourne CBD,street,-37.81040446,144.9708778975
+177,Queen Street,Melbourne CBD,street,-37.81257016116883,144.95966676987013
+178,Queens Bridge Street,Melbourne CBD,street,-37.823286267647056,144.96078186058824
+179,Queensberry Street,Melbourne CBD,street,-37.80519273666667,144.96769066333334
+180,Qv Square,Melbourne CBD,street,-37.810758785,144.965412345
+181,Qv Terrace,Melbourne CBD,street,-37.81073396,144.96559638000002
+182,Qv Upper Terrace,Melbourne CBD,street,-37.81030881,144.96559606666668
+183,Qv Urban Market,Melbourne CBD,street,-37.81059288,144.96566275
+184,Ramsay Lane,Melbourne CBD,street,-37.815392262,144.956997668
+185,Rankins Lane,Melbourne CBD,street,-37.8137457525,144.96213827
+186,Rathdowne Street,Melbourne CBD,street,-37.806391175,144.9688076825
+187,Rebecca Walk,Melbourne CBD,street,-37.821441207,144.956584531
+188,Red Cape Lane,Melbourne CBD,street,-37.81070133166667,144.96508401666668
+189,Ridgway Place,Melbourne CBD,street,-37.81303793666667,144.97241089833332
+190,Roden Street,Melbourne CBD,street,-37.80602621,144.950163525
+191,Rose Lane,Melbourne CBD,street,-37.81526458,144.954186545
+192,Rosslyn Street,Melbourne CBD,street,-37.80801116791667,144.95204527291665
+193,Royal Arcade,Melbourne CBD,street,-37.81457597142857,144.9639592
+194,Royal Lane,Melbourne CBD,street,-37.813762972,144.96694354599998
+195,Russell Place,Melbourne CBD,street,-37.813640930000005,144.9673323942857
+196,Russell Street,Melbourne CBD,street,-37.81198315625,144.96771822145834
+197,Rutledge Lane,Melbourne CBD,street,-37.81652838,144.96890784666667
+198,Siddeley Street,Melbourne CBD,street,-37.822229191333335,144.95344956866666
+199,Singers Lane,Melbourne CBD,street,-37.81108413,144.95673892000002
+200,Sniders Lane,Melbourne CBD,street,-37.811405525,144.96391259
+201,Somerset Place,Melbourne CBD,street,-37.813736979,144.96249130200002
+202,South Wharf,Melbourne CBD,street,-37.82404038,144.95136853000002
+203,South Wharf Promenade,Melbourne CBD,street,-37.824080795,144.95296752000002
+204,Southbank Boulevard,Melbourne CBD,street,-37.8229151308,144.9658898216
+205,Southern Cross Lane,Melbourne CBD,street,-37.812767875000006,144.970035775
+206,Southgate Avenue,Melbourne CBD,street,-37.8209904,144.965708025
+207,Spencer Street,Melbourne CBD,street,-37.81512011847059,144.95216881258824
+208,Spring Street,Melbourne CBD,street,-37.81171346555555,144.97316227805555
+209,St Andrews Place,Melbourne CBD,street,-37.81206901636364,144.9763659890909
+210,St Kilda Road,Melbourne CBD,street,-37.822043169,144.969200651
+211,Stanley Street,Melbourne CBD,street,-37.80718109833333,144.95062581833335
+212,Staughton Alley,Melbourne CBD,street,-37.81710933333333,144.96406797
+213,Sturt Street,Melbourne CBD,street,-37.82362588583334,144.96728393166666
+214,Sutherland Street,Melbourne CBD,street,-37.811125378571425,144.9608258642857
+215,Swanston Street,Melbourne CBD,street,-37.81185916844156,144.9650296838961
+216,Tattersalls Lane,Melbourne CBD,street,-37.811971655,144.9656057075
+217,Tavistock Place,Melbourne CBD,street,-37.818688547142855,144.96173419142858
+218,Therry Street,Melbourne CBD,street,-37.8071432236,144.9597470336
+219,Timothy Lane,Melbourne CBD,street,-37.81212381,144.96103115
+220,Trades Hall Place,Melbourne CBD,street,-37.806274275,144.966783265
+221,Trinity Place,Melbourne CBD,street,-37.81443007,144.98353408666665
+222,Victoria Parade,Melbourne CBD,street,-37.808840472058826,144.97884420911765
+223,Victoria Street,Melbourne CBD,street,-37.80594293728813,144.95680404355932
+224,Village Street,Melbourne CBD,street,-37.82112552875,144.95098897625
+225,Walker Street,Melbourne CBD,street,-37.82417764666667,144.95943390333332
+226,Walsh Street,Melbourne CBD,street,-37.80825812571429,144.95332955
+227,Waratah Place,Melbourne CBD,street,-37.8114033725,144.96699846
+228,Warburton Alley,Melbourne CBD,street,-37.813357805,144.9617260075
+229,Warburton Lane,Melbourne CBD,street,-37.81389632,144.96194793
+230,Watertank Way,Melbourne CBD,street,-37.815309381999995,144.953414286
+231,Watson Place,Melbourne CBD,street,-37.815767398000006,144.968088768
+232,Wellington Crescent,Melbourne CBD,street,-37.81721609428571,144.9779576042857
+233,Wellington Parade,Melbourne CBD,street,-37.815714093333334,144.98109393333334
+234,Wellington Parade South,Melbourne CBD,street,-37.81636676736842,144.97753399263158
+235,Whiteman Street,Melbourne CBD,street,-37.82351826083333,144.95894365
+236,William Street,Melbourne CBD,street,-37.81326304647887,144.95712735732394
+237,Windsor Place,Melbourne CBD,street,-37.8119224375,144.97262445500002
+238,Wurundjeri Way,Melbourne CBD,street,-37.820271698666666,144.951491988
+239,Basement,Melbourne,address,-37.8155626,144.96422921
+240,"Carpark, Federation Square",Melbourne,address,-37.81774369,144.97145774
+241,Cinemas,Southbank,address,-37.82411871,144.95770674
+242,City Pillar Opposite,Melbourne,address,-37.81466985,144.96604313
+243,"Cooks' Cottage, Fitzroy Gardens",East Melbourne,address,-37.81450262,144.97950559
+244,Eight Hour Reserve,Melbourne,address,-37.80724066,144.96551805
+245,"Flagstaff Gardens Tennis Courts, Flagstaff Gardens",West Melbourne,address,-37.8099313,144.95512814
+246,Flower Kiosk Opposite,Melbourne,address,-37.81458569,144.96621805
+247,Food Truck- Site No B3 Near Melb Uni Boat Club,Melbourne,address,-37.8196057,144.97198484
+248,Kiosk,Melbourne,address,-37.81039628,144.96559214
+249,"Kiosk 14, Ground",Melbourne,address,-37.81172927,144.96349012
+250,"Kiosk 2, Ground",Melbourne,address,-37.81051045,144.96289557
+251,"Kiosk 4, Ground",Melbourne,address,-37.81055976,144.96291666
+252,Kiosk K2,Melbourne,address,-37.81814995,144.96722025
+253,Kiosk T11,Melbourne,address,-37.81855368,144.96737413
+254,Kiosk T6,Melbourne,address,-37.81810837,144.96742548
+255,Kiosk T9,Melbourne,address,-37.8186041,144.96707518
+256,Level 2,Melbourne,address,-37.81273635,144.96696287
+257,LwrGround,Southbank,address,-37.8199994,144.96542978
+258,"Queen Vic Market Toilets, Queen Victoria Market",Melbourne,address,-37.80682046,144.958747
+259,Residence Alexandra Gardens,Melbourne,address,-37.82092324,144.97285057
+260,"Richmond Rowing Club, Yarra Boathouses",Melbourne,address,-37.81979689,144.96997387
+261,"Shed L, Queen Victoria Market",Melbourne,address,-37.80771623,144.95677895
+262,Shop 1,Melbourne,address,-37.81403397,144.96450969
+263,Shop 1,Melbourne,address,-37.82061104,144.95793016
+264,"Shop 1, Ground",Melbourne,address,-37.81023269,144.96265476
+265,"Shop 1, Level 1",Melbourne,address,-37.81274155,144.96704201
+266,"Shop 101A, Level 1",Southbank,address,-37.8247476,144.95830151
+267,"Shop 102, Level 1",Melbourne,address,-37.81034965,144.96277803
+268,"Shop 103, Level 1",Melbourne,address,-37.81044169,144.96282104
+269,"Shop 103, Level 1",Southbank,address,-37.82491538,144.95863462
+270,Shop 10b,Melbourne,address,-37.81224536,144.96674691
+271,Shop 11,Melbourne,address,-37.81666225,144.96553622
+272,"Shop 115, Level 1",Melbourne,address,-37.81122251,144.96318594
+273,Shop 117,Melbourne,address,-37.81244114,144.96578194
+274,"Shop 119, Level 1",Melbourne,address,-37.81144526,144.96329004
+275,"Shop 123, Level 1",Melbourne,address,-37.81151655,144.96355388
+276,"Shop 129, Level 1",Melbourne,address,-37.81104556,144.96333376
+277,Shop 13,Melbourne,address,-37.81279687,144.9661108
+278,Shop 13,Melbourne,address,-37.81520282,144.96300407
+279,"Shop 138, Level 1",Melbourne,address,-37.81038781,144.96319971
+280,Shop 14,Melbourne,address,-37.81513626,144.96297344
+281,"Shop 140, Level 1",Melbourne,address,-37.81034311,144.96334814
+282,"Shop 144, Level 1",Melbourne,address,-37.81013558,144.96338683
+283,"Shop 15, Ground",Melbourne,address,-37.81557339,144.96409234
+284,"Shop 151, Level 1",Melbourne,address,-37.80997995,144.9636468
+285,"Shop 154, Level 1",Melbourne,address,-37.81003676,144.9630444
+286,"Shop 155, Level 1",Melbourne,address,-37.81016696,144.96303384
+287,"Shop 16, LwrGround",Melbourne,address,-37.81027335,144.96270904
+288,Shop 17,Melbourne,address,-37.81558241,144.96425623
+289,"Shop 17, Level 1",Docklands,address,-37.81570245,144.95147133
+290,"Shop 17A, Ground",Southbank,address,-37.82255957,144.95917764
+291,Shop 18,Melbourne,address,-37.81238901,144.9660034
+292,"Shop 18, LwrGround",Melbourne,address,-37.8103625,144.96275665
+293,Shop 19,Melbourne,address,-37.81651506,144.96546884
+294,"Shop 19, Ground",Melbourne,address,-37.8163337,144.96542549
+295,Shop 20,Melbourne,address,-37.81255401,144.96599385
+296,"Shop 201-203, Level 1",Docklands,address,-37.81708272,144.95237535
+297,"Shop 207, Level 1",Docklands,address,-37.8169904,144.95267695
+298,"Shop 21, LwrGround",Melbourne,address,-37.81053182,144.96283539
+299,"Shop 215, Level 1",Docklands,address,-37.81550258,144.95134384
+300,"Shop 23, Level 1",Docklands,address,-37.81490253,144.95102406
+301,"Shop 23, LwrGround",Melbourne,address,-37.81060694,144.96287032
+302,Shop 26,Melbourne,address,-37.81575487,144.96461565
+303,Shop 27A,Melbourne,address,-37.81461172,144.9646806
+304,"Shop 28, Ground",Southbank,address,-37.82303212,144.9578912
+305,Shop 2R,Southbank,address,-37.82153238,144.96211028
+306,Shop 3,Melbourne,address,-37.81298161,144.9631106
+307,Shop 3,Melbourne,address,-37.81303992,144.96626718
+308,"Shop 32, Level 1",Docklands,address,-37.81479283,144.95178886
+309,"Shop 32, LwrGround",Melbourne,address,-37.81094352,144.96302684
+310,Shop 33-34,Melbourne,address,-37.81433745,144.96455651
+311,"Shop 36, Level 1",Docklands,address,-37.81506733,144.95188251
+312,Shop 37,Melbourne,address,-37.81245853,144.96571109
+313,"Shop 38, Ground",Melbourne,address,-37.81184647,144.96316414
+314,"Shop 39, Ground",Melbourne,address,-37.81163236,144.96357276
+315,Shop 4,Melbourne,address,-37.81267383,144.96686972
+316,Shop 4,Melbourne,address,-37.81609997,144.9673701
+317,"Shop 41, Level 1",Docklands,address,-37.81573369,144.9522078
+318,Shop 42,Melbourne,address,-37.81455129,144.96458577
+319,Shop 45,Melbourne,address,-37.81283647,144.96586527
+320,"Shop 45, Ground",Melbourne,address,-37.8113186,144.96336043
+321,"Shop 48-50, LwrGround",Melbourne,address,-37.8115178,144.9635541
+322,"Shop 5, Level 1",Docklands,address,-37.81668159,144.95214286
+323,"Shop 5, LwrGround",Melbourne,address,-37.81021051,144.96233972
+324,"Shop 50, Ground",Melbourne,address,-37.81092398,144.96332706
+325,"Shop 51, LwrGround",Melbourne,address,-37.81136679,144.96348387
+326,"Shop 52, Level 1",Docklands,address,-37.81682802,144.95253366
+327,"Shop 55, LwrGround",Melbourne,address,-37.810996,144.96331145
+328,"Shop 58, Basement",Southbank,address,-37.82222126,144.95993855
+329,"Shop 58, Ground",Melbourne,address,-37.81041654,144.96295425
+330,"Shop 6, Ground",Southbank,address,-37.82210894,144.95968263
+331,"Shop 66, Level 1",Docklands,address,-37.81598093,144.95226561
+332,"Shop 6E, Ground",Melbourne,address,-37.81096416,144.96230185
+333,"Shop 7, Basement",Melbourne,address,-37.81387911,144.96501245
+334,"Shop 72, Level 1",Docklands,address,-37.81556623,144.95201414
+335,"Shop 78, Level 1",Docklands,address,-37.81493911,144.95178394
+336,Shop 8,Melbourne,address,-37.81309416,144.96567939
+337,"Shop 8, Level 1",Docklands,address,-37.81652308,144.95202537
+338,Shop 9,Melbourne,address,-37.8178336,144.96610073
+339,"Shop 94, Level 1",Docklands,address,-37.8157203,144.95156728
+340,Shop B12,Melbourne,address,-37.81510078,144.96283022
+341,Shop B2B,Melbourne,address,-37.81479826,144.96313965
+342,Shop E18,Melbourne,address,-37.81496542,144.96284261
+343,Shop E25,Melbourne,address,-37.81473924,144.96313345
+344,Show Cases L-Q,Melbourne,address,-37.81759134,144.96595114
+345,Showcase 15A,Melbourne,address,-37.81561924,144.96410746
+346,Showcase Lot 30,Melbourne,address,-37.81466048,144.96366093
+347,St Andrews Place Reserve,East Melbourne,address,-37.81229925,144.97756019
+348,"Stall 10, Shed F, Queen Victoria Market",Melbourne,address,-37.80726507,144.95720552
+349,"Stall 10, Shed M, Queen Victoria Market",Melbourne,address,-37.80790185,144.95711124
+350,"Stall 18, Shed F, Queen Victoria Market",Melbourne,address,-37.80719813,144.95660837
+351,"Stall 2, Shed M, Queen Victoria Market",Melbourne,address,-37.80781254,144.95631944
+352,"Stall 3, Shed F, Queen Victoria Market",Melbourne,address,-37.8073184,144.95767612
+353,"Stall 5, Shed F, Queen Victoria Market",Melbourne,address,-37.80730502,144.95754957
+354,"Stall 6, Shed F, Queen Victoria Market",Melbourne,address,-37.80729648,144.95748713
+355,"Stall 6, Shed M, Queen Victoria Market",Melbourne,address,-37.80783736,144.95653951
+356,"Stall 7, Shed M, Queen Victoria Market",Melbourne,address,-37.80785197,144.95666905
+357,"Suite 38, Level 2",Melbourne,address,-37.81459124,144.96405609
+358,"Tenancy 27-28, Yarra Building, Federation Square",Melbourne,address,-37.81834486,144.96900718
+359,"Yarra Yarra Rowing Club, Yarra Boathouses",Melbourne,address,-37.81972802,144.97129696

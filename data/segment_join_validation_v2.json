@@ -1,0 +1,17 @@
+{
+  "total_sensor_bays": 3309,
+  "parking_bays_fetched": 23864,
+  "link1_kerbsideid_match": 3209,
+  "link1_marker_id_match": "N/A",
+  "link1_marker_recovered": "N/A",
+  "combined_sensor_to_pbay": 3209,
+  "with_roadsegmentid": 3209,
+  "unique_road_segments": 236,
+  "link2_segments_to_zones": 221,
+  "bays_reachable_via_zones": 3162,
+  "link3_zones_to_signplates": 343,
+  "final_bays_segment_chain": 3159,
+  "old_coverage_direct_join": 72,
+  "coverage_improvement_bays": 3087,
+  "final_coverage_pct": 95.5
+}
