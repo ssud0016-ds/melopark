@@ -42,13 +42,15 @@ async def lifespan(app: FastAPI):
     yield
     # No teardown needed — background tasks are cancelled automatically by the runtime.
 
+# Hide API docs in production so attackers cannot see our endpoint structure
+is_prod = settings.ENVIRONMENT.strip().lower() == "production"
 
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description=settings.APP_DESCRIPTION,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None if is_prod else "/docs",
+    redoc_url=None if is_prod else "/redoc",
     lifespan=lifespan,
 )
 

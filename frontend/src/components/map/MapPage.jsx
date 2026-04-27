@@ -231,7 +231,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden">
-      <div className="relative min-h-0 w-full flex-1 overflow-hidden">
+      <div className="relative w-full flex-1 min-h-[600px] overflow-hidden">
         <ParkingMap
           bays={bays}
           visibleBays={visibleBays}
