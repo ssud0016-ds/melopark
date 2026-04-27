@@ -1,15 +1,101 @@
 {
   "pipeline_stage": "bronze",
-  "fetched_at": "2026-04-13T23:21:53.582817+00:00",
+  "fetched_at": "2026-04-22T01:56:29.623611+00:00",
   "api_base": "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets",
   "api_licence": "CC BY - City of Melbourne Open Data",
   "api_portal": "https://data.melbourne.vic.gov.au",
   "datasets": {
+    "sensors": {
+      "dataset_id": "on-street-parking-bay-sensors",
+      "description": "Live sensor snapshot \u2014 occupancy per bay",
+      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/sensors.parquet",
+      "rows": 3309,
+      "columns": [
+        "lastupdated",
+        "status_timestamp",
+        "zone_number",
+        "status_description",
+        "kerbsideid",
+        "location"
+      ],
+      "fetched_at": "2026-04-22T01:56:37.453398+00:00"
+    },
+    "restrictions": {
+      "dataset_id": "on-street-car-park-bay-restrictions",
+      "description": "Static restriction rules per bay (up to 8 slots)",
+      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/restrictions.parquet",
+      "rows": 4263,
+      "columns": [
+        "bayid",
+        "deviceid",
+        "description1",
+        "description2",
+        "description3",
+        "description4",
+        "description5",
+        "description6",
+        "disabilityext1",
+        "disabilityext2",
+        "disabilityext3",
+        "disabilityext4",
+        "disabilityext5",
+        "disabilityext6",
+        "duration1",
+        "duration2",
+        "duration3",
+        "duration4",
+        "duration5",
+        "duration6",
+        "effectiveonph1",
+        "effectiveonph2",
+        "effectiveonph3",
+        "effectiveonph4",
+        "effectiveonph5",
+        "effectiveonph6",
+        "endtime1",
+        "endtime2",
+        "endtime3",
+        "endtime4",
+        "endtime5",
+        "endtime6",
+        "exemption1",
+        "exemption2",
+        "exemption3",
+        "exemption4",
+        "exemption5",
+        "exemption6",
+        "fromday1",
+        "fromday2",
+        "fromday3",
+        "fromday4",
+        "fromday5",
+        "fromday6",
+        "starttime1",
+        "starttime2",
+        "starttime3",
+        "starttime4",
+        "starttime5",
+        "starttime6",
+        "today1",
+        "today2",
+        "today3",
+        "today4",
+        "today5",
+        "today6",
+        "typedesc1",
+        "typedesc2",
+        "typedesc3",
+        "typedesc4",
+        "typedesc5",
+        "typedesc6"
+      ],
+      "fetched_at": "2026-04-22T01:56:46.104777+00:00"
+    },
     "bays": {
       "dataset_id": "on-street-parking-bays",
       "description": "Spatial polygon boundaries for each physical bay",
-      "output_file": "/Users/mowlya/Downloads/Monash University/melopark/data/bronze/parking_bays.parquet",
-      "rows": 10000,
+      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/parking_bays.parquet",
+      "rows": 23864,
       "columns": [
         "roadsegmentid",
         "kerbsideid",
@@ -17,17 +103,68 @@
         "latitude",
         "longitude",
         "lastupdated",
-        "location",
-        "_fetched_at"
+        "location"
       ],
-      "fetched_at": "2026-04-13T23:21:53.533285+00:00"
+      "fetched_at": "2026-04-22T01:56:49.743933+00:00"
+    },
+    "zones_to_segments": {
+      "dataset_id": "parking-zones-linked-to-street-segments",
+      "description": "Parking zone to street segment mapping",
+      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/zones_to_segments.parquet",
+      "rows": 798,
+      "columns": [
+        "parkingzone",
+        "onstreet",
+        "streetfrom",
+        "streetto",
+        "segment_id"
+      ],
+      "fetched_at": "2026-04-22T01:56:50.948558+00:00"
+    },
+    "sign_plates": {
+      "dataset_id": "sign-plates-located-in-each-parking-zone",
+      "description": "Sign plate restrictions per parking zone",
+      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/sign_plates.parquet",
+      "rows": 2033,
+      "columns": [
+        "parkingzone",
+        "restriction_days",
+        "time_restrictions_start",
+        "time_restrictions_finish",
+        "restriction_display"
+      ],
+      "fetched_at": "2026-04-22T01:56:54.007842+00:00"
+    },
+    "addresses": {
+      "dataset_id": "street-addresses",
+      "description": "City of Melbourne street/property addresses for search",
+      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/addresses.parquet",
+      "rows": 10000,
+      "columns": [
+        "geo_point_2d",
+        "geo_shape",
+        "suburb_id",
+        "latitude",
+        "street_no",
+        "str_name",
+        "address_pnt",
+        "easting",
+        "northing",
+        "gisid",
+        "longitude",
+        "suburb",
+        "street_id",
+        "add_comp"
+      ],
+      "fetched_at": "2026-04-22T01:57:13.862013+00:00"
     }
   },
   "notes": [
     "Bronze data is raw - no transformations applied.",
-    "bay_id joins sensors <-> restrictions.",
-    "marker_id joins sensors <-> parking_bays.",
+    "Sensors use kerbsideid, restrictions use bayid + deviceid.",
+    "deviceid (restrictions) = kerbsideid (sensors) \u2014 direct join key.",
+    "Coverage is improved through segment chain: bays -> zones_to_segments -> sign_plates.",
     "Restrictions dataset has NO street name column.",
-    "Use GPS lat/lon -> nearest sensor -> bay_id to look up restrictions."
+    "Large datasets may require CSV export to bypass API offset limits."
   ]
 }

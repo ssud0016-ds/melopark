@@ -1,0 +1,12 @@
+{
+  "total_sensor_bays": 3309,
+  "link1_sensors_to_pbays": 1377,
+  "link1_with_roadsegmentid": 1378,
+  "unique_road_segments": 226,
+  "link2_segments_to_zones": 212,
+  "bays_reachable_via_zones": 1354,
+  "link3_zones_to_signplates": 332,
+  "final_bays_with_rules": 1353,
+  "old_coverage_direct_join": 72,
+  "coverage_improvement_bays": 1281
+}
