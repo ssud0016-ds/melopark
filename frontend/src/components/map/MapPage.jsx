@@ -444,9 +444,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             Verified bays
           </div>
           {[
-            ['bg-[#a3ec48]', 'Available parking spots'],
+            ['bg-[#a3ec48]', 'Free, rules allow'],
+            ['bg-[#f59e0b]', 'Taken, rules allow'],
             ['bg-[#FFB382]', 'Caution: Tow Away / Loading Zone'],
-            ['bg-[#ed6868]', 'Parking spots occupied'],
+            ['bg-[#ed6868]', 'Occupied or rules block'],
           ].map(([bg, label]) => (
             <div key={label} className="mb-1 flex items-center gap-1.5 text-xs text-white/95 dark:text-brand-900">
               <div className={`${bg} h-2.5 w-2.5 shrink-0 rounded-full`} />
