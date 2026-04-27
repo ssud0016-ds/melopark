@@ -1,18 +1,20 @@
 {
   "pipeline_stage": "silver",
-  "cleaned_at": "2026-04-14T14:17:05.843479+00:00",
+  "cleaned_at": "2026-04-24T01:24:41.487168+00:00",
   "notes": [
     "CoM sensors use kerbsideid (not bay_id) and status_description (not status).",
-    "CoM restrictions use bayid (not bay_id) and description1..8 (not typedesc1..8).",
+    "CoM restrictions use bayid (internal key) + deviceid (= kerbsideid).",
+    "Join key: restrictions.deviceid = sensors.kerbsideid (both \u2192 bay_id).",
+    "bayid is a DIFFERENT namespace \u2014 do NOT join on it (produces false matches).",
     "Duration values are in MINUTES. Do NOT multiply by 60.",
     "location column is a dict \u2014 lat/lon extracted before coordinate validation.",
     "Restrictions melted from wide (description1..8) to long (one row per slot).",
-    "Join: sensors.bay_id LEFT JOIN restrictions.bay_id.",
-    "No street name in restrictions \u2014 use GPS lat/lon \u2192 nearest sensor \u2192 bay_id."
+    "Segment-chain restrictions can be merged from sign plates via zones_to_segments."
   ],
+  "restriction_coverage": {},
   "datasets": {
     "sensors_clean": {
-      "rows": 3309,
+      "rows": 3261,
       "columns": [
         "lastupdated",
         "status_timestamp",
@@ -20,7 +22,6 @@
         "status_description",
         "kerbsideid",
         "location",
-        "_fetched_at",
         "bay_id",
         "lat",
         "lon",
@@ -28,7 +29,48 @@
       ]
     },
     "restrictions_long": {
-      "rows": 8033,
+      "rows": 8056,
+      "columns": [
+        "bay_id",
+        "restriction_bayid",
+        "slot_num",
+        "typedesc",
+        "fromday",
+        "today",
+        "starttime",
+        "endtime",
+        "duration_mins",
+        "disabilityext_mins"
+      ]
+    },
+    "merged": {
+      "rows": 9702,
+      "columns": [
+        "lastupdated",
+        "status_timestamp",
+        "zone_number",
+        "status_description",
+        "kerbsideid",
+        "location",
+        "bay_id",
+        "lat",
+        "lon",
+        "status",
+        "restriction_bayid",
+        "slot_num",
+        "typedesc",
+        "fromday",
+        "today",
+        "starttime",
+        "endtime",
+        "duration_mins",
+        "disabilityext_mins",
+        "_silver_joined_at"
+      ],
+      "unique_bays": 3261
+    },
+    "segment_restrictions_long": {
+      "rows": 17062,
       "columns": [
         "bay_id",
         "slot_num",
@@ -41,20 +83,11 @@
         "disabilityext_mins"
       ]
     },
-    "merged": {
-      "rows": 3362,
+    "combined_restrictions_long": {
+      "rows": 24243,
       "columns": [
-        "lastupdated",
-        "status_timestamp",
-        "zone_number",
-        "status_description",
-        "kerbsideid",
-        "location",
-        "_fetched_at",
         "bay_id",
-        "lat",
-        "lon",
-        "status",
+        "restriction_bayid",
         "slot_num",
         "typedesc",
         "fromday",
@@ -62,10 +95,28 @@
         "starttime",
         "endtime",
         "duration_mins",
-        "disabilityext_mins",
-        "_silver_joined_at"
-      ],
-      "unique_bays": 3309
+        "disabilityext_mins"
+      ]
+    },
+    "addresses_clean": {
+      "rows": 2860,
+      "columns": [
+        "name",
+        "sub",
+        "category",
+        "lat",
+        "lng"
+      ]
+    },
+    "streets_clean": {
+      "rows": 219,
+      "columns": [
+        "name",
+        "sub",
+        "category",
+        "lat",
+        "lng"
+      ]
     }
   }
 }
