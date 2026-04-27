@@ -38,8 +38,8 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
   return (
     <nav
       className="fixed top-0 inset-x-0 z-[1000] h-16 overflow-visible bg-white dark:bg-surface-dark border-b
-                 border-gray-200/60 dark:border-gray-700/60 shadow-sm px-3 sm:px-4 md:px-6
-                 flex items-center gap-2 sm:gap-3"
+                 border-gray-200/60 dark:border-gray-700/60 shadow-sm px-2 sm:px-4 md:px-6
+                 flex items-center gap-1.5 sm:gap-3"
     >
       {/* Logo – left */}
       <a
@@ -51,7 +51,7 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
       </a>
 
       {/* Centre – Live Map + About Us */}
-      <div className="flex min-w-0 flex-1 items-center justify-center gap-2 sm:gap-3 px-1">
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-3 px-0 sm:px-1">
         <button
           type="button"
           onClick={() => onNavigate('map')}

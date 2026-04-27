@@ -224,6 +224,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
+  const [legendOpen, setLegendOpen] = useState(false)
+  useEffect(() => {
+    if (!isMobile) setLegendOpen(true)
+    else setLegendOpen(false)
+  }, [isMobile])
+
   const handlePickLandmark = useCallback((lm) => pickDestination(lm), [pickDestination])
 
   const handleMapReady = useCallback((map) => {
@@ -290,6 +296,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           defaultZoom={defaultMapZoom}
           destZoom={destinationMapZoom}
           isMobile={isMobile}
+          hideHint={isMobile && legendOpen}
         />
 
         {apiLoading && (
@@ -300,7 +307,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {apiError && (
           <div
-            className="absolute top-[72px] z-[520] max-w-[min(420px,92vw)] bg-trap-50 border border-trap-300 text-orange-800 dark:text-orange-200 rounded-xl px-3.5 py-2.5 text-sm leading-relaxed shadow-overlay"
+            className="absolute top-[120px] sm:top-[72px] z-[520] max-w-[min(420px,92vw)] bg-trap-50 border border-trap-300 text-orange-800 dark:text-orange-200 rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 text-xs sm:text-sm leading-snug sm:leading-relaxed shadow-overlay"
             style={
               desktopSheetReservePx
                 ? { left: 14, right: rightInsetPx, marginInline: 'auto' }
@@ -369,9 +376,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
               className="mt-1 rounded-lg border border-gray-200/80 bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-card backdrop-blur-[1px] dark:border-gray-700/70 dark:bg-surface-dark-secondary/85 dark:text-gray-100"
               style={{ width: `calc(100% - ${ZOOM_GROUP_WIDTH_PX}px)`, maxWidth: 'calc(580px - 72px)' }}
             >
-              Currently showing: <span className="text-brand dark:text-brand-100">{activeFilterLabel}</span>
-              {' · '}Date: <span className="text-brand dark:text-brand-100">{arriveDate || '-'}</span>
-              {' · '}Time: <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
+              <span className="hidden sm:inline">Currently showing: </span>
+              <span className="text-brand dark:text-brand-100">{activeFilterLabel}</span>
+              {' · '}<span className="hidden sm:inline">Date: </span>
+              <span className="text-brand dark:text-brand-100">{arriveDate || '-'}</span>
+              {' · '}<span className="hidden sm:inline">Time: </span>
+              <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
             </div>
           </div>
 
@@ -510,7 +520,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         )}
 
         <div
-          className="group absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-3.5 py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col cursor-help"
+          className="group absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-2.5 py-1 sm:px-3.5 sm:py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col cursor-help max-w-[45vw] sm:max-w-none"
           aria-label="Verified bays are bays with parking rule data available in MeloPark"
         >
           <div className="pointer-events-none absolute bottom-full left-0 mb-2 hidden w-64 rounded-lg border border-brand-800/80 bg-brand px-3 py-2.5 text-xs text-white shadow-card-lg group-hover:block dark:border-brand-300/70 dark:bg-surface-dark-secondary dark:text-gray-100">
@@ -519,35 +529,72 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
               Verified bays have parking rule data available in MeloPark. Tap a bay to view its parking rules and limits.
             </div>
           </div>
-          <span className="text-sm font-semibold text-white dark:text-brand-900">
+          <span className="text-xs sm:text-sm font-semibold text-white dark:text-brand-900 whitespace-nowrap">
             {verifiedCount} verified bay{verifiedCount !== 1 ? 's' : ''}
           </span>
           {!showLimitedBays && limitedCount > 0 && (
-            <span className="text-[11px] font-medium text-white/65 dark:text-brand-900/55">
+            <span className="text-[10px] sm:text-[11px] font-medium text-white/65 dark:text-brand-900/55 whitespace-nowrap">
               +{limitedCount} sensor only
             </span>
           )}
         </div>
 
-        <div
-          className="absolute bottom-3.5 z-[500] rounded-xl border border-brand bg-brand p-2.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
-          style={{ right: rightInsetPx }}
-        >
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
-            Verified bays
-          </div>
-          {[
-            ['bg-[#a3ec48]', 'Free, rules allow'],
-            ['bg-[#f59e0b]', 'Taken, rules allow'],
-            ['bg-[#FFB382]', 'Caution: Tow Away / Loading Zone'],
-            ['bg-[#ed6868]', 'Occupied or rules block'],
-          ].map(([bg, label]) => (
-            <div key={label} className="mb-1 flex items-center gap-1.5 text-xs text-white/95 dark:text-brand-900">
-              <div className={`${bg} h-2.5 w-2.5 shrink-0 rounded-full`} />
-              {label}
+        {(() => {
+          const plannerActive = mapBaysAtPlannedTime && Boolean(plannerParams)
+          const rows = [['bg-[#a3ec48]', 'Free, rules allow']]
+          if (plannerActive) rows.push(['bg-[#f59e0b]', 'Taken, rules allow'])
+          rows.push(['bg-[#FFB382]', 'Caution: Tow Away / Loading Zone'])
+          rows.push([
+            'bg-[#ed6868]',
+            plannerActive ? 'Occupied or rules block' : 'Occupied',
+          ])
+          return (
+            <div
+              className="absolute bottom-3.5 z-[500] rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
+              style={{ right: rightInsetPx }}
+            >
+              {isMobile && !legendOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setLegendOpen(true)}
+                  aria-label="Show legend"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 cursor-pointer"
+                >
+                  {rows.map(([bg]) => (
+                    <span key={bg} className={`${bg} h-2.5 w-2.5 shrink-0 rounded-full`} />
+                  ))}
+                  <span className="ml-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/85 dark:text-brand-800/90">
+                    Legend
+                  </span>
+                </button>
+              ) : (
+                <div className="p-2.5 max-w-[88vw] sm:max-w-none">
+                  <div className="mb-1.5 flex items-center justify-between gap-3">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
+                      Bay status
+                    </span>
+                    {isMobile && (
+                      <button
+                        type="button"
+                        onClick={() => setLegendOpen(false)}
+                        aria-label="Hide legend"
+                        className="text-white/80 hover:text-white dark:text-brand-800/90 dark:hover:text-brand-900 cursor-pointer text-base leading-none"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                  {rows.map(([bg, label]) => (
+                    <div key={label} className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
+                      <div className={`${bg} h-2.5 w-2.5 shrink-0 rounded-full`} />
+                      <span className="truncate">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          ))}
-        </div>
+          )
+        })()}
 
         {showOnboarding && (
           <OnboardingOverlay onPick={handleOnboardingPick} onSkip={dismissOnboarding} />
