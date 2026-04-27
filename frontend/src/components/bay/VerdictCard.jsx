@@ -49,7 +49,7 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
   const hasRealData = dataSource === 'db' || dataSource === 'api_fallback'
   const noRestrictionData =
     !evaluationPending && (coverage === 'none' || (!restriction && !hasRealData))
-  const NO_DATA_FALLBACK = 'Restriction data not available – check signage on site'
+  const NO_DATA_FALLBACK = 'Restriction data not available. Check signage on site'
 
   // ── Visual type (colour) ────────────────────────────────────────────────
   let resolvedType = bay.type   // 'available' | 'trap' | 'occupied'
@@ -70,21 +70,16 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
 
   const loading = evaluationPending
 
-  // ── Primary answer – YES/NO + plain headline ─────────────────────────────
-  let verdictWord
+  // ── Primary answer – headline (no big letterform) ──────────────────────
   let headlineText
   if (loading) {
-    verdictWord = null
     headlineText = 'Checking rules\u2026'
   } else if (isUnknown) {
-    verdictWord = '?'
-    headlineText = "We can't tell if you can park here"
+    headlineText = 'Rules unclear for this bay'
   } else if (hasRealVerdict) {
-    verdictWord = verdict === 'yes' ? 'YES' : 'NO'
-    headlineText = isAvailable ? 'Yes, you can park here' : 'No, you cannot park here'
+    headlineText = isAvailable ? 'Rules allow parking' : 'Rules block parking here'
   } else {
-    verdictWord = '?'
-    headlineText = "We can't tell if you can park here"
+    headlineText = 'Rules unclear for this bay'
   }
 
   const reasonText = loading
@@ -113,7 +108,7 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
     return '\u2013'
   })()
 
-  const costVal = 'Not shown – check meters or signage'
+  const costVal = 'Not shown. Check meters or signage'
 
   /** Extra wording from API `plain_english` not already stated in `reason` (AC: plain English without repeating). */
   let appliesVal = '\u2013'
@@ -123,7 +118,7 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
       appliesVal = extra ?? '\u2013'
     } else if (coverage !== 'none' && verdict === 'yes') {
       appliesVal =
-        'No restriction windows from our data apply at this time — always confirm on posted signs.'
+        'No restriction windows from our data apply at this time. Always confirm on posted signs.'
     } else {
       appliesVal = NO_DATA_FALLBACK
     }
@@ -159,27 +154,15 @@ export default function VerdictCard({ bay, evaluation, evaluationPending = false
           Checking
         </p>
       )}
-      {!loading && verdictWord === '?' && (
+      {!loading && (verdict === 'unknown' || !hasRealVerdict) && (
         <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500 mb-1">
           Unclear
-        </p>
-      )}
-      {!loading && verdictWord != null && verdictWord !== '?' && (
-        <p
-          className={cn(
-            'text-3xl font-black tracking-tight mb-1 tabular-nums',
-            tone === 'yes' && 'text-white',
-            tone === 'trap' && 'text-trap dark:text-trap-300',
-            tone === 'no' && 'text-danger dark:text-danger-300',
-          )}
-        >
-          {verdictWord}
         </p>
       )}
 
       <h2
         className={cn(
-          'text-2xl font-extrabold tracking-tight leading-tight mb-2',
+          'text-lg font-extrabold tracking-tight leading-tight mb-2',
           tone === 'yes' && 'text-white',
           tone === 'trap' && 'text-trap dark:text-trap-200',
           tone === 'no' && 'text-danger dark:text-danger-200',

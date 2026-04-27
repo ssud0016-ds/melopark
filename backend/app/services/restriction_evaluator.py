@@ -261,12 +261,12 @@ def _reason_when_no_restriction_active_at_arrival(
     )
     if has_timed:
         return (
-            "No timed or meter restriction applies at your arrival time — "
-            "you may park during this window without paying at a meter, based on our data. "
+            "No timed or meter restriction applies at your arrival time. "
+            "You may park during this window without paying at a meter, based on our data. "
             "Always confirm payment rules on posted signage."
         )
     return (
-        "No restrictions apply at your arrival time — you may park here. "
+        "No restrictions apply at your arrival time. You may park here. "
         "Check posted signage to confirm."
     )
 
@@ -378,6 +378,9 @@ def evaluate_bay_at(
     # ── Tier 1: DB lookup ────────────────────────────────────────────────
     bay = db.query(Bay).filter(Bay.bay_id == bay_id).first()
 
+    # Resolve street_name from the bays table (populated by build_gold pipeline).
+    db_street_name = getattr(bay, "street_name", None) if bay is not None else None
+
     if bay is not None and bay.has_restriction_data:
         restrictions = (
             db.query(BayRestriction)
@@ -386,7 +389,9 @@ def evaluate_bay_at(
         )
         if restrictions:
             has_signage_gap = getattr(bay, "has_signage_gap", False) or False
-            return _evaluate_from_db(bay_id, restrictions, arrival, duration_mins, has_signage_gap)
+            result = _evaluate_from_db(bay_id, restrictions, arrival, duration_mins, has_signage_gap)
+            result["street_name"] = db_street_name
+            return result
 
     # ── Tier 2: external API cache fallback ──────────────────────────────
     if bay is None:
@@ -398,6 +403,7 @@ def evaluate_bay_at(
             "warning": None,
             "data_source": "unknown",
             "data_coverage": "none",
+            "street_name": None,
         }
 
     logger.debug(
@@ -407,10 +413,12 @@ def evaluate_bay_at(
     bay_type = get_cached_bay_type(bay_id)
     if bay_type and bay_type != "Other":
         logger.debug("Bay %s: API fallback using bay_type=%r", bay_id, bay_type)
-        return _evaluate_from_bay_type(bay_id, bay_type)
+        result = _evaluate_from_bay_type(bay_id, bay_type)
+        result["street_name"] = db_street_name
+        return result
 
     # ── Tier 3: no data ──────────────────────────────────────────────────
-    return {"bay_id": bay_id, **_NO_DATA_RESULT_TEMPLATE}
+    return {"bay_id": bay_id, **_NO_DATA_RESULT_TEMPLATE, "street_name": db_street_name}
 
 
 def _evaluate_from_db(
@@ -529,15 +537,18 @@ def evaluate_bays_bulk(
             active = [r for r in bay_rest if is_restriction_active_at(r, arrival)]
             governing = _pick_governing_restriction(active)
 
+            sn = getattr(bay, "street_name", None)
+
             if governing is None:
-                results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "yes"})
+                results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "yes", "street_name": sn})
                 continue
 
             verdict, _, _, _ = _verdict_for_restriction(governing, arrival, duration_mins)
-            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": verdict})
+            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": verdict, "street_name": sn})
             continue
 
         # Same fallback as evaluate_bay_at when DB has no restriction rows.
+        sn = getattr(bay, "street_name", None)
         bay_type = get_cached_bay_type(bid)
         if bay_type and bay_type != "Other":
             ev = _evaluate_from_bay_type(bid, bay_type)
@@ -547,10 +558,11 @@ def evaluate_bays_bulk(
                     "lat": bay.lat,
                     "lon": bay.lon,
                     "verdict": ev["verdict"],
+                    "street_name": sn,
                 }
             )
         else:
-            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "unknown"})
+            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "unknown", "street_name": sn})
 
     return results
 

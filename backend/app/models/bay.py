@@ -13,6 +13,7 @@ class Bay(Base):
     lon = Column(Float, nullable=True)
     has_restriction_data = Column(Boolean, nullable=False, default=False)
     has_signage_gap = Column(Boolean, nullable=False, default=False)
+    street_name = Column(String, nullable=True)
 
 
 class BayRestriction(Base):
