@@ -22,6 +22,9 @@ describe('VerdictCard data_coverage behavior', () => {
 
     expect(screen.queryByText('None active at this time')).not.toBeInTheDocument()
     expect(screen.queryByText('None active')).not.toBeInTheDocument()
-    expect(screen.getByText('Restriction data not available – check signage on site')).toBeInTheDocument()
+    // Matches VerdictCard NO_DATA_FALLBACK when noRestrictionData (coverage === 'none')
+    expect(
+      screen.getByText('Restriction data not available. Check signage on site')
+    ).toBeInTheDocument()
   })
 })
