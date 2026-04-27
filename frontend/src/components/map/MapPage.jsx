@@ -7,7 +7,7 @@ import FilterChips from '../feedback/FilterChips'
 import { useMapState } from '../../hooks/useMapState'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
-import { fetchEvaluateBulk } from '../../services/apiBays'
+import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
 import { formatAtDateTime, formatDurationLabel } from '../../utils/plannerTime'
 
 function toLocalDateTimeInputValue(iso) {
@@ -82,6 +82,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [bulkVerdictById, setBulkVerdictById] = useState({})
   const [showArrivePicker, setShowArrivePicker] = useState(false)
   const [filterCollapsed, setFilterCollapsed] = useState(true)
+  const [accessibilityNearby, setAccessibilityNearby] = useState([])
+  const [accessibilityLoading, setAccessibilityLoading] = useState(false)
+  const [accessibilityError, setAccessibilityError] = useState(null)
+  const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
 
@@ -136,6 +140,43 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
       cancelled = true
     }
   }, [debouncedPlannerForBulk, debouncedBounds])
+
+  useEffect(() => {
+    if (!destination || destination.lat == null || destination.lng == null) {
+      setAccessibilityNearby([])
+      setAccessibilityError(null)
+      setAccessibilityLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setAccessibilityLoading(true)
+    setAccessibilityError(null)
+
+    fetchAccessibilityNearby({
+      lat: destination.lat,
+      lon: destination.lng,
+      radiusM: 500,
+      topN: 8,
+      availableOnly: accessibilityAvailableOnly,
+    })
+      .then((data) => {
+        if (cancelled) return
+        setAccessibilityNearby(Array.isArray(data?.bays) ? data.bays : [])
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setAccessibilityNearby([])
+        setAccessibilityError(err instanceof Error ? err.message : 'Could not load accessibility bays')
+      })
+      .finally(() => {
+        if (!cancelled) setAccessibilityLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [destination, accessibilityAvailableOnly])
 
   useEffect(() => {
     setBaysRef(bays)
@@ -412,6 +453,58 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
               <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
                 +{proxLimitedCount} sensor-only nearby
               </span>
+            )}
+          </div>
+        )}
+
+        {destination && (
+          <div
+            className="absolute left-3.5 top-[126px] z-[510] w-[min(320px,calc(100vw-28px))] rounded-xl border border-gray-200/80 bg-white/95 p-3 shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/95"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Accessibility (Epic 4)
+              </div>
+              <button
+                type="button"
+                onClick={() => setAccessibilityAvailableOnly((v) => !v)}
+                className="rounded-md border border-gray-300 px-2 py-0.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-surface-dark"
+              >
+                {accessibilityAvailableOnly ? 'Available only: ON' : 'Available only: OFF'}
+              </button>
+            </div>
+
+            {accessibilityLoading && (
+              <div className="text-xs text-gray-600 dark:text-gray-300">Loading nearby disability bays...</div>
+            )}
+
+            {!accessibilityLoading && accessibilityError && (
+              <div className="text-xs text-trap">{accessibilityError}</div>
+            )}
+
+            {!accessibilityLoading && !accessibilityError && accessibilityNearby.length === 0 && (
+              <div className="text-xs text-gray-600 dark:text-gray-300">
+                No disability bays found within 500m.
+              </div>
+            )}
+
+            {!accessibilityLoading && !accessibilityError && accessibilityNearby.length > 0 && (
+              <div className="space-y-1.5">
+                {accessibilityNearby.slice(0, 5).map((bay) => (
+                  <div
+                    key={bay.bay_id}
+                    className="rounded-lg border border-gray-200/80 bg-white px-2 py-1.5 text-xs dark:border-gray-700 dark:bg-surface-dark-secondary"
+                  >
+                    <div className="font-semibold text-gray-900 dark:text-gray-100">
+                      Bay {bay.bay_id} · {Math.round(bay.distance_m)}m
+                    </div>
+                    <div className="mt-0.5 text-gray-600 dark:text-gray-300">
+                      {bay.is_available_now ? 'Available now' : 'Currently occupied'}
+                      {bay.duration_mins ? ` · ${bay.duration_mins} mins` : ''}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
