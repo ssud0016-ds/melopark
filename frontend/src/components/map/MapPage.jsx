@@ -40,6 +40,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     pickDestination,
     clearDestination,
     showLimitedBays,
+    accessibilityMode,
+    setAccessibilityMode,
     setBaysRef,
     getVisibleBays,
     getProximityBays,
@@ -69,14 +71,19 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const handleOnboardingPick = useCallback((lm, arrivalIso = null, opts = null) => {
     pickDestination(lm)
     if (opts?.activeFilter) setActiveFilter(opts.activeFilter)
-    if (opts?.parkingType === 'accessible') setAccessibilityAvailableOnly(true)
+    if (opts?.parkingType === 'accessible') {
+      setAccessibilityMode(true)
+      setAccessibilityAvailableOnly(true)
+    } else {
+      setAccessibilityMode(false)
+    }
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
       setPlannerDurationMins(60)
       setMapBaysAtPlannedTime(true)
     }
     dismissOnboarding()
-  }, [pickDestination, dismissOnboarding, setActiveFilter])
+  }, [pickDestination, dismissOnboarding, setActiveFilter, setAccessibilityMode])
 
   const [mapBounds, setMapBounds] = useState(null)
   const [bulkVerdictById, setBulkVerdictById] = useState({})
@@ -281,6 +288,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           isMobile={isMobile}
           hideHint={isMobile && legendOpen}
         />
+
+        {accessibilityMode && (
+          <div
+            className="absolute left-3.5 top-[84px] z-[510] rounded-xl border border-brand bg-white/95 px-3 py-2 text-xs font-semibold text-brand shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
+            aria-label="Accessibility mode enabled: showing disability bays only"
+          >
+            Accessibility mode: DIS bays only
+          </div>
+        )}
 
         {apiLoading && (
           <div className="absolute inset-0 z-[400] bg-white/35 dark:bg-black/25 pointer-events-none flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-300">
