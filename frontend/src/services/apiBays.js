@@ -188,7 +188,12 @@ export async function fetchAccessibilityNearby({
     let detail = ''
     try {
       const body = await res.json()
-      if (body?.detail != null) detail = String(body.detail)
+      const d = body?.detail
+      if (Array.isArray(d)) {
+        detail = d.map((x) => (typeof x === 'string' ? x : x?.msg || JSON.stringify(x))).join(' ')
+      } else if (d != null) {
+        detail = typeof d === 'string' ? d : JSON.stringify(d)
+      }
     } catch {
       // ignore
     }
@@ -196,4 +201,25 @@ export async function fetchAccessibilityNearby({
   }
   const data = await res.json()
   return data && typeof data === 'object' ? data : null
+}
+
+export async function fetchAccessibilityPoints({ topN = 5000 } = {}) {
+  const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+  const params = new URLSearchParams()
+  params.set('top_n', String(topN))
+  const url = `${base}/api/accessibility/points?${params.toString()}`
+  const res = await fetch(url)
+  if (!res.ok) {
+    let detail = ''
+    try {
+      const body = await res.json()
+      const d = body?.detail
+      detail = d == null ? '' : (typeof d === 'string' ? d : JSON.stringify(d))
+    } catch {
+      // ignore
+    }
+    throw new Error(`Could not load accessibility points (${res.status})${detail ? `: ${detail}` : ''}`)
+  }
+  const data = await res.json()
+  return data && typeof data === 'object' ? data : { total_points: 0, points: [] }
 }

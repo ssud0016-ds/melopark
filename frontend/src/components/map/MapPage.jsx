@@ -71,7 +71,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const handleOnboardingPick = useCallback((lm, arrivalIso = null, opts = null) => {
     pickDestination(lm)
     if (opts?.activeFilter) setActiveFilter(opts.activeFilter)
-    if (opts?.parkingType === 'accessible') setAccessibilityAvailableOnly(true)
+    if (opts?.parkingType === 'accessible') setAccessibilityOnlyMap(true)
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
       setPlannerDurationMins(60)
@@ -87,7 +87,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [accessibilityNearby, setAccessibilityNearby] = useState([])
   const [accessibilityLoading, setAccessibilityLoading] = useState(false)
   const [accessibilityError, setAccessibilityError] = useState(null)
-  const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
+  const [accessibilityOnlyMap, setAccessibilityOnlyMap] = useState(false)
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
 
@@ -144,8 +144,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   }, [debouncedPlannerForBulk, debouncedBounds])
 
   useEffect(() => {
-    if (!destination || destination.lat == null || destination.lng == null) {
-      setAccessibilityNearby([])
+    if (!accessibilityOnlyMap) {
       setAccessibilityError(null)
       setAccessibilityLoading(false)
       return
@@ -155,12 +154,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setAccessibilityLoading(true)
     setAccessibilityError(null)
 
+    const targetLat = destination?.lat ?? defaultMapCenter[0]
+    const targetLon = destination?.lng ?? defaultMapCenter[1]
+
     fetchAccessibilityNearby({
-      lat: destination.lat,
-      lon: destination.lng,
-      radiusM: 500,
-      topN: 8,
-      availableOnly: accessibilityAvailableOnly,
+      lat: targetLat,
+      lon: targetLon,
+      radiusM: 20000,
+      topN: 1500,
+      availableOnly: false,
     })
       .then((data) => {
         if (cancelled) return
@@ -178,7 +180,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     return () => {
       cancelled = true
     }
-  }, [destination, accessibilityAvailableOnly])
+  }, [accessibilityOnlyMap, destination, defaultMapCenter])
 
   useEffect(() => {
     setBaysRef(bays)
@@ -186,7 +188,27 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   const visibleBays = getVisibleBays(bays)
   const proximityBays = getProximityBays(bays)
-  const selectedBay = bays.find((b) => b.id === selectedBayId) || null
+  const accessibleBayIds = useMemo(
+    () => new Set(accessibilityNearby.map((b) => String(b.bay_id))),
+    [accessibilityNearby],
+  )
+
+  const mapBays = useMemo(() => {
+    if (!accessibilityOnlyMap) return bays
+    return bays.filter((b) => accessibleBayIds.has(String(b.id)))
+  }, [bays, accessibilityOnlyMap, accessibleBayIds])
+
+  const mapVisibleBays = useMemo(() => {
+    if (!accessibilityOnlyMap) return visibleBays
+    return visibleBays.filter((b) => accessibleBayIds.has(String(b.id)))
+  }, [visibleBays, accessibilityOnlyMap, accessibleBayIds])
+
+  const mapProximityBays = useMemo(() => {
+    if (!accessibilityOnlyMap) return proximityBays
+    return proximityBays.filter((b) => accessibleBayIds.has(String(b.id)))
+  }, [proximityBays, accessibilityOnlyMap, accessibleBayIds])
+
+  const selectedBay = mapBays.find((b) => b.id === selectedBayId) || null
 
   const {
     verifiedCount,
@@ -196,12 +218,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     proxLimitedCount,
     proxModeLabel,
   } = useMemo(() => {
-    const verified = visibleBays.filter((b) => b.hasRules)
-    const limited = visibleBays.filter((b) => !b.hasRules)
-    const proxVerified = proximityBays.filter((b) => b.hasRules)
-    const proxLimited = proximityBays.filter((b) => !b.hasRules)
+    const verified = mapVisibleBays.filter((b) => b.hasRules)
+    const limited = mapVisibleBays.filter((b) => !b.hasRules)
+    const proxVerified = mapProximityBays.filter((b) => b.hasRules)
+    const proxLimited = mapProximityBays.filter((b) => !b.hasRules)
 
-    const proxLive = proximityBays.filter((b) => b.source === 'live')
+    const proxLive = mapProximityBays.filter((b) => b.source === 'live')
     const proxLiveAvailable = proxLive.filter((b) => b.type === 'available')
 
     return {
@@ -214,7 +236,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
       proxLimitedCount: proxLimited.length,
       proxModeLabel: showLimitedBays ? 'verified bay' : 'live bay',
     }
-  }, [visibleBays, proximityBays, showLimitedBays])
+  }, [mapVisibleBays, mapProximityBays, showLimitedBays])
 
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 900,
@@ -282,9 +304,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden">
       <div className="relative w-full flex-1 min-h-0 overflow-hidden">
         <ParkingMap
-          bays={bays}
-          visibleBays={visibleBays}
-          proximityBays={proximityBays}
+          bays={mapBays}
+          visibleBays={mapVisibleBays}
+          proximityBays={mapProximityBays}
           activeFilter={activeFilter}
           selectedBayId={selectedBayId}
           destination={destination}
@@ -360,6 +382,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
               <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
             </div>
             <div className="flex flex-row gap-1">
+              <button
+                type="button"
+                onClick={() => setAccessibilityOnlyMap((v) => !v)}
+                aria-label={accessibilityOnlyMap ? 'Disable accessibility filter' : 'Enable accessibility filter'}
+                title={accessibilityOnlyMap ? 'Accessibility filter ON' : 'Accessibility filter OFF'}
+                className="flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg border border-gray-200/60 bg-white px-2 font-sans text-sm font-semibold text-gray-700 shadow-card transition-colors hover:bg-gray-50 dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
+              >
+                ♿
+              </button>
               {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
                 <button
                   key={label}
@@ -473,54 +504,13 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </div>
         )}
 
-        {destination && (
-          <div
-            className="absolute left-3.5 top-[126px] z-[510] w-[min(320px,calc(100vw-28px))] rounded-xl border border-gray-200/80 bg-white/95 p-3 shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/95"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Accessibility (Epic 4)
-              </div>
-              <button
-                type="button"
-                onClick={() => setAccessibilityAvailableOnly((v) => !v)}
-                className="rounded-md border border-gray-300 px-2 py-0.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-surface-dark"
-              >
-                {accessibilityAvailableOnly ? 'Available only: ON' : 'Available only: OFF'}
-              </button>
-            </div>
-
+        {accessibilityOnlyMap && (accessibilityLoading || accessibilityError) && (
+          <div className="absolute left-3.5 top-[126px] z-[510] rounded-xl border border-gray-200/80 bg-white/95 px-3 py-2 text-xs shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/95">
             {accessibilityLoading && (
-              <div className="text-xs text-gray-600 dark:text-gray-300">Loading nearby disability bays...</div>
+              <div className="text-gray-600 dark:text-gray-300">Loading accessible bays...</div>
             )}
-
             {!accessibilityLoading && accessibilityError && (
-              <div className="text-xs text-trap">{accessibilityError}</div>
-            )}
-
-            {!accessibilityLoading && !accessibilityError && accessibilityNearby.length === 0 && (
-              <div className="text-xs text-gray-600 dark:text-gray-300">
-                No disability bays found within 500m.
-              </div>
-            )}
-
-            {!accessibilityLoading && !accessibilityError && accessibilityNearby.length > 0 && (
-              <div className="space-y-1.5">
-                {accessibilityNearby.slice(0, 5).map((bay) => (
-                  <div
-                    key={bay.bay_id}
-                    className="rounded-lg border border-gray-200/80 bg-white px-2 py-1.5 text-xs dark:border-gray-700 dark:bg-surface-dark-secondary"
-                  >
-                    <div className="font-semibold text-gray-900 dark:text-gray-100">
-                      Bay {bay.bay_id} · {Math.round(bay.distance_m)}m
-                    </div>
-                    <div className="mt-0.5 text-gray-600 dark:text-gray-300">
-                      {bay.is_available_now ? 'Available now' : 'Currently occupied'}
-                      {bay.duration_mins ? ` · ${bay.duration_mins} mins` : ''}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <div className="text-trap">{accessibilityError}</div>
             )}
           </div>
         )}
