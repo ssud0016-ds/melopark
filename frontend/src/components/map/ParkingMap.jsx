@@ -434,8 +434,8 @@ export default function ParkingMap({
             isMobile
               ? {
                   left: '14px',
-                  right: '130px',
                   bottom: destination ? '108px' : '86px',
+                  width: 'max-content',
                   maxWidth: 'calc(100% - 144px)',
                   whiteSpace: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'nowrap' : 'normal') : 'normal',
                   overflow: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'hidden' : 'visible') : 'visible',
