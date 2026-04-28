@@ -10,6 +10,15 @@ import {
 } from '../utils/mapGeo'
 import { SNAP_PEEK } from '../components/layout/BottomSheet'
 
+function isAccessibilityBay(bay) {
+  const raw = String(bay?.bayType || '').trim().toUpperCase()
+  // Epic 4: accept both "DIS ONLY" and "DIS" signage tags.
+  if (raw === 'DIS ONLY' || raw === 'DIS') return true
+  // Backend/API-normalised values often map disability bays as "Disabled".
+  if (raw === 'DISABLED' || raw === 'DISABLED PARKING') return true
+  return false
+}
+
 function extractParkingMinutes(bay) {
   const raw = String(bay?.bayType || '').toUpperCase()
   if (!raw || raw === 'OTHER') return null
@@ -50,6 +59,7 @@ export function useMapState() {
   const [destination, setDestination] = useState(null)
   const [sheetSnap, setSheetSnap] = useState(SNAP_PEEK)
   const [showLimitedBays, setShowLimitedBays] = useState(false)
+  const [accessibilityMode, setAccessibilityMode] = useState(false)
 
   const baysRef = useRef([])
 
@@ -87,7 +97,9 @@ export function useMapState() {
           })
         : bays
 
-      return pool.filter((b) => {
+      const accessibilityPool = accessibilityMode ? pool.filter(isAccessibilityBay) : pool
+
+      return accessibilityPool.filter((b) => {
         if (activeFilter === 'all') return true
         if (activeFilter === 'available') return b.type === 'available'
         if (activeFilter === 'trap') return b.type === 'trap'
@@ -101,19 +113,20 @@ export function useMapState() {
         return true
       })
     },
-    [destination, activeFilter],
+    [destination, activeFilter, accessibilityMode],
   )
 
   const getProximityBays = useCallback(
     (bays) => {
       if (!destination) return bays
-      return bays.filter((b) => {
+      const inRadius = bays.filter((b) => {
         const bl = bayLatLng(b)
         const dl = destinationLatLng(destination)
         return haversineMeters(bl.lat, bl.lng, dl.lat, dl.lng) < SEARCH_RADIUS_M
       })
+      return accessibilityMode ? inRadius.filter(isAccessibilityBay) : inRadius
     },
-    [destination],
+    [destination, accessibilityMode],
   )
 
   return {
@@ -128,6 +141,8 @@ export function useMapState() {
     setSheetSnap,
     showLimitedBays,
     setShowLimitedBays,
+    accessibilityMode,
+    setAccessibilityMode,
     setBaysRef,
     getVisibleBays,
     getProximityBays,
