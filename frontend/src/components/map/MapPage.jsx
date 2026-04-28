@@ -53,8 +53,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [plannerDurationMins, setPlannerDurationMins] = useState(null)
   /** True after "Show all bays at this time" in the panel. */
   const [mapBaysAtPlannedTime, setMapBaysAtPlannedTime] = useState(false)
-  /** Bump to force sheet form reset when banner or Clear resets live mode. */
-  const [plannerResetNonce, setPlannerResetNonce] = useState(0)
 
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -103,23 +101,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   const handleMapBounds = useCallback((b) => {
     setMapBounds(b)
-  }, [])
-
-  const handleDebouncedPlannerFromSheet = useCallback((p) => {
-    if (!p) {
-      setPlannerArrivalIso(null)
-      setPlannerDurationMins(null)
-      return
-    }
-    setPlannerArrivalIso(p.arrivalIso)
-    setPlannerDurationMins(p.durationMins)
-  }, [])
-
-  const resetPlannerToLive = useCallback(() => {
-    setPlannerArrivalIso(null)
-    setPlannerDurationMins(null)
-    setMapBaysAtPlannedTime(false)
-    setPlannerResetNonce((n) => n + 1)
   }, [])
 
   useEffect(() => {
@@ -546,14 +527,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         </div>
 
         {(() => {
-          const plannerActive = mapBaysAtPlannedTime && Boolean(plannerParams)
-          const rows = [['bg-[#a3ec48]', 'Free, rules allow']]
-          if (plannerActive) rows.push(['bg-[#f59e0b]', 'Taken, rules allow'])
-          rows.push(['bg-[#FFB382]', 'Caution: Tow Away / Loading Zone'])
-          rows.push([
-            'bg-[#ed6868]',
-            plannerActive ? 'Occupied or rules block' : 'Occupied',
-          ])
+          const rows = [
+            ['bg-[#a3ec48]', 'Available parking spots'],
+            ['bg-[#FFB382]', 'Caution: Tow Away / Loading Zone'],
+            ['bg-[#ed6868]', 'Parking spots occupied'],
+          ]
           return (
             <div
               className="absolute bottom-3.5 z-[500] rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
@@ -577,7 +555,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 <div className="p-2.5 max-w-[88vw] sm:max-w-none">
                   <div className="mb-1.5 flex items-center justify-between gap-3">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
-                      Bay status
+                      Verified bays
                     </span>
                     {isMobile && (
                       <button
@@ -616,17 +594,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             reserveBottomPx={0}
             savedPlannerArrivalIso={plannerArrivalIso}
             savedPlannerDurationMins={plannerDurationMins}
-            onDebouncedPlannerChange={handleDebouncedPlannerFromSheet}
             mapBaysAtPlannedTime={mapBaysAtPlannedTime}
-            onShowAllBaysAtThisTime={(p) => {
-              if (p) {
-                setPlannerArrivalIso(p.arrivalIso)
-                setPlannerDurationMins(p.durationMins)
-              }
-              setMapBaysAtPlannedTime(true)
-            }}
-            onResetPlannerToLive={resetPlannerToLive}
-            plannerResetNonce={plannerResetNonce}
           />
         )}
       </div>
