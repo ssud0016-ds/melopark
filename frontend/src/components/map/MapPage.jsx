@@ -68,15 +68,17 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setShowOnboarding(false)
   }, [])
 
-  const handleOnboardingPick = useCallback((lm, arrivalIso = null) => {
+  const handleOnboardingPick = useCallback((lm, arrivalIso = null, opts = null) => {
     pickDestination(lm)
+    if (opts?.activeFilter) setActiveFilter(opts.activeFilter)
+    if (opts?.parkingType === 'accessible') setAccessibilityAvailableOnly(true)
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
       setPlannerDurationMins(60)
       setMapBaysAtPlannedTime(true)
     }
     dismissOnboarding()
-  }, [pickDestination, dismissOnboarding])
+  }, [pickDestination, dismissOnboarding, setActiveFilter])
 
   const [mapBounds, setMapBounds] = useState(null)
   const [bulkVerdictById, setBulkVerdictById] = useState({})
