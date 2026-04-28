@@ -35,6 +35,7 @@ import argparse
 import json
 import io
 import logging
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -165,7 +166,20 @@ def fetch_geojson_export(url: str) -> list[dict]:
     return rows
 
 
-def main(selected_datasets: list[str] | None = None):
+def stage_disability_csv(csv_path: str | None) -> str | None:
+    """Copy a locally exported disability CSV into bronze for silver ingestion."""
+    if not csv_path:
+        return None
+    src = Path(csv_path).expanduser().resolve()
+    if not src.exists():
+        raise FileNotFoundError(f"Disability CSV not found: {src}")
+    dst = BASE_DIR / "disability_parking.csv"
+    shutil.copy2(src, dst)
+    log.info("Staged disability CSV -> %s", dst)
+    return str(dst)
+
+
+def main(selected_datasets: list[str] | None = None, disability_csv_path: str | None = None):
     BASE_DIR.mkdir(parents=True, exist_ok=True)
     fetched_at = datetime.now(timezone.utc)
     log.info("Fetching bronze data at %s", fetched_at.isoformat())
@@ -191,6 +205,20 @@ def main(selected_datasets: list[str] | None = None):
     dataset_items = DATASETS.items()
     if selected_datasets:
         dataset_items = [(name, DATASETS[name]) for name in selected_datasets]
+
+    try:
+        staged_csv = stage_disability_csv(disability_csv_path)
+        if staged_csv:
+            meta["datasets"]["disability_parking_csv"] = {
+                "dataset_id": "local_disability_csv",
+                "description": "User-provided disability parking points CSV",
+                "output_file": staged_csv,
+                "rows": None,
+                "columns": None,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+            }
+    except Exception as e:
+        log.error("  ERROR staging disability csv: %s", e)
 
     for name, config in dataset_items:
         try:
@@ -236,5 +264,9 @@ if __name__ == "__main__":
         choices=list(DATASETS.keys()),
         help="Optional subset of datasets to fetch.",
     )
+    parser.add_argument(
+        "--disability-csv-path",
+        help="Optional local CSV path to copy into data/bronze/disability_parking.csv.",
+    )
     args = parser.parse_args()
-    main(selected_datasets=args.datasets)
+    main(selected_datasets=args.datasets, disability_csv_path=args.disability_csv_path)
