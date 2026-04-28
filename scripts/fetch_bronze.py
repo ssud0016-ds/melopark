@@ -35,6 +35,7 @@ import argparse
 import json
 import io
 import logging
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -85,6 +86,15 @@ DATASETS = {
         "dataset_id": "street-addresses",
         "description": "City of Melbourne street/property addresses for search",
         "output_file": "addresses.parquet",
+    },
+    "disability_parking_arcgis": {
+        "dataset_id": "arcgis_accessibility_map_layers_disabled_parking",
+        "description": "Disabled parking points (ArcGIS FeatureServer export as GeoJSON)",
+        "output_file": "disability_parking_arcgis.parquet",
+        "geojson_url": (
+            "https://services1.arcgis.com/KGdHCCUjGBpOPPac/arcgis/rest/services/"
+            "Accessibility_map_layers/FeatureServer/disabled_parking/query"
+        ),
     },
 }
 
@@ -139,7 +149,37 @@ def fetch_csv_export(dataset_id: str) -> list[dict]:
     return df.to_dict(orient="records")
 
 
-def main(selected_datasets: list[str] | None = None):
+def fetch_geojson_export(url: str) -> list[dict]:
+    """Fetch a GeoJSON FeatureCollection and flatten to tabular records."""
+    resp = requests.get(url, params={"where": "1=1", "f": "geojson"}, timeout=120)
+    resp.raise_for_status()
+    data = resp.json()
+    feats = data.get("features") or []
+    rows: list[dict] = []
+    for f in feats:
+        props = f.get("properties") or {}
+        geom = f.get("geometry") or {}
+        coords = geom.get("coordinates") or [None, None]
+        lon = coords[0] if isinstance(coords, list) and len(coords) >= 2 else None
+        lat = coords[1] if isinstance(coords, list) and len(coords) >= 2 else None
+        rows.append({**props, "lat": lat, "lon": lon, "geometry_type": geom.get("type")})
+    return rows
+
+
+def stage_disability_csv(csv_path: str | None) -> str | None:
+    """Copy a locally exported disability CSV into bronze for silver ingestion."""
+    if not csv_path:
+        return None
+    src = Path(csv_path).expanduser().resolve()
+    if not src.exists():
+        raise FileNotFoundError(f"Disability CSV not found: {src}")
+    dst = BASE_DIR / "disability_parking.csv"
+    shutil.copy2(src, dst)
+    log.info("Staged disability CSV -> %s", dst)
+    return str(dst)
+
+
+def main(selected_datasets: list[str] | None = None, disability_csv_path: str | None = None):
     BASE_DIR.mkdir(parents=True, exist_ok=True)
     fetched_at = datetime.now(timezone.utc)
     log.info("Fetching bronze data at %s", fetched_at.isoformat())
@@ -166,10 +206,26 @@ def main(selected_datasets: list[str] | None = None):
     if selected_datasets:
         dataset_items = [(name, DATASETS[name]) for name in selected_datasets]
 
+    try:
+        staged_csv = stage_disability_csv(disability_csv_path)
+        if staged_csv:
+            meta["datasets"]["disability_parking_csv"] = {
+                "dataset_id": "local_disability_csv",
+                "description": "User-provided disability parking points CSV",
+                "output_file": staged_csv,
+                "rows": None,
+                "columns": None,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+            }
+    except Exception as e:
+        log.error("  ERROR staging disability csv: %s", e)
+
     for name, config in dataset_items:
         try:
             log.info("Fetching %s (%s) …", name, config["description"])
-            if config.get("use_csv_export"):
+            if config.get("geojson_url"):
+                records = fetch_geojson_export(config["geojson_url"])
+            elif config.get("use_csv_export"):
                 records = fetch_csv_export(config["dataset_id"])
             else:
                 records = fetch_dataset(name, config)
@@ -208,5 +264,9 @@ if __name__ == "__main__":
         choices=list(DATASETS.keys()),
         help="Optional subset of datasets to fetch.",
     )
+    parser.add_argument(
+        "--disability-csv-path",
+        help="Optional local CSV path to copy into data/bronze/disability_parking.csv.",
+    )
     args = parser.parse_args()
-    main(selected_datasets=args.datasets)
+    main(selected_datasets=args.datasets, disability_csv_path=args.disability_csv_path)

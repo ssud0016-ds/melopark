@@ -130,6 +130,10 @@ BRONZE_DIR = ROOT / "data" / "bronze"
 SILVER_DIR = ROOT / "data" / "silver"
 SILVER_DIR.mkdir(parents=True, exist_ok=True)
 
+# Optional Epic 4 disability overlay (exported points with lat/lng)
+DISABILITY_POINTS_BRONZE_CSV = BRONZE_DIR / "disability_parking.csv"
+DISABILITY_POINTS_BRONZE_ARCGIS = BRONZE_DIR / "disability_parking_arcgis.parquet"
+
 # ─── CONSTANTS ──────────────────────────────────────────────────────────────
 
 #: Melbourne CBD bounding box for coordinate validation
@@ -241,6 +245,91 @@ def _normalise_time_str(value: object) -> str | None:
     if not s or s.lower() in {"nan", "none"}:
         return None
     return s[:5] if len(s) >= 5 else s
+
+
+def clean_disability_parking_points_csv(path: Path, verbose: bool = False) -> pd.DataFrame:
+    """Clean disability parking point locations exported from Google My Maps / KML."""
+    log.info("--- Cleaning disability parking points (CSV) ---")
+    df = pd.read_csv(path)
+    initial = len(df)
+
+    # Normalise expected column names
+    rename_map: dict[str, str] = {}
+    if "latitude" in df.columns and "lat" not in df.columns:
+        rename_map["latitude"] = "lat"
+    if "longitude" in df.columns and "lng" not in df.columns:
+        rename_map["longitude"] = "lng"
+    if "lon" in df.columns and "lng" not in df.columns:
+        rename_map["lon"] = "lng"
+    if rename_map:
+        df = df.rename(columns=rename_map)
+
+    for c in ("name", "description"):
+        if c in df.columns:
+            df[c] = df[c].astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
+        else:
+            df[c] = None
+
+    df["lat"] = pd.to_numeric(df.get("lat"), errors="coerce")
+    df["lng"] = pd.to_numeric(df.get("lng"), errors="coerce")
+
+    in_bounds = (
+        df["lat"].between(LAT_MIN, LAT_MAX)
+        & df["lng"].between(LON_MIN, LON_MAX)
+        & df["lat"].notna()
+        & df["lng"].notna()
+    )
+    df = df[in_bounds].copy()
+    df["source"] = "mymaps_csv"
+
+    # Dedup near-identical points
+    df["_lat_r"] = df["lat"].round(6)
+    df["_lng_r"] = df["lng"].round(6)
+    df = df.drop_duplicates(subset=["name", "_lat_r", "_lng_r"], keep="first")
+    df = df.drop(columns=["_lat_r", "_lng_r"]).reset_index(drop=True)
+
+    log.info("  Disability points: %d → %d rows", initial, len(df))
+    if verbose:
+        log.info("  Disability points columns: %s", list(df.columns))
+    return df[["name", "description", "lat", "lng", "source"]]
+
+
+def clean_disability_parking_points_arcgis(path: Path, verbose: bool = False) -> pd.DataFrame:
+    """Clean disability parking points from ArcGIS GeoJSON-derived bronze parquet."""
+    log.info("--- Cleaning disability parking points (ArcGIS) ---")
+    df = pd.read_parquet(path)
+    initial = len(df)
+
+    uid_col = "UNIQUE_ID" if "UNIQUE_ID" in df.columns else ("unique_id" if "unique_id" in df.columns else None)
+    if uid_col is not None:
+        df["source_id"] = df[uid_col].astype(str).str.strip()
+    else:
+        df["source_id"] = None
+
+    df["lat"] = pd.to_numeric(df.get("lat"), errors="coerce")
+    df["lng"] = pd.to_numeric(df.get("lon"), errors="coerce")
+
+    in_bounds = (
+        df["lat"].between(LAT_MIN, LAT_MAX)
+        & df["lng"].between(LON_MIN, LON_MAX)
+        & df["lat"].notna()
+        & df["lng"].notna()
+    )
+    df = df[in_bounds].copy()
+    df["source"] = "arcgis_geojson"
+    df["name"] = None
+    df["description"] = None
+
+    # ArcGIS ids should be unique, but still dedup by point+id defensively.
+    df["_lat_r"] = df["lat"].round(6)
+    df["_lng_r"] = df["lng"].round(6)
+    df = df.drop_duplicates(subset=["source_id", "_lat_r", "_lng_r"], keep="first")
+    df = df.drop(columns=["_lat_r", "_lng_r"]).reset_index(drop=True)
+
+    log.info("  ArcGIS disability points: %d → %d rows", initial, len(df))
+    if verbose:
+        log.info("  ArcGIS columns: %s", list(df.columns))
+    return df[["name", "description", "lat", "lng", "source", "source_id"]]
 
 
 def clean_bays(df_raw: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
@@ -1114,6 +1203,40 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
     else:
         log.info("No addresses.parquet found. Skipping address search datasets.")
 
+    disability_points_csv = None
+    disability_points_arcgis = None
+    disability_points_unified = None
+    if DISABILITY_POINTS_BRONZE_CSV.exists():
+        disability_points_csv = clean_disability_parking_points_csv(DISABILITY_POINTS_BRONZE_CSV, verbose=verbose)
+    else:
+        log.info("No disability_parking.csv found in bronze. Skipping disability overlay points.")
+    if DISABILITY_POINTS_BRONZE_ARCGIS.exists():
+        disability_points_arcgis = clean_disability_parking_points_arcgis(DISABILITY_POINTS_BRONZE_ARCGIS, verbose=verbose)
+    else:
+        log.info("No disability_parking_arcgis.parquet found in bronze. Skipping ArcGIS disability points.")
+
+    frames = []
+    if disability_points_csv is not None:
+        frames.append(disability_points_csv.assign(source_id=None))
+    if disability_points_arcgis is not None:
+        frames.append(disability_points_arcgis)
+    if frames:
+        disability_points_unified = pd.concat(frames, ignore_index=True)
+        disability_points_unified["_lat_r"] = disability_points_unified["lat"].round(6)
+        disability_points_unified["_lng_r"] = disability_points_unified["lng"].round(6)
+        disability_points_unified = (
+            disability_points_unified
+            .drop_duplicates(subset=["source", "source_id", "_lat_r", "_lng_r"], keep="first")
+            .drop(columns=["_lat_r", "_lng_r"])
+            .reset_index(drop=True)
+        )
+        log.info(
+            "Unified disability points: %d rows (%d csv + %d arcgis)",
+            len(disability_points_unified),
+            0 if disability_points_csv is None else len(disability_points_csv),
+            0 if disability_points_arcgis is None else len(disability_points_arcgis),
+        )
+
     if dry_run:
         log.info("DRY RUN — no files written.")
         log.info("Would write:")
@@ -1128,6 +1251,10 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         if addresses_clean is not None and streets_clean is not None:
             log.info("  data/silver/addresses_clean.parquet (%d rows)", len(addresses_clean))
             log.info("  data/silver/streets_clean.parquet   (%d rows)", len(streets_clean))
+        if disability_points_csv is not None:
+            log.info("  data/silver/disability_parking_points_clean.parquet (%d rows)", len(disability_points_csv))
+        if disability_points_unified is not None:
+            log.info("  data/silver/disability_parking_points_unified_clean.parquet (%d rows)", len(disability_points_unified))
         return
 
     # Save
@@ -1168,6 +1295,15 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         streets_clean.to_parquet(street_path, index=False, engine="pyarrow")
         log.info("Saved addresses_clean.parquet (%d rows)", len(addresses_clean))
         log.info("Saved streets_clean.parquet   (%d rows)", len(streets_clean))
+
+    if disability_points_csv is not None:
+        dp_path = SILVER_DIR / "disability_parking_points_clean.parquet"
+        disability_points_csv.to_parquet(dp_path, index=False, engine="pyarrow")
+        log.info("Saved disability_parking_points_clean.parquet (%d rows)", len(disability_points_csv))
+    if disability_points_unified is not None:
+        dpu_path = SILVER_DIR / "disability_parking_points_unified_clean.parquet"
+        disability_points_unified.to_parquet(dpu_path, index=False, engine="pyarrow")
+        log.info("Saved disability_parking_points_unified_clean.parquet (%d rows)", len(disability_points_unified))
     write_metadata(
         sensors_clean,
         restrictions_long,
