@@ -73,16 +73,19 @@ export function useMapState() {
   const baysRef = useRef([])
 
   const setAccessibilityMode = useCallback((next) => {
-    const value = typeof next === 'function' ? next(accessibilityMode) : next
-    const on = Boolean(value)
-    _setAccessibilityMode(on)
-    if (typeof window === 'undefined') return
-    try {
-      window.localStorage.setItem(ACCESSIBILITY_MODE_STORAGE_KEY, on ? '1' : '0')
-    } catch {
-      /* ignore quota / private mode */
-    }
-  }, [accessibilityMode])
+    _setAccessibilityMode((prev) => {
+      const value = typeof next === 'function' ? next(prev) : next
+      const on = Boolean(value)
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(ACCESSIBILITY_MODE_STORAGE_KEY, on ? '1' : '0')
+        } catch {
+          /* ignore quota / private mode */
+        }
+      }
+      return on
+    })
+  }, [])
 
   const setSelectedBayId = useCallback(
     (id) => {
@@ -139,7 +142,7 @@ export function useMapState() {
 
   const getProximityBays = useCallback(
     (bays) => {
-      if (!destination) return bays
+      if (!destination) return accessibilityMode ? bays.filter(isAccessibilityBay) : bays
       const inRadius = bays.filter((b) => {
         const bl = bayLatLng(b)
         const dl = destinationLatLng(destination)
