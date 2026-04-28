@@ -1,6 +1,6 @@
 {
   "pipeline_stage": "silver",
-  "cleaned_at": "2026-04-24T01:24:41.487168+00:00",
+  "cleaned_at": "2026-04-28T13:29:51.675153+00:00",
   "notes": [
     "CoM sensors use kerbsideid (not bay_id) and status_description (not status).",
     "CoM restrictions use bayid (internal key) + deviceid (= kerbsideid).",
@@ -44,7 +44,7 @@
       ]
     },
     "merged": {
-      "rows": 9702,
+      "rows": 10322,
       "columns": [
         "lastupdated",
         "status_timestamp",
@@ -70,7 +70,7 @@
       "unique_bays": 3261
     },
     "segment_restrictions_long": {
-      "rows": 17062,
+      "rows": 18034,
       "columns": [
         "bay_id",
         "slot_num",
@@ -84,7 +84,7 @@
       ]
     },
     "combined_restrictions_long": {
-      "rows": 24243,
+      "rows": 25202,
       "columns": [
         "bay_id",
         "restriction_bayid",
@@ -99,7 +99,7 @@
       ]
     },
     "addresses_clean": {
-      "rows": 2860,
+      "rows": 3157,
       "columns": [
         "name",
         "sub",
@@ -109,7 +109,7 @@
       ]
     },
     "streets_clean": {
-      "rows": 219,
+      "rows": 221,
       "columns": [
         "name",
         "sub",
