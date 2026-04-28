@@ -1,7 +1,6 @@
 """FastAPI application entrypoint."""
 
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -30,16 +29,8 @@ async def lifespan(app: FastAPI):
     from app.services.parking_service import start_background_refresh
     from app.services.restriction_lookup_service import start_background_restrictions_refresh
 
-    # Lambda has no persistent process — background loops never keep a warm cache.
-    # Parking is served via on-demand refresh in parking_service.fetch_raw_parking_bays().
-    if os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
-        logger.info(
-            "AWS Lambda detected: skipping CoM background refresh tasks "
-            "(parking uses on-demand sensor fetch; restrictions cache may stay cold until extended)."
-        )
-    else:
-        await start_background_refresh()
-        await start_background_restrictions_refresh()
+    await start_background_refresh()
+    await start_background_restrictions_refresh()
     yield
     # No teardown needed — background tasks are cancelled automatically by the runtime.
 
