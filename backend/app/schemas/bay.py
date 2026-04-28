@@ -25,6 +25,16 @@ class StrictWarning(BaseModel):
     description: str
 
 
+class TranslatorRule(BaseModel):
+    """A single plain-English rule segment for the 'Parking Sign Translator' UI."""
+
+    state: Literal["current", "upcoming", "normal", "outside"]
+    heading: str
+    body: str
+    # For upcoming rules: e.g. "THIS RULE WILL BE IN EFFECT IN 1 HOUR"
+    banner: Optional[str] = None
+
+
 class BayEvaluation(BaseModel):
     bay_id: str
     verdict: str  # "yes" | "no" | "unknown"
@@ -42,6 +52,7 @@ class BayEvaluation(BaseModel):
     #   "none"            = show "check signage" (no verdict, no sensor)
     data_coverage: Literal["full", "rules_only", "partial_signage", "none"] = "none"
     street_name: Optional[str] = None
+    translator_rules: list[TranslatorRule] = []
 
 
 class BayVerdictBrief(BaseModel):
