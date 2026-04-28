@@ -86,6 +86,15 @@ DATASETS = {
         "description": "City of Melbourne street/property addresses for search",
         "output_file": "addresses.parquet",
     },
+    "disability_parking_arcgis": {
+        "dataset_id": "arcgis_accessibility_map_layers_disabled_parking",
+        "description": "Disabled parking points (ArcGIS FeatureServer export as GeoJSON)",
+        "output_file": "disability_parking_arcgis.parquet",
+        "geojson_url": (
+            "https://services1.arcgis.com/KGdHCCUjGBpOPPac/arcgis/rest/services/"
+            "Accessibility_map_layers/FeatureServer/disabled_parking/query"
+        ),
+    },
 }
 
 MAX_API_OFFSET = 10_000
@@ -139,6 +148,23 @@ def fetch_csv_export(dataset_id: str) -> list[dict]:
     return df.to_dict(orient="records")
 
 
+def fetch_geojson_export(url: str) -> list[dict]:
+    """Fetch a GeoJSON FeatureCollection and flatten to tabular records."""
+    resp = requests.get(url, params={"where": "1=1", "f": "geojson"}, timeout=120)
+    resp.raise_for_status()
+    data = resp.json()
+    feats = data.get("features") or []
+    rows: list[dict] = []
+    for f in feats:
+        props = f.get("properties") or {}
+        geom = f.get("geometry") or {}
+        coords = geom.get("coordinates") or [None, None]
+        lon = coords[0] if isinstance(coords, list) and len(coords) >= 2 else None
+        lat = coords[1] if isinstance(coords, list) and len(coords) >= 2 else None
+        rows.append({**props, "lat": lat, "lon": lon, "geometry_type": geom.get("type")})
+    return rows
+
+
 def main(selected_datasets: list[str] | None = None):
     BASE_DIR.mkdir(parents=True, exist_ok=True)
     fetched_at = datetime.now(timezone.utc)
@@ -169,7 +195,9 @@ def main(selected_datasets: list[str] | None = None):
     for name, config in dataset_items:
         try:
             log.info("Fetching %s (%s) …", name, config["description"])
-            if config.get("use_csv_export"):
+            if config.get("geojson_url"):
+                records = fetch_geojson_export(config["geojson_url"])
+            elif config.get("use_csv_export"):
                 records = fetch_csv_export(config["dataset_id"])
             else:
                 records = fetch_dataset(name, config)
