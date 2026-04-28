@@ -181,7 +181,9 @@ export default function ParkingMap({
   const destLatLng = destination ? destinationLatLng(destination) : null
 
   const { verifiedBays, limitedBays } = useMemo(() => {
-    const byType = activeFilter === 'all' ? bays : visibleBays
+    // Always render from already-filtered visibleBays so mode-level filtering
+    // (e.g. accessibility mode) cannot be bypassed by "All bays".
+    const byType = visibleBays
     const inRange = destination
       ? byType.filter((b) => proximityBays.some((p) => p.id === b.id))
       : byType
@@ -189,7 +191,7 @@ export default function ParkingMap({
       verifiedBays: inRange.filter((b) => b.hasRules),
       limitedBays: inRange.filter((b) => !b.hasRules),
     }
-  }, [activeFilter, bays, visibleBays, destination, proximityBays])
+  }, [visibleBays, destination, proximityBays])
 
   const baysForClustering = useMemo(() => {
     const live = verifiedBays.filter((b) => b.source === 'live')
