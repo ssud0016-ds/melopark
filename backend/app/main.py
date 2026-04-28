@@ -54,9 +54,12 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 cors_origins = settings.cors_origins_list()
 allow_all = cors_origins == ["*"]
 
+cors_origin_regex = settings.CORS_ORIGIN_REGEX.strip() or None
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
     allow_credentials=not allow_all,
     allow_methods=["*"],
     allow_headers=["*"],

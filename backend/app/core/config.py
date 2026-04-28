@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     
     # Comma-separated list, e.g. "http://localhost:5173,https://your.vercel.app"
     CORS_ORIGINS: str = "*"
+    # Optional regex matched against Origin header. Useful for Vercel preview
+    # deploys where the subdomain hash changes per build.
+    CORS_ORIGIN_REGEX: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",
