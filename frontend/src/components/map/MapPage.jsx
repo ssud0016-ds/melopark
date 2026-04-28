@@ -400,23 +400,47 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           className="absolute top-5 z-[600] pointer-events-auto"
           style={{ right: rightInsetPx }}
         >
-          <div className="relative flex items-center gap-2">
+          <div className="relative flex items-start gap-2">
             <button
               type="button"
               onClick={toggleAccessibilityMode}
               aria-pressed={accessibilityMode}
               aria-label={accessibilityMode ? 'Disable accessibility mode' : 'Enable accessibility mode'}
-              className={`flex h-8 items-center justify-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold shadow-card transition-colors ${
+              className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
                 accessibilityMode
-                  ? 'border-brand bg-brand text-white hover:bg-brand-light dark:border-brand-300/80 dark:bg-brand dark:text-white'
-                  : 'border-gray-200/80 bg-white/95 text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-200 dark:hover:bg-surface-dark'
+                  ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
+                  : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
               }`}
               title={accessibilityMode ? 'Accessibility mode: ON' : 'Accessibility mode: OFF'}
             >
-              <span aria-hidden className="text-[12px] leading-none">♿</span>
-              <span className="hidden sm:inline">{accessibilityMode ? 'A11y ON' : 'A11y OFF'}</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle cx="12" cy="5.6" r="2.1" stroke="currentColor" strokeWidth="1.75" />
+                <path d="M12 8.2v5.1l3 2.1" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                <path d="M8.6 11.7h3.4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                <circle cx="13.8" cy="15.7" r="4.5" stroke="currentColor" strokeWidth="1.75" />
+              </svg>
+              <span className="text-[9px] font-semibold leading-none">{accessibilityMode ? 'A11y ON' : 'A11y OFF'}</span>
             </button>
-            <div className="relative">
+            <div className="relative flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLegendOpen((v) => !v)}
+                aria-pressed={legendOpen}
+                aria-label={legendOpen ? 'Hide heatmap legend' : 'Show heatmap legend'}
+                className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
+                  legendOpen
+                    ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
+                    : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+                }`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <circle cx="7" cy="8" r="2.25" stroke="currentColor" strokeWidth="1.75" />
+                  <circle cx="16.5" cy="6.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
+                  <circle cx="14.5" cy="15.5" r="2.5" stroke="currentColor" strokeWidth="1.75" />
+                  <circle cx="6.5" cy="16.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
+                </svg>
+                <span className="text-[10px] font-semibold leading-none">Heatmap</span>
+              </button>
               <button
                 type="button"
                 onClick={() =>
@@ -428,9 +452,17 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 }
                 aria-expanded={showArrivePicker}
                 aria-label={showArrivePicker ? 'Hide arrive by picker' : 'Show arrive by picker'}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200/80 bg-white/95 text-gray-600 shadow-card transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-200 dark:hover:bg-surface-dark"
+                className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
+                  showArrivePicker
+                    ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
+                    : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+                }`}
               >
-                <span aria-hidden className="text-[12px] leading-none">🕒</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.75" />
+                  <path d="M12 7.5v5l3.5 2.2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                </svg>
+                <span className="text-[10px] font-semibold leading-none">Time</span>
               </button>
             </div>
             <FilterChips
