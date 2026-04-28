@@ -1,0 +1,16 @@
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+.env
+.env.*
+package/
+deploy.zip
+lambda_handler.py
+tests/
+app/tests/
+.pytest_cache
+.git
+.gitignore
+*.md
