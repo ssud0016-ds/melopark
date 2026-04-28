@@ -278,7 +278,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden">
-      <div className="relative w-full flex-1 min-h-[600px] overflow-hidden">
+      <div className="relative w-full flex-1 min-h-0 overflow-hidden">
         <ParkingMap
           bays={bays}
           visibleBays={visibleBays}
@@ -307,7 +307,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {apiError && (
           <div
-            className="absolute top-[120px] sm:top-[72px] z-[520] max-w-[min(420px,92vw)] bg-trap-50 border border-trap-300 text-orange-800 dark:text-orange-200 rounded-xl px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 text-xs sm:text-sm leading-snug sm:leading-relaxed shadow-overlay"
+            className={`absolute z-[520] max-w-[min(420px,92vw)] bg-trap-50 border border-trap-300 text-orange-800 dark:text-orange-200 rounded-xl shadow-overlay ${
+              isMobile
+                ? 'top-[120px] px-2.5 py-1.5 text-xs leading-snug'
+                : 'top-[72px] px-3.5 py-2.5 text-sm leading-relaxed'
+            }`}
             style={
               desktopSheetReservePx
                 ? { left: 14, right: rightInsetPx, marginInline: 'auto' }
@@ -376,11 +380,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
               className="mt-1 rounded-lg border border-gray-200/80 bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-card backdrop-blur-[1px] dark:border-gray-700/70 dark:bg-surface-dark-secondary/85 dark:text-gray-100"
               style={{ width: `calc(100% - ${ZOOM_GROUP_WIDTH_PX}px)`, maxWidth: 'calc(580px - 72px)' }}
             >
-              <span className="hidden sm:inline">Currently showing: </span>
+              {!isMobile && <span>Currently showing: </span>}
               <span className="text-brand dark:text-brand-100">{activeFilterLabel}</span>
-              {' · '}<span className="hidden sm:inline">Date: </span>
+              {' · '}{!isMobile && <span>Date: </span>}
               <span className="text-brand dark:text-brand-100">{arriveDate || '-'}</span>
-              {' · '}<span className="hidden sm:inline">Time: </span>
+              {' · '}{!isMobile && <span>Time: </span>}
               <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
             </div>
           </div>
@@ -388,7 +392,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         </div>
 
         <div
-          className="absolute top-5 z-[500] pointer-events-auto"
+          className="absolute top-5 z-[600] pointer-events-auto"
           style={{ right: rightInsetPx }}
         >
           <div className="relative flex items-center gap-2">
