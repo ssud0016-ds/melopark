@@ -10,6 +10,8 @@ import {
 } from '../utils/mapGeo'
 import { SNAP_PEEK } from '../components/layout/BottomSheet'
 
+const ACCESSIBILITY_MODE_STORAGE_KEY = 'melopark.accessibility_mode'
+
 function isAccessibilityBay(bay) {
   const raw = String(bay?.bayType || '').trim().toUpperCase()
   // Epic 4: accept both "DIS ONLY" and "DIS" signage tags.
@@ -59,9 +61,28 @@ export function useMapState() {
   const [destination, setDestination] = useState(null)
   const [sheetSnap, setSheetSnap] = useState(SNAP_PEEK)
   const [showLimitedBays, setShowLimitedBays] = useState(false)
-  const [accessibilityMode, setAccessibilityMode] = useState(false)
+  const [accessibilityMode, _setAccessibilityMode] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      return window.localStorage.getItem(ACCESSIBILITY_MODE_STORAGE_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
 
   const baysRef = useRef([])
+
+  const setAccessibilityMode = useCallback((next) => {
+    const value = typeof next === 'function' ? next(accessibilityMode) : next
+    const on = Boolean(value)
+    _setAccessibilityMode(on)
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(ACCESSIBILITY_MODE_STORAGE_KEY, on ? '1' : '0')
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [accessibilityMode])
 
   const setSelectedBayId = useCallback(
     (id) => {
