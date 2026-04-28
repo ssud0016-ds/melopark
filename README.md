@@ -29,11 +29,47 @@ MelOPark uses a hybrid architecture:
 | Layer | Technology |
 | --- | --- |
 | Frontend | React + Vite + Tailwind CSS + Leaflet |
-| Backend API | FastAPI + SQLAlchemy |
-| Lambda adapter | Mangum (`backend/lambda_handler.py`) |
+| Backend API | FastAPI + SQLAlchemy + uvicorn |
+| Backend hosting | DigitalOcean App Platform (Docker, Sydney region) |
+| Frontend hosting | Vercel |
 | Data pipeline | Python + Pandas (+ optional DuckDB in scripts) |
-| Database | PostgreSQL (AWS RDS in deployed environments) |
+| Database | PostgreSQL (AWS RDS, `ap-southeast-2`) |
 | Data design | Medallion-style Bronze -> Silver -> Gold pipeline |
+
+### Deployment topology
+
+```
+            ┌────────────────┐         ┌────────────────────────┐
+ Browser ──▶│ Vercel (CDN)   │──fetch─▶│ DO App Platform (SYD)  │
+            │  React SPA     │  HTTPS  │  FastAPI + uvicorn     │
+            └────────────────┘         │  Docker (python:3.12)  │
+                                       │  In-memory caches:     │
+                                       │   - sensor (5 min)     │
+                                       │   - restriction (1 hr) │
+                                       │   - street name (10 m) │
+                                       └───────────┬────────────┘
+                                                   │ SSL verify-full
+                                                   ▼
+                                       ┌────────────────────────┐
+                                       │ AWS RDS PostgreSQL     │
+                                       │  bays, bay_restrictions│
+                                       │  search_index          │
+                                       └────────────────────────┘
+                                                   ▲
+                                                   │
+                                       ┌───────────┴────────────┐
+                                       │ Data pipeline (local)  │
+                                       │ Bronze → Silver → Gold │
+                                       └────────────────────────┘
+
+ City of Melbourne Open Data API ─── pulled live by backend (sensors,
+ restrictions) and offline by pipeline (geometry, addresses, rules).
+```
+
+The backend runs as a single long-lived container so background refresh
+loops keep upstream caches warm across requests, eliminating the
+cold-start 503 cascades that occurred under the previous AWS Lambda
+deployment.
 
 ## Repository structure
 
@@ -50,7 +86,9 @@ melopark/
 │   ├── app/services/            # live fetch/cache + restriction evaluator logic
 │   ├── app/models/              # SQLAlchemy models for bays + restrictions
 │   ├── app/tests/               # evaluator and API health tests
-│   ├── lambda_handler.py
+│   ├── certs/global-bundle.pem  # AWS RDS public CA bundle (SSL verify-full)
+│   ├── Dockerfile               # python:3.12-slim image for App Platform
+│   ├── .dockerignore
 │   └── .env.example
 ├── scripts/
 │   ├── fetch_bronze.py
@@ -70,9 +108,13 @@ melopark/
 ### App startup and routing
 
 - `backend/app/main.py` creates the FastAPI app, configures CORS, and mounts routers.
-- Startup behavior differs by runtime:
-  - **Local/server runtime:** starts background refresh tasks for parking data and restriction lookup cache
-  - **AWS Lambda runtime:** skips persistent background loops and relies on on-demand fetch behavior
+- The lifespan hook starts two background refresh tasks on container boot:
+  - `start_background_refresh()` — refreshes the live sensor cache every 5 minutes
+  - `start_background_restrictions_refresh()` — refreshes the restriction lookup cache every hour
+- Caches are in-process (per container). The Basic App Platform plan runs a
+  single container, so cache state is consistent without an external store.
+  If the deployment is scaled to multiple containers, add a shared cache
+  (e.g. managed Redis) before enabling autoscale.
 
 ### API routers
 
@@ -154,6 +196,9 @@ Required:
 
 Common optional:
 - `CORS_ORIGINS` (comma-separated origins, or `*`)
+- `CORS_ORIGIN_REGEX` (regex matched against the `Origin` header; useful for
+  Vercel preview deploys where the subdomain hash changes per build,
+  e.g. `https://(.*\.)?vercel\.app`)
 
 ### Frontend (`frontend/.env`)
 
@@ -202,6 +247,47 @@ Frontend runs at [http://localhost:5173](http://localhost:5173).
 cd backend
 pytest
 ```
+
+## Deployment
+
+### Backend (DigitalOcean App Platform)
+
+The backend is shipped as a Docker image built from `backend/Dockerfile`:
+
+- Base image: `python:3.12-slim`
+- Build context: the `backend/` directory (set as the App Platform source dir)
+- Run command: `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}`
+- Health check path: `/health`
+- Region: Sydney (`syd1`) — co-located with the AWS RDS instance in
+  `ap-southeast-2` to keep DB latency low
+- Plan: Basic ($5/mo, 1 container, no autoscale)
+
+Required env vars on App Platform:
+
+| Key | Notes |
+| --- | --- |
+| `DATABASE_URL` | Full Postgres URL with `sslmode=verify-full&sslrootcert=./certs/global-bundle.pem` (encrypt) |
+| `ENVIRONMENT` | `production` (hides `/docs` and `/redoc`) |
+| `CORS_ORIGINS` | Comma-separated list of exact origins, e.g. the Vercel production URL |
+| `CORS_ORIGIN_REGEX` | Regex for dynamic origins, e.g. `https://(.*\.)?vercel\.app` |
+
+The AWS RDS public CA bundle (`backend/certs/global-bundle.pem`) is committed
+to the repo so the Docker build context can include it. The bundle contains
+only public root CAs — no secrets — and is published by AWS at
+`https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`.
+
+Auto-deploy on push is enabled for the migration branch; pushes to the
+configured branch trigger a fresh App Platform build.
+
+### Frontend (Vercel)
+
+- Build: `vite build` (default Vercel React preset)
+- Env var: `VITE_API_URL` set to the App Platform URL
+  (e.g. `https://melopark-app-hcdwq.ondigitalocean.app`) for both
+  Preview and Production scopes
+- Security headers (CSP, HSTS, X-Frame-Options, etc.) are set in
+  `frontend/vercel.json`. The CSP `connect-src` directive must list the
+  backend host explicitly.
 
 ## Data refresh workflow (when datasets change)
 
