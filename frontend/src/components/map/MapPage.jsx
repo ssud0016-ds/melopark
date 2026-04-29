@@ -40,6 +40,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     pickDestination,
     clearDestination,
     showLimitedBays,
+    accessibilityMode,
+    setAccessibilityMode,
     setBaysRef,
     getVisibleBays,
     getProximityBays,
@@ -71,14 +73,19 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const handleOnboardingPick = useCallback((lm, arrivalIso = null, opts = null) => {
     pickDestination(lm)
     if (opts?.activeFilter) setActiveFilter(opts.activeFilter)
-    if (opts?.parkingType === 'accessible') setAccessibilityOnlyMap(true)
+    if (opts?.parkingType === 'accessible') {
+      setAccessibilityMode(true)
+      setAccessibilityAvailableOnly(true)
+    } else {
+      setAccessibilityMode(false)
+    }
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
       setPlannerDurationMins(60)
       setMapBaysAtPlannedTime(true)
     }
     dismissOnboarding()
-  }, [pickDestination, dismissOnboarding, setActiveFilter])
+  }, [pickDestination, dismissOnboarding, setActiveFilter, setAccessibilityMode])
 
   const [mapBounds, setMapBounds] = useState(null)
   const [bulkVerdictById, setBulkVerdictById] = useState({})
@@ -87,7 +94,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [accessibilityNearby, setAccessibilityNearby] = useState([])
   const [accessibilityLoading, setAccessibilityLoading] = useState(false)
   const [accessibilityError, setAccessibilityError] = useState(null)
-  const [accessibilityOnlyMap, setAccessibilityOnlyMap] = useState(false)
+  const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
 
@@ -144,7 +151,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   }, [debouncedPlannerForBulk, debouncedBounds])
 
   useEffect(() => {
-    if (!accessibilityOnlyMap) {
+    if (!accessibilityAvailableOnly) {
       setAccessibilityError(null)
       setAccessibilityLoading(false)
       return
@@ -180,7 +187,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     return () => {
       cancelled = true
     }
-  }, [accessibilityOnlyMap, destination, defaultMapCenter])
+  }, [accessibilityAvailableOnly, destination, defaultMapCenter])
 
   useEffect(() => {
     setBaysRef(bays)
@@ -194,19 +201,19 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   )
 
   const mapBays = useMemo(() => {
-    if (!accessibilityOnlyMap) return bays
+    if (!accessibilityAvailableOnly) return bays
     return bays.filter((b) => accessibleBayIds.has(String(b.id)))
-  }, [bays, accessibilityOnlyMap, accessibleBayIds])
+  }, [bays, accessibilityAvailableOnly, accessibleBayIds])
 
   const mapVisibleBays = useMemo(() => {
-    if (!accessibilityOnlyMap) return visibleBays
+    if (!accessibilityAvailableOnly) return visibleBays
     return visibleBays.filter((b) => accessibleBayIds.has(String(b.id)))
-  }, [visibleBays, accessibilityOnlyMap, accessibleBayIds])
+  }, [visibleBays, accessibilityAvailableOnly, accessibleBayIds])
 
   const mapProximityBays = useMemo(() => {
-    if (!accessibilityOnlyMap) return proximityBays
+    if (!accessibilityAvailableOnly) return proximityBays
     return proximityBays.filter((b) => accessibleBayIds.has(String(b.id)))
-  }, [proximityBays, accessibilityOnlyMap, accessibleBayIds])
+  }, [proximityBays, accessibilityAvailableOnly, accessibleBayIds])
 
   const selectedBay = mapBays.find((b) => b.id === selectedBayId) || null
 
@@ -267,6 +274,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     else m.zoomOut()
   }, [])
 
+  const toggleAccessibilityMode = useCallback(() => {
+    setAccessibilityMode((v) => !v)
+    setFilterCollapsed(true)
+    setShowArrivePicker(false)
+  }, [setAccessibilityMode])
+
   const handleBayClick = useCallback(
     (bay) => setSelectedBayId(bay ? bay.id : null),
     [setSelectedBayId],
@@ -323,6 +336,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           hideHint={isMobile && legendOpen}
         />
 
+        {accessibilityMode && (
+          <div
+            className="absolute left-3.5 top-[84px] z-[510] rounded-xl border border-brand bg-white/95 px-3 py-2 text-xs font-semibold text-brand shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
+            aria-label="Accessibility mode enabled: showing disability bays only"
+          >
+            Accessibility mode: DIS bays only
+          </div>
+        )}
+
         {apiLoading && (
           <div className="absolute inset-0 z-[400] bg-white/35 dark:bg-black/25 pointer-events-none flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-300">
             Loading bays...
@@ -360,7 +382,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           style={
             desktopSheetReservePx
               ? {
-                  /* Centre within strip [14px, 100% − rightInset] so it matches “main” feel with sheet open */
+                  /* Centre within strip [14px, 100% − rightInset] so it matches "main" feel with sheet open */
                   left: `calc(14px + (100% - 14px - ${rightInsetPx}px) / 2)`,
                   transform: 'translateX(-50%)',
                   width: `min(${TOOLBAR_MAX_PX}px, calc(100% - ${14 + rightInsetPx}px))`,
@@ -384,9 +406,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             <div className="flex flex-row gap-1">
               <button
                 type="button"
-                onClick={() => setAccessibilityOnlyMap((v) => !v)}
-                aria-label={accessibilityOnlyMap ? 'Disable accessibility filter' : 'Enable accessibility filter'}
-                title={accessibilityOnlyMap ? 'Accessibility filter ON' : 'Accessibility filter OFF'}
+                onClick={() => setAccessibilityAvailableOnly((v) => !v)}
+                aria-label={accessibilityAvailableOnly ? 'Disable accessibility filter' : 'Enable accessibility filter'}
+                title={accessibilityAvailableOnly ? 'Accessibility filter ON' : 'Accessibility filter OFF'}
                 className="flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg border border-gray-200/60 bg-white px-2 font-sans text-sm font-semibold text-gray-700 shadow-card transition-colors hover:bg-gray-50 dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
               >
                 ♿
@@ -428,8 +450,47 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           className="absolute top-5 z-[600] pointer-events-auto"
           style={{ right: rightInsetPx }}
         >
-          <div className="relative flex items-center gap-2">
-            <div className="relative">
+          <div className="relative flex items-start gap-2">
+            <button
+              type="button"
+              onClick={toggleAccessibilityMode}
+              aria-pressed={accessibilityMode}
+              aria-label={accessibilityMode ? 'Disable accessibility mode' : 'Enable accessibility mode'}
+              className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
+                accessibilityMode
+                  ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
+                  : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+              }`}
+              title={accessibilityMode ? 'Accessibility mode: ON' : 'Accessibility mode: OFF'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle cx="12" cy="5.6" r="2.1" stroke="currentColor" strokeWidth="1.75" />
+                <path d="M12 8.2v5.1l3 2.1" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                <path d="M8.6 11.7h3.4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                <circle cx="13.8" cy="15.7" r="4.5" stroke="currentColor" strokeWidth="1.75" />
+              </svg>
+              <span className="text-[9px] font-semibold leading-none">{accessibilityMode ? 'A11y ON' : 'A11y OFF'}</span>
+            </button>
+            <div className="relative flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLegendOpen((v) => !v)}
+                aria-pressed={legendOpen}
+                aria-label={legendOpen ? 'Hide heatmap legend' : 'Show heatmap legend'}
+                className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
+                  legendOpen
+                    ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
+                    : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+                }`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <circle cx="7" cy="8" r="2.25" stroke="currentColor" strokeWidth="1.75" />
+                  <circle cx="16.5" cy="6.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
+                  <circle cx="14.5" cy="15.5" r="2.5" stroke="currentColor" strokeWidth="1.75" />
+                  <circle cx="6.5" cy="16.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
+                </svg>
+                <span className="text-[10px] font-semibold leading-none">Heatmap</span>
+              </button>
               <button
                 type="button"
                 onClick={() =>
@@ -441,9 +502,17 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 }
                 aria-expanded={showArrivePicker}
                 aria-label={showArrivePicker ? 'Hide arrive by picker' : 'Show arrive by picker'}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200/80 bg-white/95 text-gray-600 shadow-card transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-200 dark:hover:bg-surface-dark"
+                className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
+                  showArrivePicker
+                    ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
+                    : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+                }`}
               >
-                <span aria-hidden className="text-[12px] leading-none">🕒</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.75" />
+                  <path d="M12 7.5v5l3.5 2.2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                </svg>
+                <span className="text-[10px] font-semibold leading-none">Time</span>
               </button>
             </div>
             <FilterChips
@@ -504,7 +573,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </div>
         )}
 
-        {accessibilityOnlyMap && (accessibilityLoading || accessibilityError) && (
+        {accessibilityAvailableOnly && (accessibilityLoading || accessibilityError) && (
           <div className="absolute left-3.5 top-[126px] z-[510] rounded-xl border border-gray-200/80 bg-white/95 px-3 py-2 text-xs shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/95">
             {accessibilityLoading && (
               <div className="text-gray-600 dark:text-gray-300">Loading accessible bays...</div>
@@ -536,14 +605,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         </div>
 
         {(() => {
-          const plannerActive = mapBaysAtPlannedTime && Boolean(plannerParams)
-          const rows = [['bg-[#a3ec48]', 'Free, rules allow']]
-          if (plannerActive) rows.push(['bg-[#f59e0b]', 'Taken, rules allow'])
-          rows.push(['bg-[#FFB382]', 'Caution: Tow Away / Loading Zone'])
-          rows.push([
-            'bg-[#ed6868]',
-            plannerActive ? 'Occupied or rules block' : 'Occupied',
-          ])
+          const rows = [
+            ['bg-[#a3ec48]', 'Available parking spots'],
+            ['bg-[#FFB382]', 'Caution: Tow Away / Loading Zone'],
+            ['bg-[#ed6868]', 'Parking spots occupied'],
+          ]
           return (
             <div
               className="absolute bottom-3.5 z-[500] rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
@@ -567,7 +633,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 <div className="p-2.5 max-w-[88vw] sm:max-w-none">
                   <div className="mb-1.5 flex items-center justify-between gap-3">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
-                      Bay status
+                      Verified bays
                     </span>
                     {isMobile && (
                       <button

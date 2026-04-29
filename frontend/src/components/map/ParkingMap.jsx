@@ -21,7 +21,7 @@ import {
 import { bayHeading } from '../../utils/bayLabels'
 const CLUSTER_ZOOM_CUTOFF = 18
 
-/** Bay-dot fill colours (match map legend): lime / orange / peach / red. */
+/** Bay-dot fill colours (match map legend): lime / peach / red. */
 const VERIFIED_FILL = {
   available: '#a3ec48',
   trap: '#FFB382',
@@ -32,12 +32,12 @@ function verifiedBayFillColor(bay, plannerMapActive, verdictByBayId) {
   if (plannerMapActive && verdictByBayId) {
     const pv = verdictByBayId[bay.id]
     if (pv === 'yes') {
-      // Sensor free + rules yes = green; sensor occupied + rules yes = amber
-      if (bay.free === 0) return '#f59e0b'
-      return VERIFIED_FILL.available
+      // Rules allow: free bays are green; occupied stays red (3-state legend only).
+      return bay.free === 1 ? VERIFIED_FILL.available : VERIFIED_FILL.occupied
     }
     if (pv === 'no') return VERIFIED_FILL.occupied
-    return '#9ca3af'
+    // Strict 3-state legend semantics: unknown maps to occupied/red (conservative).
+    return VERIFIED_FILL.occupied
   }
   const t = bay.type === 'trap' ? 'trap' : bay.type === 'occupied' ? 'occupied' : 'available'
   return VERIFIED_FILL[t] || VERIFIED_FILL.available
@@ -181,7 +181,9 @@ export default function ParkingMap({
   const destLatLng = destination ? destinationLatLng(destination) : null
 
   const { verifiedBays, limitedBays } = useMemo(() => {
-    const byType = activeFilter === 'all' ? bays : visibleBays
+    // Always render from already-filtered visibleBays so mode-level filtering
+    // (e.g. accessibility mode) cannot be bypassed by "All bays".
+    const byType = visibleBays
     const inRange = destination
       ? byType.filter((b) => proximityBays.some((p) => p.id === b.id))
       : byType
@@ -189,7 +191,7 @@ export default function ParkingMap({
       verifiedBays: inRange.filter((b) => b.hasRules),
       limitedBays: inRange.filter((b) => !b.hasRules),
     }
-  }, [activeFilter, bays, visibleBays, destination, proximityBays])
+  }, [visibleBays, destination, proximityBays])
 
   const baysForClustering = useMemo(() => {
     const live = verifiedBays.filter((b) => b.source === 'live')
@@ -250,10 +252,10 @@ export default function ParkingMap({
     let text = isDark ? '#f4f6ff' : '#35338c'
     if (total > 0 && available === total) bg = '#a3ec48'
     else if (total > 0 && occupied === total) bg = '#ed6868'
-    else if (total > 0 && trap === total) bg = '#FF7F50'
+    else if (total > 0 && trap === total) bg = '#FFB382'
 
     if (bg === '#a3ec48') text = '#3f5618'
-    else if (bg === '#FF7F50') text = '#8f3f22'
+    else if (bg === '#FFB382') text = '#8f3f22'
     else if (bg === '#ed6868') text = '#611d1d'
     const ring = '#ffffff'
 
