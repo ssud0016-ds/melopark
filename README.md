@@ -1,6 +1,6 @@
 # MelOPark - Melbourne Parking Intelligence
 
-MelOPark is a parking decision-support platform for Melbourne CBD drivers, built for FIT5120 Industry Experience Studio (S1 2026) by Team FlaminGO.
+MeloPark is a parking decision-support platform for Melbourne CBD drivers, built for FIT5120 Industry Experience Studio (S1 2026) by Team FlaminGO.
 
 It combines live occupancy data with restriction-aware legality checks to answer:
 **Can I park here now, for my planned stay, and what rules apply?**
