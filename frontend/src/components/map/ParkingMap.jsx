@@ -4,6 +4,7 @@ import {
   TileLayer,
   Circle,
   CircleMarker,
+  Rectangle,
   Marker,
   Popup,
   useMap,
@@ -19,6 +20,7 @@ import {
   DESTINATION_MAP_ZOOM,
 } from '../../utils/mapGeo'
 import { bayHeading } from '../../utils/bayLabels'
+import { buildZoneDemandSnapshot, DEMAND_FILL } from '../../utils/zoneDemand'
 const CLUSTER_ZOOM_CUTOFF = 18
 
 /** Bay-dot fill colours (match map legend): lime / peach / red. */
@@ -160,6 +162,9 @@ export default function ParkingMap({
   destZoom = DESTINATION_MAP_ZOOM,
   isMobile = false,
   hideHint = false,
+  showDemandOverlay = true,
+  onZoneClick = null,
+  optimalZoneId = null,
 }) {
   const [isDark, setIsDark] = useState(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -199,6 +204,11 @@ export default function ParkingMap({
     if (showLimitedBays) return verifiedCore
     return [...verifiedCore, ...limitedBays]
   }, [verifiedBays, limitedBays, showLimitedBays])
+
+  const zoneDemand = useMemo(() => {
+    if (!Array.isArray(bays) || bays.length === 0) return []
+    return buildZoneDemandSnapshot(bays)
+  }, [bays])
 
   const clustered = useMemo(() => {
     if (zoomLevel >= CLUSTER_ZOOM_CUTOFF) return []
@@ -306,6 +316,31 @@ export default function ParkingMap({
         <MapBoundsNotifier onBoundsChange={onBoundsChange} />
         <MapZoomTracker onZoomChange={setZoomLevel} />
         <MapEmptyClick onEmptyClick={() => onBayClick(null)} />
+
+        {showDemandOverlay && zoneDemand.map((zone) => {
+          if (!zone.hasLiveData || !zone.level) return null
+          const fillColor = DEMAND_FILL[zone.level]
+          if (!fillColor) return null
+          const isOptimal = zone.id === optimalZoneId
+          return (
+            <Rectangle
+              key={`zone-demand-${zone.id}`}
+              bounds={[zone.southWest, zone.northEast]}
+              interactive
+              eventHandlers={{
+                click: () => onZoneClick?.(zone.id),
+              }}
+              pathOptions={{
+                color: isOptimal ? '#1d4ed8' : fillColor,
+                fillColor,
+                fillOpacity: isOptimal ? 0.34 : 0.18,
+                opacity: isOptimal ? 1 : 0.4,
+                weight: isOptimal ? 3 : 1,
+                dashArray: isOptimal ? '8 5' : undefined,
+              }}
+            />
+          )
+        })}
 
         {destination && destLatLng && (
           <Circle

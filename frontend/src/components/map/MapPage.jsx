@@ -9,6 +9,11 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
 import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
 import { formatAtDateTime, formatDurationLabel } from '../../utils/plannerTime'
+import {
+  buildZoneAvailabilitySnapshot,
+  buildZoneDemandSnapshot,
+  chooseOptimalZoneId,
+} from '../../utils/zoneDemand'
 
 function toLocalDateTimeInputValue(iso) {
   const d = iso ? new Date(iso) : new Date()
@@ -95,6 +100,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [accessibilityLoading, setAccessibilityLoading] = useState(false)
   const [accessibilityError, setAccessibilityError] = useState(null)
   const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
+  const [selectedZoneId, setSelectedZoneId] = useState(null)
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
 
@@ -216,6 +222,16 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   }, [proximityBays, accessibilityAvailableOnly, accessibleBayIds])
 
   const selectedBay = mapBays.find((b) => b.id === selectedBayId) || null
+  const zoneAvailability = useMemo(() => buildZoneAvailabilitySnapshot(mapBays), [mapBays])
+  const zoneDemand = useMemo(() => buildZoneDemandSnapshot(mapBays), [mapBays])
+  const optimalZoneId = useMemo(
+    () => chooseOptimalZoneId(zoneDemand, destination, mapBounds),
+    [zoneDemand, destination, mapBounds],
+  )
+  const selectedZone = useMemo(
+    () => zoneAvailability.find((z) => z.id === selectedZoneId) || null,
+    [zoneAvailability, selectedZoneId],
+  )
 
   const {
     verifiedCount,
@@ -261,6 +277,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     else setLegendOpen(false)
   }, [isMobile])
 
+  useEffect(() => {
+    if (!legendOpen) setSelectedZoneId(null)
+  }, [legendOpen])
+
   const handlePickLandmark = useCallback((lm) => pickDestination(lm), [pickDestination])
 
   const handleMapReady = useCallback((map) => {
@@ -284,6 +304,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     (bay) => setSelectedBayId(bay ? bay.id : null),
     [setSelectedBayId],
   )
+
+  const handleZoneClick = useCallback((zoneId) => {
+    if (!zoneId) return
+    setSelectedZoneId(zoneId)
+    setSelectedBayId(null)
+  }, [setSelectedBayId])
 
   const desktopSheetReservePx = selectedBay && !isMobile ? 396 : 0
   const rightInsetPx = 14 + desktopSheetReservePx
@@ -334,6 +360,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           destZoom={destinationMapZoom}
           isMobile={isMobile}
           hideHint={isMobile && legendOpen}
+          showDemandOverlay={legendOpen}
+          onZoneClick={handleZoneClick}
+          optimalZoneId={legendOpen ? optimalZoneId : null}
         />
 
         {accessibilityMode && (
@@ -573,6 +602,44 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </div>
         )}
 
+        {selectedZone && (
+          <div
+            className="absolute left-3.5 top-[126px] z-[520] max-w-[min(280px,calc(100vw-28px))] rounded-xl border border-brand bg-white/96 px-3 py-2 text-xs shadow-card-lg dark:border-brand-300/80 dark:bg-surface-dark-secondary/96"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-brand dark:text-brand-100">
+                  Zone pressure panel
+                </div>
+                <div className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  {selectedZone.label}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedZoneId(null)}
+                aria-label="Close zone panel"
+                className="cursor-pointer rounded-md px-1 text-base leading-none text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-2 rounded-lg bg-brand-50 px-2.5 py-2 dark:bg-brand-100/15">
+              <span className="text-[11px] font-medium text-gray-700 dark:text-gray-200">
+                Currently available bays in this zone
+              </span>
+              <div className="mt-1 text-lg font-bold text-brand dark:text-brand-100">
+                {selectedZone.availableBayCount}
+              </div>
+              <div className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                Based on {selectedZone.liveBayCount} live monitored bay{selectedZone.liveBayCount === 1 ? '' : 's'}
+              </div>
+            </div>
+          </div>
+        )}
+
         {accessibilityAvailableOnly && (accessibilityLoading || accessibilityError) && (
           <div className="absolute left-3.5 top-[126px] z-[510] rounded-xl border border-gray-200/80 bg-white/95 px-3 py-2 text-xs shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/95">
             {accessibilityLoading && (
@@ -606,9 +673,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {(() => {
           const rows = [
-            ['bg-[#a3ec48]', 'Available parking spots'],
-            ['bg-[#FFB382]', 'Caution: Tow Away / Loading Zone'],
-            ['bg-[#ed6868]', 'Parking spots occupied'],
+            ['bg-[#4ade80]', 'Low demand'],
+            ['bg-[#f59e0b]', 'Moderate demand'],
+            ['bg-[#ef4444]', 'High demand'],
           ]
           return (
             <div
@@ -633,7 +700,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 <div className="p-2.5 max-w-[88vw] sm:max-w-none">
                   <div className="mb-1.5 flex items-center justify-between gap-3">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
-                      Verified bays
+                      Parking pressure (CBD zones)
                     </span>
                     {isMobile && (
                       <button
