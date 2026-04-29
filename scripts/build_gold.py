@@ -1078,10 +1078,76 @@ def build_gold_accessibility(export_csv: bool = False, dry_run: bool = False) ->
     else:
         df["plain_english"] = "Restriction details not available."
 
+    # Optional: expand disability-only flags using disability parking point overlays.
+    # If a disability point is within MATCH_M of a bay coordinate, mark that bay as disability.
+    overlay_path = SILVER_DIR / "disability_parking_points_clean.parquet"
+    MATCH_M = 25.0
+    if overlay_path.exists() and "lat" in df.columns and "lon" in df.columns:
+        try:
+            pts = pd.read_parquet(overlay_path)
+            pts = pts.dropna(subset=["lat", "lng"]).copy()
+            pts["lat"] = pd.to_numeric(pts["lat"], errors="coerce")
+            pts["lng"] = pd.to_numeric(pts["lng"], errors="coerce")
+            pts = pts.dropna(subset=["lat", "lng"])
+
+            bays = df[["bay_id", "lat", "lon"]].dropna(subset=["lat", "lon"]).drop_duplicates("bay_id").copy()
+            bays["lat"] = pd.to_numeric(bays["lat"], errors="coerce")
+            bays["lon"] = pd.to_numeric(bays["lon"], errors="coerce")
+            bays = bays.dropna(subset=["lat", "lon"])
+
+            if not pts.empty and not bays.empty:
+                import numpy as np
+
+                def _haversine_m(lat1, lon1, lat2, lon2):
+                    r = 6_371_000.0
+                    lat1 = np.radians(lat1)
+                    lat2 = np.radians(lat2)
+                    dlat = np.radians(lat2 - lat1)
+                    dlon = np.radians(lon2 - lon1)
+                    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
+                    return 2.0 * r * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
+
+                bay_ids = bays["bay_id"].astype(str).to_numpy()
+                bay_lat = bays["lat"].to_numpy(dtype=float)
+                bay_lon = bays["lon"].to_numpy(dtype=float)
+
+                matched_bay_ids: set[str] = set()
+                # Chunk points so this stays fast without extra deps.
+                for start in range(0, len(pts), 200):
+                    chunk = pts.iloc[start:start + 200]
+                    plat = chunk["lat"].to_numpy(dtype=float)[:, None]
+                    plon = chunk["lng"].to_numpy(dtype=float)[:, None]
+                    dist = _haversine_m(plat, plon, bay_lat[None, :], bay_lon[None, :])
+                    nn_idx = dist.argmin(axis=1)
+                    nn_dist = dist[np.arange(dist.shape[0]), nn_idx]
+                    ok = nn_dist <= MATCH_M
+                    if ok.any():
+                        matched_bay_ids.update(bay_ids[nn_idx[ok]].tolist())
+
+                if matched_bay_ids:
+                    df["is_disability_overlay"] = df["bay_id"].astype(str).isin(matched_bay_ids)
+                else:
+                    df["is_disability_overlay"] = False
+                log.info(
+                    "Disability overlay match: points=%d bays=%d matched_bays=%d (threshold=%.0fm)",
+                    len(pts), len(bays), int(df["is_disability_overlay"].sum()), MATCH_M,
+                )
+            else:
+                df["is_disability_overlay"] = False
+        except Exception as e:
+            log.warning("Disability overlay match skipped: %s", e)
+            df["is_disability_overlay"] = False
+    else:
+        df["is_disability_overlay"] = False
+
     if "is_disability_only" in df.columns:
         df["is_disability_only"] = df["is_disability_only"].fillna(False).astype(bool)
     else:
         df["is_disability_only"] = False
+
+    # Promote overlay matches into the disability-only flag.
+    if "is_disability_overlay" in df.columns:
+        df["is_disability_only"] = df["is_disability_only"] | df["is_disability_overlay"].fillna(False).astype(bool)
     if "has_disability_extension" in df.columns:
         df["has_disability_extension"] = df["has_disability_extension"].fillna(False).astype(bool)
     else:
