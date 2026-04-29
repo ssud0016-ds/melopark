@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { metersBetweenBayAndDestination, walkingMinutesFromMeters } from '../../utils/mapGeo'
 import { bayHeading, bayMissingStreetNote, streetShort } from '../../utils/bayLabels'
@@ -133,6 +134,36 @@ export default function BayDetailSheet({
       durationMins: debouncedPlanner.durationMins,
     }
   }, [debouncedPlanner, plannerBackdatedError])
+=======
+import { useState, useEffect, useMemo } from 'react'
+import { bayHeading, bayMissingStreetNote, streetShort } from '../../utils/bayLabels'
+import { cn } from '../../utils/cn'
+import { fetchBayEvaluation } from '../../services/apiBays'
+import ParkingVerdictPanel from './ParkingVerdictPanel'
+import BayStatusAndLimits from './BayStatusAndLimits'
+import ParkingSignTranslator from './ParkingSignTranslator'
+
+export default function BayDetailSheet({
+  bay,
+  onClose,
+  isMobile,
+  reserveBottomPx = 280,
+  savedPlannerArrivalIso = null,
+  savedPlannerDurationMins = null,
+  mapBaysAtPlannedTime = false,
+}) {
+  const [evaluation, setEvaluation] = useState(null)
+  const [evalLoading, setEvalLoading] = useState(false)
+  const durationMins = savedPlannerDurationMins ?? 60
+
+  const fetchOpts = useMemo(() => {
+    if (!savedPlannerArrivalIso || savedPlannerDurationMins == null) return null
+    return {
+      arrivalIso: savedPlannerArrivalIso,
+      durationMins: savedPlannerDurationMins,
+    }
+  }, [savedPlannerArrivalIso, savedPlannerDurationMins])
+>>>>>>> origin/main
 
   useEffect(() => {
     if (!bay?.id) {
@@ -140,11 +171,14 @@ export default function BayDetailSheet({
       setEvalLoading(false)
       return
     }
+<<<<<<< HEAD
     if (plannerBackdatedError) {
       setEvaluation(null)
       setEvalLoading(false)
       return
     }
+=======
+>>>>>>> origin/main
     let cancelled = false
     setEvalLoading(true)
     setEvaluation(null)
@@ -157,6 +191,7 @@ export default function BayDetailSheet({
     return () => {
       cancelled = true
     }
+<<<<<<< HEAD
   }, [bay?.id, fetchOpts, debouncedPlanner, plannerBackdatedError])
 
   const plannerSectionRef = useRef(null)
@@ -198,11 +233,18 @@ export default function BayDetailSheet({
 
   const combined = combinedStatus(bay, evalLoading ? null : evaluation)
 
+=======
+  }, [bay?.id, fetchOpts])
+
+  if (!bay) return null
+
+>>>>>>> origin/main
   const resolvedName = bay.name?.trim() || evaluation?.street_name || null
   const bayDisplayName = resolvedName || bayHeading(bay)
   const missingStreetNote = resolvedName ? null : bayMissingStreetNote(bay)
   const streetLine = resolvedName ? streetShort(resolvedName) : null
 
+<<<<<<< HEAD
   let walkStr = null
   if (destination) {
     const m = Math.round(metersBetweenBayAndDestination(bay, destination))
@@ -270,6 +312,59 @@ export default function BayDetailSheet({
   const showApiNote = dataSource === 'api_fallback'
 
   const atLabel = debouncedPlanner ? formatAtDateTime(debouncedPlanner.arrivalIso) : null
+=======
+  const occupancyBadge = bay?.free === 1 ? 'SPACE FREE' : bay?.free === 0 ? 'SPACE OCCUPIED' : 'SPACE UNKNOWN'
+  const occupancyDotClass = bay?.free === 1 ? 'bg-emerald-400' : bay?.free === 0 ? 'bg-red-500' : 'bg-gray-400'
+
+  const disabilityOnly =
+    evaluation?.active_restriction?.rule_category === 'disabled' || evaluation?.warning?.type === 'disabled'
+
+  const isTowAwayOrLoadingCaution = (() => {
+    const cat = (evaluation?.warning?.type || evaluation?.active_restriction?.rule_category || '').toLowerCase()
+    return cat === 'clearway' || cat === 'loading' || cat === 'no_standing'
+  })()
+
+  const verdictVariant = (() => {
+    if (bay?.free === 0) return 'no'
+    if (!evaluation || evalLoading) return null
+    if (evaluation.verdict === 'no') return 'no'
+    if (evaluation.verdict === 'yes' && evaluation.warning && isTowAwayOrLoadingCaution) return 'caution'
+    if (evaluation.verdict === 'yes') return 'yes'
+    // Keep strict 3-state behaviour: unknown / unsupported warnings are conservative "NO".
+    return 'no'
+  })()
+
+  const currentlyShowingStr = (() => {
+    const iso = savedPlannerArrivalIso || new Date().toISOString()
+    // Build "YYYY-MM-DD | h:mm AM/PM" in Melbourne time, matching screenshots.
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
+    const parts = new Intl.DateTimeFormat('en-AU', {
+      timeZone: 'Australia/Melbourne',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(d)
+    const y = parts.find((p) => p.type === 'year')?.value
+    const m = parts.find((p) => p.type === 'month')?.value
+    const da = parts.find((p) => p.type === 'day')?.value
+    const dateStr = y && m && da ? `${y}-${m}-${da}` : ''
+    const timeStr = new Intl.DateTimeFormat('en-AU', {
+      timeZone: 'Australia/Melbourne',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(d)
+    return `${dateStr} | ${timeStr}`
+  })()
+
+  const durationLabel = (() => {
+    if (mapBaysAtPlannedTime) return 'All Bays'
+    if (typeof durationMins !== 'number' || !Number.isFinite(durationMins)) return null
+    if (durationMins % 60 === 0 && durationMins <= 6 * 60) return `${durationMins / 60}P`
+    return `${durationMins}m`
+  })()
+>>>>>>> origin/main
 
   return (
     <div
@@ -289,6 +384,14 @@ export default function BayDetailSheet({
           <div className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Bay #{bay.id}
           </div>
+<<<<<<< HEAD
+=======
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-[10px] font-bold tracking-wider text-gray-500 dark:text-gray-400">
+              <span className={cn('w-2 h-2 rounded-full', occupancyDotClass)} aria-hidden />
+              {occupancyBadge}
+            </div>
+>>>>>>> origin/main
           <button
             type="button"
             onClick={onClose}
@@ -297,6 +400,10 @@ export default function BayDetailSheet({
           >
             &times;
           </button>
+<<<<<<< HEAD
+=======
+          </div>
+>>>>>>> origin/main
         </div>
         {streetLine ? (
           <div
@@ -310,6 +417,7 @@ export default function BayDetailSheet({
             {missingStreetNote}
           </div>
         ) : null}
+<<<<<<< HEAD
         {walkStr && (
           <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{walkStr}</div>
         )}
@@ -576,6 +684,44 @@ export default function BayDetailSheet({
           </div>
         )}
       </div>
+=======
+      </div>
+
+      {/* 2. Currently showing strip */}
+      <div className="px-5 pt-3">
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="font-semibold">Currently Showing:</span>{' '}
+          <span className="font-semibold text-[#2E2A8A]">{currentlyShowingStr}</span>
+          {durationLabel ? <span className="font-semibold text-gray-500">{` | ${durationLabel}`}</span> : null}
+        </div>
+        <div className="mt-2 rounded-lg bg-gray-100/70 dark:bg-gray-800/60 px-3 py-1.5 text-[11px] font-semibold text-red-500">
+          Please update the time filter to plan ahead
+        </div>
+      </div>
+
+      {/* 3. Disability banner (when relevant) */}
+      {disabilityOnly && (
+        <div className="mx-5 mt-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-700/40 px-3.5 py-2.5 text-xs font-bold tracking-wider text-blue-700 dark:text-blue-200 flex items-center gap-2">
+          <span aria-hidden>♿</span>
+          DISABILITY PERMIT HOLDERS ONLY
+        </div>
+      )}
+
+      {/* 4. Parking verdict panel (matches tab design) */}
+      {verdictVariant && (
+        <ParkingVerdictPanel
+          variant={verdictVariant}
+          durationMins={durationMins}
+          evaluation={evalLoading ? null : evaluation}
+        />
+      )}
+
+      {/* 5. Bay status and limits */}
+      <BayStatusAndLimits bay={bay} evaluation={evalLoading ? null : evaluation} />
+
+      {/* 6. Parking sign translator */}
+      <ParkingSignTranslator evaluation={evalLoading ? null : evaluation} />
+>>>>>>> origin/main
     </div>
   )
 }
