@@ -1,11 +1,16 @@
 """Parking data endpoints."""
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.services.parking_service import (
     SensorCacheEmptyError,
     fetch_parking_bays,
+    predict_occupancy_for_arrival,
+    predict_zone_pressure_for_arrival,
     fetch_raw_parking_bays,
 )
 
@@ -15,6 +20,7 @@ from slowapi.util import get_remote_address
 limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/api/parking", tags=["parking"])
+_MELBOURNE_TZ = ZoneInfo("Australia/Melbourne")
 
 
 @router.get("", summary="Cleaned parking bays for frontend use")
@@ -66,3 +72,61 @@ async def get_raw_parking_bays(request: Request):
             status_code=503,
             detail=f"Could not reach upstream API: {exc}",
         ) from exc
+
+
+@router.get("/predicted-occupancy", summary="Predicted occupancy for arrival time")
+@limiter.limit("30/minute")
+async def get_predicted_occupancy(
+    request: Request,
+    arrival_iso: str = Query(
+        ...,
+        description="ISO-8601 arrival time (e.g. 2026-04-14T10:30:00).",
+    ),
+):
+    """Predict occupancy percentage for a target arrival time.
+
+    Uses historical sensor snapshots collected from live refreshes.
+    """
+    try:
+        arrival = datetime.fromisoformat(arrival_iso)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="arrival_iso must be a valid ISO-8601 datetime") from exc
+
+    if arrival.tzinfo is None:
+        arrival = arrival.replace(tzinfo=_MELBOURNE_TZ)
+
+    prediction = await predict_occupancy_for_arrival(arrival)
+    if prediction is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Prediction is not available yet because historical sensor data is insufficient.",
+        )
+    return {
+        "arrival_iso": arrival.isoformat(),
+        **prediction,
+    }
+
+
+@router.get("/predicted-zone-pressure", summary="Predicted pressure by CBD zone")
+@limiter.limit("30/minute")
+async def get_predicted_zone_pressure(
+    request: Request,
+    arrival_iso: str = Query(
+        ...,
+        description="ISO-8601 arrival time (e.g. 2026-04-14T10:30:00).",
+    ),
+):
+    """Predict pressure level for each zone at a target arrival time."""
+    try:
+        arrival = datetime.fromisoformat(arrival_iso)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="arrival_iso must be a valid ISO-8601 datetime") from exc
+
+    if arrival.tzinfo is None:
+        arrival = arrival.replace(tzinfo=_MELBOURNE_TZ)
+
+    zones = await predict_zone_pressure_for_arrival(arrival)
+    return {
+        "arrival_iso": arrival.isoformat(),
+        "zones": zones,
+    }

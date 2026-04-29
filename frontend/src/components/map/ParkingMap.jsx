@@ -165,6 +165,7 @@ export default function ParkingMap({
   showDemandOverlay = true,
   onZoneClick = null,
   optimalZoneId = null,
+  predictedHighPressureZoneIds = [],
 }) {
   const [isDark, setIsDark] = useState(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -322,23 +323,40 @@ export default function ParkingMap({
           const fillColor = DEMAND_FILL[zone.level]
           if (!fillColor) return null
           const isOptimal = zone.id === optimalZoneId
+          const isPredictedHighPressure = predictedHighPressureZoneIds.includes(zone.id)
           return (
-            <Rectangle
-              key={`zone-demand-${zone.id}`}
-              bounds={[zone.southWest, zone.northEast]}
-              interactive
-              eventHandlers={{
-                click: () => onZoneClick?.(zone.id),
-              }}
-              pathOptions={{
-                color: isOptimal ? '#1d4ed8' : fillColor,
-                fillColor,
-                fillOpacity: isOptimal ? 0.34 : 0.18,
-                opacity: isOptimal ? 1 : 0.4,
-                weight: isOptimal ? 3 : 1,
-                dashArray: isOptimal ? '8 5' : undefined,
-              }}
-            />
+            <>
+              <Rectangle
+                key={`zone-demand-${zone.id}`}
+                bounds={[zone.southWest, zone.northEast]}
+                interactive
+                eventHandlers={{
+                  click: () => onZoneClick?.(zone.id),
+                }}
+                pathOptions={{
+                  color: isOptimal ? '#1d4ed8' : fillColor,
+                  fillColor,
+                  fillOpacity: isOptimal ? 0.34 : 0.18,
+                  opacity: isOptimal ? 1 : 0.4,
+                  weight: isOptimal ? 3 : 1,
+                  dashArray: isOptimal ? '8 5' : undefined,
+                }}
+              />
+              {isPredictedHighPressure && (
+                <Rectangle
+                  key={`zone-warning-${zone.id}`}
+                  bounds={[zone.southWest, zone.northEast]}
+                  interactive={false}
+                  pathOptions={{
+                    color: '#b91c1c',
+                    fillOpacity: 0,
+                    opacity: 1,
+                    weight: isOptimal ? 4 : 3,
+                    dashArray: '4 4',
+                  }}
+                />
+              )}
+            </>
           )
         })}
 

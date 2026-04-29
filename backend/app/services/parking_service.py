@@ -3,7 +3,9 @@
 import asyncio
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -54,6 +56,21 @@ _sensor_cache: list[dict] = []
 _sensor_cache_lock = asyncio.Lock()
 _sensor_cache_ts_mono: float = 0.0
 _last_upstream_fail_mono: Optional[float] = None
+_sensor_history: list[dict] = []
+_SENSOR_HISTORY_MAX_POINTS = 2016  # ~7 days at 5-min refresh cadence
+_MELBOURNE_TZ = ZoneInfo("Australia/Melbourne")
+_ZONE_GRID = [
+    {"id": "nw", "x_min": 0.0, "x_max": 1.0 / 3.0, "y_min": 0.0, "y_max": 0.5},
+    {"id": "nc", "x_min": 1.0 / 3.0, "x_max": 2.0 / 3.0, "y_min": 0.0, "y_max": 0.5},
+    {"id": "ne", "x_min": 2.0 / 3.0, "x_max": 1.0, "y_min": 0.0, "y_max": 0.5},
+    {"id": "sw", "x_min": 0.0, "x_max": 1.0 / 3.0, "y_min": 0.5, "y_max": 1.0},
+    {"id": "sc", "x_min": 1.0 / 3.0, "x_max": 2.0 / 3.0, "y_min": 0.5, "y_max": 1.0},
+    {"id": "se", "x_min": 2.0 / 3.0, "x_max": 1.0, "y_min": 0.5, "y_max": 1.0},
+]
+_NORTH_LAT = -37.8055
+_SOUTH_LAT = -37.8225
+_WEST_LNG = 144.9475
+_EAST_LNG = 144.9745
 
 _refresh_task: Optional[asyncio.Task] = None
 _refresh_task_lock = asyncio.Lock()
@@ -176,6 +193,7 @@ async def _refresh_from_upstream_once() -> bool:
                 _sensor_cache = fresh
                 _sensor_cache_ts_mono = time.monotonic()
                 _last_upstream_fail_mono = None
+                _record_sensor_history_snapshot(fresh)
             logger.info("Sensor cache refreshed — %d records", len(fresh))
             return False
         except httpx.HTTPStatusError as exc:
@@ -314,6 +332,215 @@ async def fetch_raw_parking_bays() -> list[dict]:
 # ---------------------------------------------------------------------------
 # Transformation helpers
 # ---------------------------------------------------------------------------
+
+
+def _record_sensor_history_snapshot(raw_records: list[dict]) -> None:
+    """Append one occupancy snapshot for downstream prediction use."""
+    known = 0
+    occupied = 0
+    zone_known: dict[str, int] = {z["id"]: 0 for z in _ZONE_GRID}
+    zone_occupied: dict[str, int] = {z["id"]: 0 for z in _ZONE_GRID}
+    for r in raw_records:
+        state = _map_status(str(r.get("status_description", "")))
+        if state not in ("free", "occupied"):
+            continue
+        known += 1
+        if state == "occupied":
+            occupied += 1
+        location = r.get("location") or {}
+        lat = location.get("lat")
+        lon = location.get("lon")
+        if lat is None or lon is None:
+            continue
+        zone_id = _zone_id_for_lat_lng(lat, lon)
+        if zone_id is None:
+            continue
+        zone_known[zone_id] += 1
+        if state == "occupied":
+            zone_occupied[zone_id] += 1
+    if known == 0:
+        return
+
+    _sensor_history.append(
+        {
+            "timestamp_utc": datetime.now(timezone.utc),
+            "occupancy_ratio": occupied / known,
+            "zone_occupancy_ratio": {
+                zid: (zone_occupied[zid] / zone_known[zid])
+                for zid in zone_known
+                if zone_known[zid] > 0
+            },
+        }
+    )
+    if len(_sensor_history) > _SENSOR_HISTORY_MAX_POINTS:
+        del _sensor_history[: len(_sensor_history) - _SENSOR_HISTORY_MAX_POINTS]
+
+
+def _current_occupancy_ratio(raw_records: list[dict]) -> Optional[float]:
+    known = 0
+    occupied = 0
+    for r in raw_records:
+        state = _map_status(str(r.get("status_description", "")))
+        if state not in ("free", "occupied"):
+            continue
+        known += 1
+        if state == "occupied":
+            occupied += 1
+    if known == 0:
+        return None
+    return occupied / known
+
+
+def _zone_id_for_lat_lng(lat: float, lng: float) -> Optional[str]:
+    if lat is None or lng is None:
+        return None
+    if lat > _NORTH_LAT or lat < _SOUTH_LAT or lng < _WEST_LNG or lng > _EAST_LNG:
+        return None
+    x = (lng - _WEST_LNG) / (_EAST_LNG - _WEST_LNG)
+    y = (lat - _NORTH_LAT) / (_SOUTH_LAT - _NORTH_LAT)
+    for z in _ZONE_GRID:
+        if (
+            x >= z["x_min"]
+            and x <= z["x_max"]
+            and y >= z["y_min"]
+            and y <= z["y_max"]
+        ):
+            return z["id"]
+    return None
+
+
+def _classify_demand_from_ratio(occupied_ratio: float) -> str:
+    if occupied_ratio < 0.4:
+        return "low"
+    if occupied_ratio < 0.75:
+        return "moderate"
+    return "high"
+
+
+async def predict_occupancy_for_arrival(arrival: datetime) -> Optional[dict]:
+    """Predict occupancy percentage for a target arrival time.
+
+    Prediction uses historical sensor snapshots captured from previous live
+    refreshes. If there is no usable historical data yet, it falls back to the
+    current live occupancy ratio.
+    """
+    async with _sensor_cache_lock:
+        history = list(_sensor_history)
+        current = list(_sensor_cache)
+
+    target = arrival.astimezone(_MELBOURNE_TZ)
+
+    historical_ratios: list[float] = []
+    for p in history:
+        ts = p.get("timestamp_utc")
+        ratio = p.get("occupancy_ratio")
+        if ts is None or ratio is None:
+            continue
+        ts_mel = ts.astimezone(_MELBOURNE_TZ)
+        if ts_mel.weekday() == target.weekday() and ts_mel.hour == target.hour:
+            historical_ratios.append(ratio)
+
+    if len(historical_ratios) < 3:
+        hour_only = []
+        for p in history:
+            ts = p.get("timestamp_utc")
+            ratio = p.get("occupancy_ratio")
+            if ts is None or ratio is None:
+                continue
+            ts_mel = ts.astimezone(_MELBOURNE_TZ)
+            if ts_mel.hour == target.hour:
+                hour_only.append(ratio)
+        if hour_only:
+            historical_ratios = hour_only
+
+    if historical_ratios:
+        avg = sum(historical_ratios) / len(historical_ratios)
+        return {
+            "predicted_occupancy_pct": round(avg * 100, 1),
+            "sample_count": len(historical_ratios),
+            "basis": "historical_sensor_data",
+        }
+
+    current_ratio = _current_occupancy_ratio(current)
+    if current_ratio is None:
+        return None
+    return {
+        "predicted_occupancy_pct": round(current_ratio * 100, 1),
+        "sample_count": 0,
+        "basis": "live_fallback",
+    }
+
+
+async def predict_zone_pressure_for_arrival(arrival: datetime) -> list[dict]:
+    """Predict demand level per zone for a target arrival time."""
+    async with _sensor_cache_lock:
+        history = list(_sensor_history)
+        current = list(_sensor_cache)
+
+    target = arrival.astimezone(_MELBOURNE_TZ)
+    zones: list[dict] = []
+    for z in _ZONE_GRID:
+        zid = z["id"]
+        samples: list[float] = []
+
+        for p in history:
+            ts = p.get("timestamp_utc")
+            zone_map = p.get("zone_occupancy_ratio") or {}
+            ratio = zone_map.get(zid)
+            if ts is None or ratio is None:
+                continue
+            ts_mel = ts.astimezone(_MELBOURNE_TZ)
+            if ts_mel.weekday() == target.weekday() and ts_mel.hour == target.hour:
+                samples.append(ratio)
+
+        if len(samples) < 3:
+            for p in history:
+                ts = p.get("timestamp_utc")
+                zone_map = p.get("zone_occupancy_ratio") or {}
+                ratio = zone_map.get(zid)
+                if ts is None or ratio is None:
+                    continue
+                ts_mel = ts.astimezone(_MELBOURNE_TZ)
+                if ts_mel.hour == target.hour:
+                    samples.append(ratio)
+
+        if not samples:
+            zone_known = 0
+            zone_occupied = 0
+            for r in current:
+                state = _map_status(str(r.get("status_description", "")))
+                if state not in ("free", "occupied"):
+                    continue
+                location = r.get("location") or {}
+                lat = location.get("lat")
+                lon = location.get("lon")
+                if _zone_id_for_lat_lng(lat, lon) != zid:
+                    continue
+                zone_known += 1
+                if state == "occupied":
+                    zone_occupied += 1
+            if zone_known > 0:
+                ratio = zone_occupied / zone_known
+                zones.append(
+                    {
+                        "zone_id": zid,
+                        "predicted_occupancy_pct": round(ratio * 100, 1),
+                        "predicted_pressure_level": _classify_demand_from_ratio(ratio),
+                        "basis": "live_fallback",
+                    }
+                )
+            continue
+
+        avg = sum(samples) / len(samples)
+        zones.append(
+            {
+                "zone_id": zid,
+                "predicted_occupancy_pct": round(avg * 100, 1),
+                "predicted_pressure_level": _classify_demand_from_ratio(avg),
+                "basis": "historical_sensor_data",
+            }
+        )
+    return zones
 
 _STATUS_MAP: dict[str, str] = {
     "unoccupied": "free",

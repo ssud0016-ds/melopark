@@ -163,6 +163,58 @@ export async function fetchEvaluateBulk(bbox, options) {
 }
 
 /**
+ * Predict occupancy percentage at a target arrival time.
+ * Backend: GET /api/parking/predicted-occupancy
+ */
+export async function fetchPredictedOccupancy(arrivalIso) {
+  if (!arrivalIso) return null
+  const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+  const params = new URLSearchParams()
+  params.set('arrival_iso', arrivalIso)
+  const url = `${base}/api/parking/predicted-occupancy?${params.toString()}`
+  const res = await fetch(url)
+  if (!res.ok) {
+    let detail = ''
+    try {
+      const body = await res.json()
+      const d = body?.detail
+      detail = d == null ? '' : (typeof d === 'string' ? d : JSON.stringify(d))
+    } catch {
+      // ignore
+    }
+    throw new Error(`Could not generate occupancy prediction (${res.status})${detail ? `: ${detail}` : ''}`)
+  }
+  const data = await res.json()
+  return data && typeof data === 'object' ? data : null
+}
+
+/**
+ * Predict pressure level for each CBD zone at a target arrival time.
+ * Backend: GET /api/parking/predicted-zone-pressure
+ */
+export async function fetchPredictedZonePressure(arrivalIso) {
+  if (!arrivalIso) return null
+  const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+  const params = new URLSearchParams()
+  params.set('arrival_iso', arrivalIso)
+  const url = `${base}/api/parking/predicted-zone-pressure?${params.toString()}`
+  const res = await fetch(url)
+  if (!res.ok) {
+    let detail = ''
+    try {
+      const body = await res.json()
+      const d = body?.detail
+      detail = d == null ? '' : (typeof d === 'string' ? d : JSON.stringify(d))
+    } catch {
+      // ignore
+    }
+    throw new Error(`Could not generate zone pressure prediction (${res.status})${detail ? `: ${detail}` : ''}`)
+  }
+  const data = await res.json()
+  return data && typeof data === 'object' ? data : null
+}
+
+/**
  * Fetch nearby disability-only bays around a destination point.
  * Backend: GET /api/accessibility/nearby
  */

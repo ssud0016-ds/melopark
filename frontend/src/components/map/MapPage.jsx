@@ -7,7 +7,12 @@ import FilterChips from '../feedback/FilterChips'
 import { useMapState } from '../../hooks/useMapState'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
-import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
+import {
+  fetchAccessibilityNearby,
+  fetchEvaluateBulk,
+  fetchPredictedOccupancy,
+  fetchPredictedZonePressure,
+} from '../../services/apiBays'
 import { formatAtDateTime, formatDurationLabel } from '../../utils/plannerTime'
 import {
   buildZoneAvailabilitySnapshot,
@@ -101,6 +106,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [accessibilityError, setAccessibilityError] = useState(null)
   const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
   const [selectedZoneId, setSelectedZoneId] = useState(null)
+  const [predictedOccupancy, setPredictedOccupancy] = useState(null)
+  const [predictedZonePressure, setPredictedZonePressure] = useState(null)
+  const [predictionLoading, setPredictionLoading] = useState(false)
+  const [predictionError, setPredictionError] = useState(null)
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
 
@@ -138,6 +147,53 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   useEffect(() => {
     if (!mapBaysAtPlannedTime) setBulkVerdictById({})
   }, [mapBaysAtPlannedTime])
+
+  useEffect(() => {
+    if (!plannerArrivalIso) {
+      setPredictedOccupancy(null)
+      setPredictionLoading(false)
+      setPredictionError(null)
+      return
+    }
+    let cancelled = false
+    setPredictionLoading(true)
+    setPredictionError(null)
+    Promise.all([
+      fetchPredictedOccupancy(plannerArrivalIso),
+      fetchPredictedZonePressure(plannerArrivalIso),
+    ])
+      .then(([occupancyData, zoneData]) => {
+        if (cancelled) return
+        setPredictedOccupancy(occupancyData)
+        setPredictedZonePressure(zoneData)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setPredictedOccupancy(null)
+        setPredictedZonePressure(null)
+        setPredictionError(err instanceof Error ? err.message : 'Could not generate occupancy prediction')
+      })
+      .finally(() => {
+        if (!cancelled) setPredictionLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [plannerArrivalIso])
+
+  const predictedHighPressureZoneIds = useMemo(() => {
+    if (!predictedZonePressure?.zones || !Array.isArray(predictedZonePressure.zones)) return []
+    return predictedZonePressure.zones
+      .filter((z) => z?.predicted_pressure_level === 'high')
+      .map((z) => String(z.zone_id))
+  }, [predictedZonePressure])
+
+  const isPreDeparturePrediction = useMemo(() => {
+    if (!plannerArrivalIso) return false
+    const d = new Date(plannerArrivalIso)
+    if (Number.isNaN(d.getTime())) return false
+    return d.getTime() > Date.now()
+  }, [plannerArrivalIso])
 
   useEffect(() => {
     if (!debouncedPlannerForBulk || !debouncedBounds) return
@@ -363,6 +419,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           showDemandOverlay={legendOpen}
           onZoneClick={handleZoneClick}
           optimalZoneId={legendOpen ? optimalZoneId : null}
+          predictedHighPressureZoneIds={legendOpen && isPreDeparturePrediction ? predictedHighPressureZoneIds : []}
         />
 
         {accessibilityMode && (
@@ -371,6 +428,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             aria-label="Accessibility mode enabled: showing disability bays only"
           >
             Accessibility mode: DIS bays only
+          </div>
+        )}
+
+        {legendOpen && isPreDeparturePrediction && predictedHighPressureZoneIds.length > 0 && (
+          <div className="absolute left-3.5 top-[84px] z-[520] rounded-xl border border-red-300 bg-red-50/95 px-3 py-2 text-xs font-semibold text-red-700 shadow-card dark:border-red-700/60 dark:bg-red-900/20 dark:text-red-200">
+            Warning: {predictedHighPressureZoneIds.length} zone{predictedHighPressureZoneIds.length === 1 ? '' : 's'} predicted as high pressure before departure.
           </div>
         )}
 
@@ -471,6 +534,25 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
               {' · '}{!isMobile && <span>Time: </span>}
               <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
             </div>
+            {(predictionLoading || predictedOccupancy || predictionError) && (
+              <div className="mt-1 rounded-lg border border-brand/30 bg-brand-50/85 px-2.5 py-1 text-[11px] font-semibold text-brand shadow-card backdrop-blur-[1px] dark:border-brand-300/40 dark:bg-brand-100/15 dark:text-brand-100">
+                {predictionLoading && 'Generating predicted occupancy from historical sensor data...'}
+                {!predictionLoading && predictedOccupancy && (
+                  <>
+                    Predicted occupancy at selected time:{' '}
+                    <span className="text-brand dark:text-brand-100">
+                      {Number(predictedOccupancy.predicted_occupancy_pct).toFixed(1)}%
+                    </span>
+                    {' · '}Historical samples: {predictedOccupancy.sample_count ?? 0}
+                  </>
+                )}
+                {!predictionLoading && !predictedOccupancy && predictionError && (
+                  <>
+                    Predicted occupancy unavailable: {predictionError}
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
         </div>
