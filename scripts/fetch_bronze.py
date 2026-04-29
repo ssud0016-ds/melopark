@@ -85,6 +85,7 @@ DATASETS = {
         "dataset_id": "street-addresses",
         "description": "City of Melbourne street/property addresses for search",
         "output_file": "addresses.parquet",
+<<<<<<< HEAD
     },
     "disability_parking_arcgis": {
         "dataset_id": "arcgis_accessibility_map_layers_disabled_parking",
@@ -94,6 +95,8 @@ DATASETS = {
             "https://services1.arcgis.com/KGdHCCUjGBpOPPac/arcgis/rest/services/"
             "Accessibility_map_layers/FeatureServer/disabled_parking/query"
         ),
+=======
+>>>>>>> origin/main
     },
 }
 
@@ -148,6 +151,7 @@ def fetch_csv_export(dataset_id: str) -> list[dict]:
     return df.to_dict(orient="records")
 
 
+<<<<<<< HEAD
 def fetch_geojson_export(url: str) -> list[dict]:
     """Fetch a GeoJSON FeatureCollection and flatten to tabular records."""
     resp = requests.get(url, params={"where": "1=1", "f": "geojson"}, timeout=120)
@@ -165,6 +169,8 @@ def fetch_geojson_export(url: str) -> list[dict]:
     return rows
 
 
+=======
+>>>>>>> origin/main
 def main(selected_datasets: list[str] | None = None):
     BASE_DIR.mkdir(parents=True, exist_ok=True)
     fetched_at = datetime.now(timezone.utc)
@@ -195,9 +201,13 @@ def main(selected_datasets: list[str] | None = None):
     for name, config in dataset_items:
         try:
             log.info("Fetching %s (%s) …", name, config["description"])
+<<<<<<< HEAD
             if config.get("geojson_url"):
                 records = fetch_geojson_export(config["geojson_url"])
             elif config.get("use_csv_export"):
+=======
+            if config.get("use_csv_export"):
+>>>>>>> origin/main
                 records = fetch_csv_export(config["dataset_id"])
             else:
                 records = fetch_dataset(name, config)
