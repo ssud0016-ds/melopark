@@ -24,6 +24,19 @@ from app.models.bay import Bay, BayRestriction
 logger = logging.getLogger(__name__)
 _MELBOURNE_TZ = ZoneInfo("Australia/Melbourne")
 
+<<<<<<< HEAD
+=======
+_COM_DAY_NAMES = {
+    0: "Sunday",
+    1: "Monday",
+    2: "Tuesday",
+    3: "Wednesday",
+    4: "Thursday",
+    5: "Friday",
+    6: "Saturday",
+}
+
+>>>>>>> origin/main
 # Priority order: lower number = stricter.  When multiple restrictions are
 # active simultaneously the most restrictive one governs the verdict.
 _CATEGORY_PRIORITY: dict[str, int] = {
@@ -168,6 +181,90 @@ def _to_melbourne_iso(dt: datetime) -> str:
     return dt.replace(tzinfo=_MELBOURNE_TZ).isoformat()
 
 
+<<<<<<< HEAD
+=======
+def _format_clock(t: time) -> str:
+    """Format a time as '7:30 AM' in Melbourne locale."""
+    dt = datetime(2000, 1, 1, t.hour, t.minute, tzinfo=_MELBOURNE_TZ)
+    # %-I isn't portable on Windows; use strftime then normalise.
+    s = dt.strftime("%I:%M %p")
+    return s.lstrip("0").replace("  ", " ")
+
+
+def _format_day_range(fromday: int, today: int) -> str:
+    if fromday == today:
+        return _COM_DAY_NAMES.get(fromday, "Day")
+    return f"{_COM_DAY_NAMES.get(fromday, 'Day')} to {_COM_DAY_NAMES.get(today, 'Day')}"
+
+
+def _build_translator_rules(
+    restrictions: list[BayRestriction],
+    arrival: datetime,
+    governing: Optional[BayRestriction],
+    warning: Optional[dict],
+) -> list[dict]:
+    """Build the Parking Sign Translator list from DB restriction rows.
+
+    Returns a list of dicts matching schemas.bay.TranslatorRule.
+    """
+    items: list[dict] = []
+
+    # Sort stable by slot_num (pipeline semantics) then time.
+    sorted_rows = sorted(
+        restrictions,
+        key=lambda r: (getattr(r, "slot_num", 0), _time_to_minutes(r.starttime), _time_to_minutes(r.endtime)),
+    )
+
+    warning_id = None
+    if warning:
+        # Find the BayRestriction row that produced the warning (best-effort match).
+        for r in sorted_rows:
+            if r.is_strict and r.rule_category == warning.get("type") and r.typedesc == warning.get("typedesc"):
+                warning_id = getattr(r, "id", None)
+                break
+
+    for r in sorted_rows:
+        heading = f"{_format_day_range(r.fromday, r.today)} from {_format_clock(r.starttime)} to {_format_clock(r.endtime)}"
+        state: str = "normal"
+        banner: Optional[str] = None
+
+        if governing is not None and getattr(r, "id", None) == getattr(governing, "id", None):
+            state = "current"
+            banner = "THIS RULE IS CURRENTLY IN EFFECT"
+        elif warning and warning_id is not None and getattr(r, "id", None) == warning_id:
+            state = "upcoming"
+            mins = int(warning.get("minutes_into_stay") or 0)
+            if mins >= 60 and mins % 60 == 0:
+                h = mins // 60
+                banner = f"THIS RULE WILL BE IN EFFECT IN {h} HOUR" if h == 1 else f"THIS RULE WILL BE IN EFFECT IN {h} HOURS"
+            elif mins >= 60:
+                h = mins // 60
+                m = mins % 60
+                banner = f"THIS RULE WILL BE IN EFFECT IN {h}H {m}M"
+            else:
+                banner = f"THIS RULE WILL BE IN EFFECT IN {mins} MIN"
+
+        items.append(
+            {
+                "state": state,
+                "heading": heading,
+                "body": r.plain_english,
+                "banner": banner,
+            }
+        )
+
+    # Always include the outside-times card to match the UI.
+    items.append(
+        {
+            "state": "outside",
+            "heading": "Outside all these times (nights, public holidays)",
+            "body": "You're free to park with no limit and no payment.",
+            "banner": None,
+        }
+    )
+    return items
+
+>>>>>>> origin/main
 def _effective_end_mins(start: time, end: time, fromday: int, today: int) -> int:
     """Return the active-window end as minutes-from-midnight.
 
@@ -456,6 +553,10 @@ def _evaluate_from_db(
             "warning": warning,
             "data_source": "db",
             "data_coverage": data_coverage,
+<<<<<<< HEAD
+=======
+            "translator_rules": _build_translator_rules(restrictions, arrival, None, warning),
+>>>>>>> origin/main
         }
 
     verdict, reason, max_stay, expires_at = _verdict_for_restriction(
@@ -482,6 +583,10 @@ def _evaluate_from_db(
         "warning": warning,
         "data_source": "db",
         "data_coverage": data_coverage,
+<<<<<<< HEAD
+=======
+        "translator_rules": _build_translator_rules(restrictions, arrival, governing, warning),
+>>>>>>> origin/main
     }
 
 

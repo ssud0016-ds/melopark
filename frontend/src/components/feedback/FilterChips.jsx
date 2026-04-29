@@ -27,6 +27,7 @@ export default function FilterChips({
           aria-controls="map-filter-chips"
           aria-label={collapsed ? 'Expand filters' : 'Collapse filters'}
           title={collapsed ? 'Expand filters' : 'Collapse filters'}
+<<<<<<< HEAD
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200/80 bg-white/95 text-gray-600 shadow-card transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-200 dark:hover:bg-surface-dark"
         >
           <svg
@@ -35,10 +36,29 @@ export default function FilterChips({
             viewBox="0 0 24 24"
             fill="none"
             className={cn('transition-transform', !collapsed && 'rotate-180')}
+=======
+          className={cn(
+            'flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border sm:h-[74px] sm:w-[74px]',
+            'border-gray-200/90 bg-white/98 text-gray-700 shadow-card transition-colors',
+            'hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark',
+            !collapsed && 'border-brand/50 text-brand dark:border-brand-300/80 dark:text-brand-100',
+          )}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            className={cn('transition-transform', !collapsed && 'scale-105')}
+>>>>>>> origin/main
             aria-hidden
           >
             <path d="M4 6h16l-6 7v5l-4 2v-7L4 6Z" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
           </svg>
+<<<<<<< HEAD
+=======
+          <span className="text-[10px] font-semibold leading-none">Filter</span>
+>>>>>>> origin/main
         </button>
       </div>
 
