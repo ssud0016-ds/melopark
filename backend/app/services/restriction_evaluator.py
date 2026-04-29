@@ -24,8 +24,6 @@ from app.models.bay import Bay, BayRestriction
 logger = logging.getLogger(__name__)
 _MELBOURNE_TZ = ZoneInfo("Australia/Melbourne")
 
-<<<<<<< HEAD
-=======
 _COM_DAY_NAMES = {
     0: "Sunday",
     1: "Monday",
@@ -36,7 +34,6 @@ _COM_DAY_NAMES = {
     6: "Saturday",
 }
 
->>>>>>> origin/main
 # Priority order: lower number = stricter.  When multiple restrictions are
 # active simultaneously the most restrictive one governs the verdict.
 _CATEGORY_PRIORITY: dict[str, int] = {
@@ -181,8 +178,6 @@ def _to_melbourne_iso(dt: datetime) -> str:
     return dt.replace(tzinfo=_MELBOURNE_TZ).isoformat()
 
 
-<<<<<<< HEAD
-=======
 def _format_clock(t: time) -> str:
     """Format a time as '7:30 AM' in Melbourne locale."""
     dt = datetime(2000, 1, 1, t.hour, t.minute, tzinfo=_MELBOURNE_TZ)
@@ -264,7 +259,6 @@ def _build_translator_rules(
     )
     return items
 
->>>>>>> origin/main
 def _effective_end_mins(start: time, end: time, fromday: int, today: int) -> int:
     """Return the active-window end as minutes-from-midnight.
 
@@ -553,10 +547,7 @@ def _evaluate_from_db(
             "warning": warning,
             "data_source": "db",
             "data_coverage": data_coverage,
-<<<<<<< HEAD
-=======
             "translator_rules": _build_translator_rules(restrictions, arrival, None, warning),
->>>>>>> origin/main
         }
 
     verdict, reason, max_stay, expires_at = _verdict_for_restriction(
@@ -583,10 +574,7 @@ def _evaluate_from_db(
         "warning": warning,
         "data_source": "db",
         "data_coverage": data_coverage,
-<<<<<<< HEAD
-=======
         "translator_rules": _build_translator_rules(restrictions, arrival, governing, warning),
->>>>>>> origin/main
     }
 
 
