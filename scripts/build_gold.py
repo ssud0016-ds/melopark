@@ -1079,9 +1079,14 @@ def build_gold_accessibility(export_csv: bool = False, dry_run: bool = False) ->
         df["plain_english"] = "Restriction details not available."
 
     # Optional: expand disability-only flags using disability parking point overlays.
-    # If a disability point is within MATCH_M of a bay coordinate, mark that bay as disability.
-    overlay_path = SILVER_DIR / "disability_parking_points_clean.parquet"
-    MATCH_M = 25.0
+    # Two-stage threshold:
+    #   - <=20m high confidence
+    #   - <=50m medium confidence fallback
+    overlay_path = SILVER_DIR / "disability_parking_points_unified_clean.parquet"
+    if not overlay_path.exists():
+        overlay_path = SILVER_DIR / "disability_parking_points_clean.parquet"
+    MATCH_PRIMARY_M = 20.0
+    MATCH_FALLBACK_M = 50.0
     if overlay_path.exists() and "lat" in df.columns and "lon" in df.columns:
         try:
             pts = pd.read_parquet(overlay_path)
@@ -1111,7 +1116,9 @@ def build_gold_accessibility(export_csv: bool = False, dry_run: bool = False) ->
                 bay_lat = bays["lat"].to_numpy(dtype=float)
                 bay_lon = bays["lon"].to_numpy(dtype=float)
 
-                matched_bay_ids: set[str] = set()
+                matched_bay_ids_primary: set[str] = set()
+                matched_bay_ids_fallback: set[str] = set()
+                overlap_rows: list[dict] = []
                 # Chunk points so this stays fast without extra deps.
                 for start in range(0, len(pts), 200):
                     chunk = pts.iloc[start:start + 200]
@@ -1120,25 +1127,68 @@ def build_gold_accessibility(export_csv: bool = False, dry_run: bool = False) ->
                     dist = _haversine_m(plat, plon, bay_lat[None, :], bay_lon[None, :])
                     nn_idx = dist.argmin(axis=1)
                     nn_dist = dist[np.arange(dist.shape[0]), nn_idx]
-                    ok = nn_dist <= MATCH_M
-                    if ok.any():
-                        matched_bay_ids.update(bay_ids[nn_idx[ok]].tolist())
+                    for i, d in enumerate(nn_dist):
+                        bay = str(bay_ids[nn_idx[i]])
+                        src = str(chunk.iloc[i].get("source", "unknown"))
+                        source_id = chunk.iloc[i].get("source_id")
+                        if d <= MATCH_PRIMARY_M:
+                            matched_bay_ids_primary.add(bay)
+                            confidence = "high"
+                        elif d <= MATCH_FALLBACK_M:
+                            matched_bay_ids_fallback.add(bay)
+                            confidence = "medium"
+                        else:
+                            confidence = "unmatched"
+                        overlap_rows.append({
+                            "source": src,
+                            "source_id": None if pd.isna(source_id) else str(source_id),
+                            "point_lat": float(chunk.iloc[i]["lat"]),
+                            "point_lng": float(chunk.iloc[i]["lng"]),
+                            "nearest_bay_id": bay,
+                            "nearest_distance_m": float(d),
+                            "match_confidence": confidence,
+                        })
 
-                if matched_bay_ids:
-                    df["is_disability_overlay"] = df["bay_id"].astype(str).isin(matched_bay_ids)
-                else:
-                    df["is_disability_overlay"] = False
+                matched_all = matched_bay_ids_primary | matched_bay_ids_fallback
+                df["is_disability_overlay"] = df["bay_id"].astype(str).isin(matched_all)
+                df["disability_match_confidence"] = "none"
+                df.loc[df["bay_id"].astype(str).isin(matched_bay_ids_fallback), "disability_match_confidence"] = "medium"
+                df.loc[df["bay_id"].astype(str).isin(matched_bay_ids_primary), "disability_match_confidence"] = "high"
+
+                # Save overlap QA report for PR/review visibility.
+                overlap_df = pd.DataFrame(overlap_rows)
+                overlap_stats = {
+                    "overlay_points_total": int(len(pts)),
+                    "matched_primary_20m": int((overlap_df["match_confidence"] == "high").sum()),
+                    "matched_fallback_50m": int((overlap_df["match_confidence"] == "medium").sum()),
+                    "unmatched": int((overlap_df["match_confidence"] == "unmatched").sum()),
+                    "matched_unique_bays_primary_20m": int(len(matched_bay_ids_primary)),
+                    "matched_unique_bays_fallback_50m": int(len(matched_bay_ids_fallback - matched_bay_ids_primary)),
+                    "matched_unique_bays_total": int(len(matched_all)),
+                }
+                overlap_report_path = GOLD_DIR / "epic4_overlap_report.json"
+                with open(overlap_report_path, "w") as fh:
+                    json.dump(overlap_stats, fh, indent=2)
+                overlap_samples_path = GOLD_DIR / "epic4_overlap_samples.csv"
+                overlap_df.to_csv(overlap_samples_path, index=False)
                 log.info(
-                    "Disability overlay match: points=%d bays=%d matched_bays=%d (threshold=%.0fm)",
-                    len(pts), len(bays), int(df["is_disability_overlay"].sum()), MATCH_M,
+                    "Disability overlay match: points=%d bays=%d matched_20m=%d matched_50m=%d total_bays=%d",
+                    len(pts),
+                    len(bays),
+                    len(matched_bay_ids_primary),
+                    len(matched_bay_ids_fallback - matched_bay_ids_primary),
+                    len(matched_all),
                 )
             else:
                 df["is_disability_overlay"] = False
+                df["disability_match_confidence"] = "none"
         except Exception as e:
             log.warning("Disability overlay match skipped: %s", e)
             df["is_disability_overlay"] = False
+            df["disability_match_confidence"] = "none"
     else:
         df["is_disability_overlay"] = False
+        df["disability_match_confidence"] = "none"
 
     if "is_disability_only" in df.columns:
         df["is_disability_only"] = df["is_disability_only"].fillna(False).astype(bool)
@@ -1163,6 +1213,7 @@ def build_gold_accessibility(export_csv: bool = False, dry_run: bool = False) ->
         "fromday", "today", "starttime", "endtime",
         "duration_mins", "disabilityext_mins",
         "is_disability_only", "has_disability_extension",
+        "is_disability_overlay", "disability_match_confidence",
     ]
     keep_cols = [c for c in keep_cols if c in df.columns]
     gold = df[keep_cols].copy()
