@@ -40,6 +40,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     pickDestination,
     clearDestination,
     showLimitedBays,
+<<<<<<< HEAD
+=======
+    accessibilityMode,
+    setAccessibilityMode,
+>>>>>>> origin/main
     setBaysRef,
     getVisibleBays,
     getProximityBays,
@@ -53,8 +58,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [plannerDurationMins, setPlannerDurationMins] = useState(null)
   /** True after "Show all bays at this time" in the panel. */
   const [mapBaysAtPlannedTime, setMapBaysAtPlannedTime] = useState(false)
+<<<<<<< HEAD
   /** Bump to force sheet form reset when banner or Clear resets live mode. */
   const [plannerResetNonce, setPlannerResetNonce] = useState(0)
+=======
+>>>>>>> origin/main
 
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -71,14 +79,27 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const handleOnboardingPick = useCallback((lm, arrivalIso = null, opts = null) => {
     pickDestination(lm)
     if (opts?.activeFilter) setActiveFilter(opts.activeFilter)
+<<<<<<< HEAD
     if (opts?.parkingType === 'accessible') setAccessibilityAvailableOnly(true)
+=======
+    if (opts?.parkingType === 'accessible') {
+      setAccessibilityMode(true)
+      setAccessibilityAvailableOnly(true)
+    } else {
+      setAccessibilityMode(false)
+    }
+>>>>>>> origin/main
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
       setPlannerDurationMins(60)
       setMapBaysAtPlannedTime(true)
     }
     dismissOnboarding()
+<<<<<<< HEAD
   }, [pickDestination, dismissOnboarding, setActiveFilter])
+=======
+  }, [pickDestination, dismissOnboarding, setActiveFilter, setAccessibilityMode])
+>>>>>>> origin/main
 
   const [mapBounds, setMapBounds] = useState(null)
   const [bulkVerdictById, setBulkVerdictById] = useState({})
@@ -105,6 +126,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setMapBounds(b)
   }, [])
 
+<<<<<<< HEAD
   const handleDebouncedPlannerFromSheet = useCallback((p) => {
     if (!p) {
       setPlannerArrivalIso(null)
@@ -122,6 +144,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setPlannerResetNonce((n) => n + 1)
   }, [])
 
+=======
+>>>>>>> origin/main
   useEffect(() => {
     if (!mapBaysAtPlannedTime) setBulkVerdictById({})
   }, [mapBaysAtPlannedTime])
@@ -245,6 +269,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     else m.zoomOut()
   }, [])
 
+<<<<<<< HEAD
+=======
+  const toggleAccessibilityMode = useCallback(() => {
+    setAccessibilityMode((v) => !v)
+    setFilterCollapsed(true)
+    setShowArrivePicker(false)
+  }, [setAccessibilityMode])
+
+>>>>>>> origin/main
   const handleBayClick = useCallback(
     (bay) => setSelectedBayId(bay ? bay.id : null),
     [setSelectedBayId],
@@ -301,6 +334,18 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           hideHint={isMobile && legendOpen}
         />
 
+<<<<<<< HEAD
+=======
+        {accessibilityMode && (
+          <div
+            className="absolute left-3.5 top-[84px] z-[510] rounded-xl border border-brand bg-white/95 px-3 py-2 text-xs font-semibold text-brand shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
+            aria-label="Accessibility mode enabled: showing disability bays only"
+          >
+            Accessibility mode: DIS bays only
+          </div>
+        )}
+
+>>>>>>> origin/main
         {apiLoading && (
           <div className="absolute inset-0 z-[400] bg-white/35 dark:bg-black/25 pointer-events-none flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-300">
             Loading bays...
@@ -397,8 +442,52 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           className="absolute top-5 z-[600] pointer-events-auto"
           style={{ right: rightInsetPx }}
         >
+<<<<<<< HEAD
           <div className="relative flex items-center gap-2">
             <div className="relative">
+=======
+          <div className="relative flex items-start gap-2">
+            <button
+              type="button"
+              onClick={toggleAccessibilityMode}
+              aria-pressed={accessibilityMode}
+              aria-label={accessibilityMode ? 'Disable accessibility mode' : 'Enable accessibility mode'}
+              className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
+                accessibilityMode
+                  ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
+                  : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+              }`}
+              title={accessibilityMode ? 'Accessibility mode: ON' : 'Accessibility mode: OFF'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle cx="12" cy="5.6" r="2.1" stroke="currentColor" strokeWidth="1.75" />
+                <path d="M12 8.2v5.1l3 2.1" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                <path d="M8.6 11.7h3.4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                <circle cx="13.8" cy="15.7" r="4.5" stroke="currentColor" strokeWidth="1.75" />
+              </svg>
+              <span className="text-[9px] font-semibold leading-none">{accessibilityMode ? 'A11y ON' : 'A11y OFF'}</span>
+            </button>
+            <div className="relative flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLegendOpen((v) => !v)}
+                aria-pressed={legendOpen}
+                aria-label={legendOpen ? 'Hide heatmap legend' : 'Show heatmap legend'}
+                className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
+                  legendOpen
+                    ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
+                    : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+                }`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <circle cx="7" cy="8" r="2.25" stroke="currentColor" strokeWidth="1.75" />
+                  <circle cx="16.5" cy="6.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
+                  <circle cx="14.5" cy="15.5" r="2.5" stroke="currentColor" strokeWidth="1.75" />
+                  <circle cx="6.5" cy="16.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
+                </svg>
+                <span className="text-[10px] font-semibold leading-none">Heatmap</span>
+              </button>
+>>>>>>> origin/main
               <button
                 type="button"
                 onClick={() =>
@@ -410,9 +499,23 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 }
                 aria-expanded={showArrivePicker}
                 aria-label={showArrivePicker ? 'Hide arrive by picker' : 'Show arrive by picker'}
+<<<<<<< HEAD
                 className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200/80 bg-white/95 text-gray-600 shadow-card transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-200 dark:hover:bg-surface-dark"
               >
                 <span aria-hidden className="text-[12px] leading-none">🕒</span>
+=======
+                className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
+                  showArrivePicker
+                    ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
+                    : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+                }`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.75" />
+                  <path d="M12 7.5v5l3.5 2.2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+                </svg>
+                <span className="text-[10px] font-semibold leading-none">Time</span>
+>>>>>>> origin/main
               </button>
             </div>
             <FilterChips
@@ -546,6 +649,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         </div>
 
         {(() => {
+<<<<<<< HEAD
           const plannerActive = mapBaysAtPlannedTime && Boolean(plannerParams)
           const rows = [['bg-[#a3ec48]', 'Free, rules allow']]
           if (plannerActive) rows.push(['bg-[#f59e0b]', 'Taken, rules allow'])
@@ -554,6 +658,13 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             'bg-[#ed6868]',
             plannerActive ? 'Occupied or rules block' : 'Occupied',
           ])
+=======
+          const rows = [
+            ['bg-[#a3ec48]', 'Available parking spots'],
+            ['bg-[#FFB382]', 'Caution: Tow Away / Loading Zone'],
+            ['bg-[#ed6868]', 'Parking spots occupied'],
+          ]
+>>>>>>> origin/main
           return (
             <div
               className="absolute bottom-3.5 z-[500] rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
@@ -577,7 +688,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 <div className="p-2.5 max-w-[88vw] sm:max-w-none">
                   <div className="mb-1.5 flex items-center justify-between gap-3">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
+<<<<<<< HEAD
                       Bay status
+=======
+                      Verified bays
+>>>>>>> origin/main
                     </span>
                     {isMobile && (
                       <button
@@ -616,6 +731,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             reserveBottomPx={0}
             savedPlannerArrivalIso={plannerArrivalIso}
             savedPlannerDurationMins={plannerDurationMins}
+<<<<<<< HEAD
             onDebouncedPlannerChange={handleDebouncedPlannerFromSheet}
             mapBaysAtPlannedTime={mapBaysAtPlannedTime}
             onShowAllBaysAtThisTime={(p) => {
@@ -627,6 +743,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             }}
             onResetPlannerToLive={resetPlannerToLive}
             plannerResetNonce={plannerResetNonce}
+=======
+            mapBaysAtPlannedTime={mapBaysAtPlannedTime}
+>>>>>>> origin/main
           />
         )}
       </div>

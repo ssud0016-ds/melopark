@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+=======
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+>>>>>>> origin/main
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import BayDetailSheet from './BayDetailSheet'
@@ -9,6 +13,7 @@ vi.mock('../../services/apiBays', () => ({
 
 const { fetchBayEvaluation } = await import('../../services/apiBays')
 
+<<<<<<< HEAD
 /** Coverage badge lives under the collapsed Details section — expand it first. */
 async function openDetailsPanel() {
   await waitFor(() => {
@@ -21,14 +26,24 @@ async function openDetailsPanel() {
 }
 
 function renderSheetWithCoverage(coverage) {
+=======
+function renderSheetWithEvaluation(evaluation, props = {}) {
+>>>>>>> origin/main
   fetchBayEvaluation.mockResolvedValue({
     bay_id: '1000',
     verdict: 'yes',
     reason: 'ok',
     active_restriction: null,
     warning: null,
+<<<<<<< HEAD
     data_source: coverage === 'none' ? 'unknown' : 'db',
     data_coverage: coverage,
+=======
+    data_source: 'db',
+    data_coverage: 'full',
+    translator_rules: [],
+    ...(evaluation ?? {}),
+>>>>>>> origin/main
   })
 
   render(
@@ -46,16 +61,25 @@ function renderSheetWithCoverage(coverage) {
       onClose={() => {}}
       isMobile={false}
       lastUpdated={null}
+<<<<<<< HEAD
+=======
+      {...props}
+>>>>>>> origin/main
     />
   )
 }
 
+<<<<<<< HEAD
 describe('BayDetailSheet coverage badge', () => {
+=======
+describe('BayDetailSheet parking tab UI', () => {
+>>>>>>> origin/main
   beforeEach(() => {
     cleanup()
     fetchBayEvaluation.mockClear()
   })
 
+<<<<<<< HEAD
   it('shows Live status + rules for full coverage', async () => {
     renderSheetWithCoverage('full')
     await openDetailsPanel()
@@ -178,4 +202,68 @@ describe('BayDetailSheet planner time contract', () => {
     expect(plannerCall[1].arrivalIso).not.toMatch(/[+-]\d{2}:\d{2}$/)
     expect(plannerCall[1].arrivalIso.endsWith('Z')).toBe(false)
   })
+=======
+  it('renders the key sections from the parking-tab design', async () => {
+    renderSheetWithEvaluation({
+      translator_rules: [
+        {
+          state: 'current',
+          banner: 'THIS RULE IS CURRENTLY IN EFFECT',
+          heading: 'Monday to Friday from 9:30 AM to 7:30 PM',
+          body: 'You can park, but only for 2 hour. Pay the meter.',
+        },
+        {
+          state: 'outside',
+          heading: 'Outside all these times (nights, public holidays)',
+          body: "You're free to park with no limit and no payment.",
+        },
+      ],
+    })
+
+    await waitFor(() => expect(fetchBayEvaluation).toHaveBeenCalled())
+    expect(screen.getByText('Currently Showing:')).toBeInTheDocument()
+    expect(screen.getByText('Please update the time filter to plan ahead')).toBeInTheDocument()
+    expect(screen.getByText('Bay Status and Limits')).toBeInTheDocument()
+    expect(screen.getByText('Parking Sign Translator')).toBeInTheDocument()
+
+    expect(screen.getByText('THIS RULE IS CURRENTLY IN EFFECT')).toBeInTheDocument()
+    expect(screen.getByText('Monday to Friday from 9:30 AM to 7:30 PM')).toBeInTheDocument()
+    expect(screen.getByText("Outside all these times (nights, public holidays)")).toBeInTheDocument()
+  })
+
+  it('sends planner params contract from parent (naive arrival_iso)', async () => {
+    renderSheetWithEvaluation(
+      { translator_rules: [] },
+      {
+        savedPlannerArrivalIso: '2026-12-22T14:00:00',
+        savedPlannerDurationMins: 120,
+      },
+    )
+
+    await waitFor(() => {
+      const plannerCall = fetchBayEvaluation.mock.calls.find(
+        (c) => c?.[1]?.arrivalIso === '2026-12-22T14:00:00',
+      )
+      expect(plannerCall).toBeTruthy()
+    })
+
+    const plannerCall = fetchBayEvaluation.mock.calls.find(
+      (c) => c?.[1]?.arrivalIso === '2026-12-22T14:00:00',
+    )
+    expect(plannerCall[1].durationMins).toBe(120)
+    expect(plannerCall[1].arrivalIso).not.toMatch(/[+-]\d{2}:\d{2}$/)
+    expect(plannerCall[1].arrivalIso.endsWith('Z')).toBe(false)
+  })
+
+  it('requests live evaluation when planner props are absent', async () => {
+    renderSheetWithEvaluation({ translator_rules: [] })
+
+    await waitFor(() => {
+      expect(fetchBayEvaluation).toHaveBeenCalled()
+    })
+    const first = fetchBayEvaluation.mock.calls[0]
+    expect(first[0]).toBe('1000')
+    expect(first[1]).toBeNull()
+  })
+>>>>>>> origin/main
 })
