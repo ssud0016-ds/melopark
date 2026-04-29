@@ -317,4 +317,4 @@ Used datasets include:
 
 ## Team
 
-Team FlaminGO - Monash University FIT5120 S1 2026
+Team FlaminGO - Monash University FIT5120 S1 2026.
