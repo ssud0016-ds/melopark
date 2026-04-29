@@ -10,6 +10,8 @@ import {
 } from '../utils/mapGeo'
 import { SNAP_PEEK } from '../components/layout/BottomSheet'
 
+<<<<<<< HEAD
+=======
 const ACCESSIBILITY_MODE_STORAGE_KEY = 'melopark.accessibility_mode'
 
 function isAccessibilityBay(bay) {
@@ -21,6 +23,7 @@ function isAccessibilityBay(bay) {
   return false
 }
 
+>>>>>>> origin/main
 function extractParkingMinutes(bay) {
   const raw = String(bay?.bayType || '').toUpperCase()
   if (!raw || raw === 'OTHER') return null
@@ -61,6 +64,11 @@ export function useMapState() {
   const [destination, setDestination] = useState(null)
   const [sheetSnap, setSheetSnap] = useState(SNAP_PEEK)
   const [showLimitedBays, setShowLimitedBays] = useState(false)
+<<<<<<< HEAD
+
+  const baysRef = useRef([])
+
+=======
   const [accessibilityMode, _setAccessibilityMode] = useState(() => {
     if (typeof window === 'undefined') return false
     try {
@@ -87,6 +95,7 @@ export function useMapState() {
     })
   }, [])
 
+>>>>>>> origin/main
   const setSelectedBayId = useCallback(
     (id) => {
       if (id == null) return _setSelectedBayId(null)
@@ -121,9 +130,13 @@ export function useMapState() {
           })
         : bays
 
+<<<<<<< HEAD
+      return pool.filter((b) => {
+=======
       const accessibilityPool = accessibilityMode ? pool.filter(isAccessibilityBay) : pool
 
       return accessibilityPool.filter((b) => {
+>>>>>>> origin/main
         if (activeFilter === 'all') return true
         if (activeFilter === 'available') return b.type === 'available'
         if (activeFilter === 'trap') return b.type === 'trap'
@@ -137,20 +150,34 @@ export function useMapState() {
         return true
       })
     },
+<<<<<<< HEAD
+    [destination, activeFilter],
+=======
     [destination, activeFilter, accessibilityMode],
+>>>>>>> origin/main
   )
 
   const getProximityBays = useCallback(
     (bays) => {
+<<<<<<< HEAD
+      if (!destination) return bays
+      return bays.filter((b) => {
+=======
       if (!destination) return accessibilityMode ? bays.filter(isAccessibilityBay) : bays
       const inRadius = bays.filter((b) => {
+>>>>>>> origin/main
         const bl = bayLatLng(b)
         const dl = destinationLatLng(destination)
         return haversineMeters(bl.lat, bl.lng, dl.lat, dl.lng) < SEARCH_RADIUS_M
       })
+<<<<<<< HEAD
+    },
+    [destination],
+=======
       return accessibilityMode ? inRadius.filter(isAccessibilityBay) : inRadius
     },
     [destination, accessibilityMode],
+>>>>>>> origin/main
   )
 
   return {
@@ -165,8 +192,11 @@ export function useMapState() {
     setSheetSnap,
     showLimitedBays,
     setShowLimitedBays,
+<<<<<<< HEAD
+=======
     accessibilityMode,
     setAccessibilityMode,
+>>>>>>> origin/main
     setBaysRef,
     getVisibleBays,
     getProximityBays,
