@@ -1,10 +1,28 @@
 {
   "pipeline_stage": "bronze",
+<<<<<<< HEAD
+  "fetched_at": "2026-04-28T13:29:23.906084+00:00",
+=======
   "fetched_at": "2026-04-22T01:56:29.623611+00:00",
+>>>>>>> origin/main
   "api_base": "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets",
   "api_licence": "CC BY - City of Melbourne Open Data",
   "api_portal": "https://data.melbourne.vic.gov.au",
   "datasets": {
+<<<<<<< HEAD
+    "disability_parking_arcgis": {
+      "dataset_id": "arcgis_accessibility_map_layers_disabled_parking",
+      "description": "Disabled parking points (ArcGIS FeatureServer export as GeoJSON)",
+      "output_file": "C:\\Users\\Dell\\OneDrive\\Desktop\\FIT5120\\Git_Repo\\melopark\\data\\bronze\\disability_parking_arcgis.parquet",
+      "rows": 437,
+      "columns": [
+        "UNIQUE_ID",
+        "lat",
+        "lon",
+        "geometry_type"
+      ],
+      "fetched_at": "2026-04-28T13:29:25.650363+00:00"
+=======
     "sensors": {
       "dataset_id": "on-street-parking-bay-sensors",
       "description": "Live sensor snapshot \u2014 occupancy per bay",
@@ -157,6 +175,7 @@
         "add_comp"
       ],
       "fetched_at": "2026-04-22T01:57:13.862013+00:00"
+>>>>>>> origin/main
     }
   },
   "notes": [
