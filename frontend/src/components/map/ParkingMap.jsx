@@ -164,10 +164,10 @@ export default function ParkingMap({
   destZoom = DESTINATION_MAP_ZOOM,
   isMobile = false,
   hideHint = false,
-  pressureHulls = null,
   pressureZones = null,
   pressureEnabled = false,
   onPressureZoneClick = null,
+  selectedPressureZoneId = null,
 }) {
   const [isDark, setIsDark] = useState(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -316,12 +316,12 @@ export default function ParkingMap({
         <MapZoomTracker onZoomChange={setZoomLevel} />
         <MapEmptyClick onEmptyClick={() => onBayClick(null)} />
 
-        {pressureEnabled && pressureHulls && pressureZones?.length > 0 && (
+        {pressureEnabled && pressureZones?.length > 0 && (
           <PressureLayer
-            hulls={pressureHulls}
             zones={pressureZones}
             isDark={isDark}
             onZoneClick={onPressureZoneClick}
+            selectedZoneId={selectedPressureZoneId}
           />
         )}
 
@@ -340,7 +340,7 @@ export default function ParkingMap({
           />
         )}
 
-        {zoomLevel < CLUSTER_ZOOM_CUTOFF &&
+        {!pressureEnabled && zoomLevel < CLUSTER_ZOOM_CUTOFF &&
           clustered.map((c) => (
             <Marker
               key={`cluster-${c.key}`}
@@ -371,7 +371,7 @@ export default function ParkingMap({
           ))}
 
         {/* Sensor-only bays: same zoom threshold as verified dots — low zoom uses clusters only (fewer, larger); high zoom shows many smaller dots. */}
-        {!showLimitedBays &&
+        {!pressureEnabled && !showLimitedBays &&
           zoomLevel >= CLUSTER_ZOOM_CUTOFF &&
           limitedBays.map((bay) => {
             const ll = bayLatLng(bay)
@@ -418,7 +418,7 @@ export default function ParkingMap({
             )
           })}
 
-        {zoomLevel >= CLUSTER_ZOOM_CUTOFF && verifiedBays.map((bay) => {
+        {!pressureEnabled && zoomLevel >= CLUSTER_ZOOM_CUTOFF && verifiedBays.map((bay) => {
           const ll = bayLatLng(bay)
           const inFilter = visibleBays.some((v) => v.id === bay.id)
           const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)

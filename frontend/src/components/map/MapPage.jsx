@@ -288,7 +288,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     else setLegendOpen(false)
   }, [isMobile])
 
-  const handlePickLandmark = useCallback((lm) => pickDestination(lm), [pickDestination])
+  const handlePickLandmark = useCallback((lm) => {
+    pickDestination(lm)
+    setPressureEnabled(true) // auto-show pressure on destination pick
+    setSelectedZone(null)
+  }, [pickDestination])
 
   const handleMapReady = useCallback((map) => {
     mapRef.current = map
@@ -345,23 +349,28 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   const mapTopRightControls = (
     <div className="relative flex flex-nowrap items-start gap-2">
-      <button
-        type="button"
-        onClick={togglePressure}
-        aria-pressed={pressureEnabled}
-        aria-label={pressureEnabled ? 'Hide parking pressure' : 'Show parking pressure'}
-        className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
-          pressureEnabled
-            ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-            : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-        }`}
-        title={pressureEnabled ? 'Pressure map: ON' : 'Pressure map: OFF'}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path d="M3 17h4V9H3v8zm6 0h4V3H9v14zm6 0h4v-6h-4v6z" fill="currentColor" />
-        </svg>
-        <span className="text-[9px] font-semibold leading-none">Pressure</span>
-      </button>
+      <div className="flex flex-col items-center gap-1">
+        <button
+          type="button"
+          onClick={togglePressure}
+          aria-pressed={pressureEnabled}
+          aria-label={pressureEnabled ? 'Hide parking pressure' : 'Show parking pressure'}
+          className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
+            pressureEnabled
+              ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
+              : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+          }`}
+          title={pressureEnabled ? 'Pressure map: ON' : 'Pressure map: OFF'}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M3 17h4V9H3v8zm6 0h4V3H9v14zm6 0h4v-6h-4v6z" fill="currentColor" />
+          </svg>
+          <span className="text-[9px] font-semibold leading-none">Pressure</span>
+        </button>
+        {pressureEnabled && (
+          <TimeHorizonSelector value={horizon} onChange={setHorizon} compact />
+        )}
+      </div>
       <button
         type="button"
         onClick={toggleAccessibilityMode}
@@ -488,9 +497,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           isMobile={isMobile}
           hideHint={isMobile && legendOpen}
           pressureEnabled={pressureEnabled}
-          pressureHulls={pressureHulls}
           pressureZones={pressureZones}
           onPressureZoneClick={handlePressureZoneClick}
+          selectedPressureZoneId={selectedZone?.zone_id ?? null}
         />
 
         {accessibilityMode && (
@@ -785,25 +794,19 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {/* ── Epic 5: Pressure overlays ── */}
         {pressureEnabled && (
-          <div className="absolute left-3.5 top-[168px] z-[520] sm:top-[128px]">
-            <TimeHorizonSelector value={horizon} onChange={setHorizon} />
-          </div>
-        )}
-
-        {pressureEnabled && (
-          <div className="absolute bottom-28 left-3.5 z-[510] sm:bottom-20">
+          <div className="absolute bottom-20 left-3.5 z-[510] sm:bottom-6">
             <PressureLegend />
           </div>
         )}
 
         {selectedZone && !destination && (
-          <div className="absolute bottom-28 right-3 z-[520] w-72 sm:bottom-6">
+          <div className="absolute bottom-20 right-3 z-[520] w-72 sm:bottom-6">
             <ZoneDetailPanel zone={selectedZone} onClose={() => setSelectedZone(null)} />
           </div>
         )}
 
         {pressureEnabled && destination && alternativesData && (
-          <div className="absolute bottom-28 right-3 z-[520] w-80 sm:bottom-6">
+          <div className="absolute bottom-20 left-1/2 z-[520] w-[min(340px,calc(100vw-24px))] -translate-x-1/2 sm:bottom-6">
             <DecisionCard
               target={alternativesData.target}
               alternatives={alternativesData.alternatives}

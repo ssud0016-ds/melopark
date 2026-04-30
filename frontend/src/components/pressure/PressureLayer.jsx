@@ -2,76 +2,66 @@ import { useEffect } from 'react'
 import { useMap } from 'react-leaflet'
 import L from 'leaflet'
 
-const LEVEL_COLORS = {
-  low: '#a3ec48',
-  medium: '#FFB382',
-  high: '#ed6868',
+const COLORS = {
+  light: { low: '#22c55e', medium: '#f59e0b', high: '#ef4444' },
+  dark:  { low: '#4ade80', medium: '#fbbf24', high: '#f87171' },
 }
 
-const LEVEL_COLORS_DARK = {
-  low: '#6bbf2a',
-  medium: '#e08a50',
-  high: '#d44',
+function zoneRadius(totalBays) {
+  return Math.max(9, Math.min(22, Math.sqrt(totalBays || 1) * 3))
 }
 
-function getStyle(feature, zoneMap, isDark) {
-  const zoneId = feature.properties?.zone_number
-  const zone = zoneMap.get(zoneId)
-  const level = zone?.level || 'low'
-  const colors = isDark ? LEVEL_COLORS_DARK : LEVEL_COLORS
-  return {
-    fillColor: colors[level] || colors.low,
-    fillOpacity: 0.55,
-    color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)',
-    weight: 1,
-    opacity: 0.8,
-  }
-}
-
-export default function PressureLayer({ hulls, zones, isDark, onZoneClick }) {
+export default function PressureLayer({ zones, isDark, onZoneClick, selectedZoneId }) {
   const map = useMap()
 
   useEffect(() => {
-    if (!hulls || !zones?.length) return
+    if (!zones?.length) return
 
-    const zoneMap = new Map(zones.map((z) => [z.zone_id, z]))
+    const palette = isDark ? COLORS.dark : COLORS.light
+    const markers = []
 
-    const layer = L.geoJSON(hulls, {
-      style: (feature) => getStyle(feature, zoneMap, isDark),
-      onEachFeature: (feature, lyr) => {
-        const zoneId = feature.properties?.zone_number
-        const zone = zoneMap.get(zoneId)
-        const colors = isDark ? LEVEL_COLORS_DARK : LEVEL_COLORS
-        const baseStyle = getStyle(feature, zoneMap, isDark)
+    zones.forEach((zone) => {
+      if (!zone.centroid_lat || !zone.centroid_lon) return
 
-        lyr.on('mouseover', () => {
-          lyr.setStyle({ ...baseStyle, fillOpacity: 0.75, weight: 2.5 })
-        })
-        lyr.on('mouseout', () => {
-          lyr.setStyle(baseStyle)
-        })
+      const color = palette[zone.level] || palette.low
+      const r = zoneRadius(zone.total_bays)
+      const isSelected = zone.zone_id === selectedZoneId
 
-        if (zone) {
-          const occPct = Math.round((zone.components?.occupancy_pct || 0) * 100)
-          lyr.bindTooltip(
-            `<div style="font-size:12px;line-height:1.4">` +
-            `<strong style="display:block;margin-bottom:2px">${zone.label}</strong>` +
-            `<span style="color:${colors[zone.level]};font-weight:600">${zone.level.charAt(0).toUpperCase() + zone.level.slice(1)}</span>` +
-            ` · ${zone.free_bays} free / ${zone.total_bays} bays` +
-            `<br/><span style="color:#888;font-size:11px">${occPct}% occupied · ${zone.trend}</span>` +
-            `</div>`,
-            { sticky: true, className: 'pressure-tooltip', opacity: 0.95 }
-          )
-        }
-        lyr.on('click', () => {
-          if (onZoneClick && zone) onZoneClick(zone)
-        })
-      },
+      const marker = L.circleMarker([zone.centroid_lat, zone.centroid_lon], {
+        radius: isSelected ? r + 4 : r,
+        fillColor: color,
+        fillOpacity: isSelected ? 1 : 0.78,
+        color: isSelected ? '#fff' : (isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.18)'),
+        weight: isSelected ? 3 : 1.5,
+        pane: 'markerPane',
+      })
+
+      const occPct = Math.round((zone.components?.occupancy_pct || 0) * 100)
+      const levelLabel = zone.level.charAt(0).toUpperCase() + zone.level.slice(1)
+      marker.bindTooltip(
+        `<div style="font-size:12px;line-height:1.5;min-width:160px">` +
+        `<strong style="display:block;margin-bottom:3px;font-size:13px">${zone.label}</strong>` +
+        `<span style="color:${color};font-weight:700">${levelLabel}</span>` +
+        ` · ${zone.free_bays} free / ${zone.total_bays} bays` +
+        `<div style="color:#888;font-size:11px;margin-top:2px">${occPct}% occupied · ${zone.trend}</div>` +
+        `</div>`,
+        { sticky: true, className: 'pressure-tooltip', opacity: 0.98 }
+      )
+
+      marker.on('mouseover', () => {
+        marker.setStyle({ fillOpacity: 1, weight: isSelected ? 3 : 2.5, radius: r + 3 })
+      })
+      marker.on('mouseout', () => {
+        marker.setStyle({ fillOpacity: isSelected ? 1 : 0.78, weight: isSelected ? 3 : 1.5, radius: isSelected ? r + 4 : r })
+      })
+      marker.on('click', () => onZoneClick?.(zone))
+
+      marker.addTo(map)
+      markers.push(marker)
     })
 
-    layer.addTo(map)
-    return () => { map.removeLayer(layer) }
-  }, [hulls, zones, isDark, map, onZoneClick])
+    return () => markers.forEach((m) => map.removeLayer(m))
+  }, [zones, isDark, map, onZoneClick, selectedZoneId])
 
   return null
 }
