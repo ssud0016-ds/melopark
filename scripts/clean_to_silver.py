@@ -106,9 +106,11 @@ DATE   : 13th, April 2026
 """
 
 import argparse
+import importlib.util
 import json
 import logging
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -839,9 +841,35 @@ def clean_addresses(df_raw: pd.DataFrame, verbose: bool = False) -> tuple[pd.Dat
     return addresses_df, streets_df
 
 
-def build_segment_restrictions(verbose: bool = False) -> tuple[pd.DataFrame, set[str]]:
-    """Build restrictions via segment chain: bays -> zones_to_segments -> sign_plates."""
-    log.info("--- Building segment-chain restrictions ---")
+def _parkingzone_is_uniform_lz_dp(zone_signs: pd.DataFrame) -> bool:
+    """True iff every non-empty sign on this parkingzone is LZ* or DP* only."""
+    codes: list[str] = []
+    for x in zone_signs["display_code"].tolist():
+        c = str(x).strip().upper()
+        if not c or c in ("NAN", "NONE"):
+            continue
+        codes.append(c)
+    if not codes:
+        return False
+    return all(any(c.startswith(p) for p in SEGMENT_EXCLUDE_PREFIXES) for c in codes)
+
+
+def _compute_segment_is_uniform_lz_dp(signs: pd.DataFrame, zones: pd.DataFrame) -> pd.Series:
+    """segment_id -> bool; True only if every parkingzone touching the segment is LZ/DP-uniform."""
+    zone_flags: dict[str, bool] = {}
+    for pz, grp in signs.groupby("parkingzone", dropna=False):
+        key = str(pz).strip()
+        zone_flags[key] = _parkingzone_is_uniform_lz_dp(grp)
+
+    zs = zones[["segment_id", "parkingzone"]].drop_duplicates().copy()
+    zs["segment_id"] = zs["segment_id"].astype(str).str.strip()
+    zs["parkingzone"] = zs["parkingzone"].astype(str).str.strip()
+    zs["zone_is_uniform_lz_dp"] = zs["parkingzone"].map(zone_flags).fillna(False).astype(bool)
+    return zs.groupby("segment_id")["zone_is_uniform_lz_dp"].all()
+
+
+def _segment_chain_prepare(verbose: bool = False) -> dict:
+    """Load bronze segment-chain inputs and return bay/zone/sign frames + joined plate rows."""
     bays = load_bronze("parking_bays.parquet").copy()
     zones = load_bronze("zones_to_segments.parquet").copy()
     signs = load_bronze("sign_plates.parquet").copy()
@@ -850,7 +878,6 @@ def build_segment_restrictions(verbose: bool = False) -> tuple[pd.DataFrame, set
         log.info("  zones_to_segments columns: %s", list(zones.columns))
         log.info("  sign_plates columns: %s", list(signs.columns))
 
-    # 1) bays: bay_id + roadsegmentid
     if "kerbsideid" not in bays.columns or "roadsegmentid" not in bays.columns:
         raise KeyError("parking_bays.parquet must include kerbsideid and roadsegmentid")
     bays["bay_id"] = _normalise_str_series(bays["kerbsideid"])
@@ -859,48 +886,55 @@ def build_segment_restrictions(verbose: bool = False) -> tuple[pd.DataFrame, set
     bays = bays[~bays["bay_id"].isin(["nan", "none"]) & ~bays["roadsegmentid"].isin(["nan", "none"])]
     bays = bays[["bay_id", "roadsegmentid"]].drop_duplicates()
 
-    # 2) zones_to_segments: detect segment + zone columns
     seg_col = _find_column_by_tokens(zones, ["segment", "id"])
     zone_col = _find_column_by_tokens(zones, [], ["zone", "parking"])
     if seg_col is None or zone_col is None:
-        raise KeyError(f"Could not detect segment/zone columns in zones_to_segments.parquet. Columns={list(zones.columns)}")
+        raise KeyError(
+            f"Could not detect segment/zone columns in zones_to_segments.parquet. Columns={list(zones.columns)}"
+        )
     zones = zones.rename(columns={seg_col: "segment_id", zone_col: "parkingzone"})
     zones["segment_id"] = _normalise_str_series(zones["segment_id"])
     zones["parkingzone"] = _normalise_str_series(zones["parkingzone"])
     zones = zones[(zones["segment_id"] != "") & (zones["parkingzone"] != "")]
     zones = zones[~zones["segment_id"].isin(["nan", "none"]) & ~zones["parkingzone"].isin(["nan", "none"])]
-    zones = zones[["segment_id", "parkingzone"]].drop_duplicates()
+    _zcols = ["segment_id", "parkingzone"]
+    _on_col = _find_column_by_tokens(zones, ["street"], [])  # e.g. onstreet
+    if _on_col is not None and _on_col not in _zcols:
+        zones[_on_col] = _normalise_str_series(zones[_on_col])
+        zones = zones.rename(columns={_on_col: "onstreet"})
+        _zcols.append("onstreet")
+    zones = zones[_zcols].drop_duplicates()
 
     bay_zones = bays.merge(zones, left_on="roadsegmentid", right_on="segment_id", how="inner")
 
-    # 3) sign_plates: detect zone + restriction display columns
     sign_zone_col = _find_column_by_tokens(signs, [], ["zone", "parking"])
-    code_col = _find_column_by_tokens(signs, ["code"], ["display", "restrict", "sign"]) or _find_column_by_tokens(signs, ["display"], ["code", "restrict", "sign"])
+    code_col = _find_column_by_tokens(signs, ["code"], ["display", "restrict", "sign"]) or _find_column_by_tokens(
+        signs, ["display"], ["code", "restrict", "sign"]
+    )
     if sign_zone_col is None or code_col is None:
-        raise KeyError(f"Could not detect parking zone or restriction code columns in sign_plates.parquet. Columns={list(signs.columns)}")
+        raise KeyError(
+            f"Could not detect parking zone or restriction code columns in sign_plates.parquet. Columns={list(signs.columns)}"
+        )
     signs = signs.rename(columns={sign_zone_col: "parkingzone", code_col: "display_code"})
     signs["parkingzone"] = _normalise_str_series(signs["parkingzone"])
     signs["display_code"] = _normalise_str_series(signs["display_code"])
     signs = signs[(signs["parkingzone"] != "") & (signs["display_code"] != "")]
     signs = signs[~signs["parkingzone"].isin(["nan", "none"]) & ~signs["display_code"].isin(["nan", "none"])]
 
-    # Detect real day/time columns. The CoM sign-plates schema uses literal names
-    # `restriction_days`, `time_restrictions_start`, `time_restrictions_finish` — the
-    # old token-search heuristic missed `restriction_days` and the "finish" suffix,
-    # so every rule was silently defaulted. Literal lookups first, token fallback second.
     days_col = (
-        "restriction_days" if "restriction_days" in signs.columns
-        else _find_column_by_tokens(signs, ["restriction", "day"])
-        or _find_column_by_tokens(signs, ["day"])
+        "restriction_days"
+        if "restriction_days" in signs.columns
+        else _find_column_by_tokens(signs, ["restriction", "day"]) or _find_column_by_tokens(signs, ["day"])
     )
     start_col = (
-        "time_restrictions_start" if "time_restrictions_start" in signs.columns
+        "time_restrictions_start"
+        if "time_restrictions_start" in signs.columns
         else _find_column_by_tokens(signs, ["start"])
     )
     end_col = (
-        "time_restrictions_finish" if "time_restrictions_finish" in signs.columns
-        else _find_column_by_tokens(signs, ["finish"])
-        or _find_column_by_tokens(signs, ["end"])
+        "time_restrictions_finish"
+        if "time_restrictions_finish" in signs.columns
+        else _find_column_by_tokens(signs, ["finish"]) or _find_column_by_tokens(signs, ["end"])
     )
     has_time_data = all(c is not None for c in [days_col, start_col, end_col])
     if has_time_data:
@@ -919,6 +953,127 @@ def build_segment_restrictions(verbose: bool = False) -> tuple[pd.DataFrame, set
         "QP": "P/15MINS",
         "FP": "FREE",
     }
+
+    return {
+        "bays": bays,
+        "zones": zones,
+        "signs": signs,
+        "bay_zones": bay_zones,
+        "joined": joined,
+        "days_col": days_col,
+        "start_col": start_col,
+        "end_col": end_col,
+        "has_time_data": has_time_data,
+        "code_map": code_map,
+    }
+
+
+def build_lz_dp_uniform_segment_restrictions(verbose: bool = False) -> pd.DataFrame:
+    """Attach LZ/DP sign-plate rules bay-by-bay only on segment-uniform LZ/DP segments (Phase A).
+
+    Does not replace ``SEGMENT_EXCLUDE_PREFIXES`` fan-out guard in ``build_segment_restrictions``:
+    this path runs separately and expands plates only when *every* parkingzone on a
+    segment carries LZ/DP-only signage (conservative).
+    """
+    log.info("--- Building LZ/DP uniform-segment restriction rows (Phase A) ---")
+    try:
+        ctx = _segment_chain_prepare(verbose=verbose)
+    except (FileNotFoundError, KeyError) as e:
+        log.warning("LZ/DP uniform segment pass skipped: %s", e)
+        return pd.DataFrame()
+
+    signs: pd.DataFrame = ctx["signs"]
+    zones: pd.DataFrame = ctx["zones"]
+    bays: pd.DataFrame = ctx["bays"]
+    days_col = ctx["days_col"]
+    start_col = ctx["start_col"]
+    end_col = ctx["end_col"]
+    has_time_data: bool = ctx["has_time_data"]
+    code_map: dict = ctx["code_map"]
+
+    seg_uniform = _compute_segment_is_uniform_lz_dp(signs, zones)
+    if seg_uniform.empty:
+        log.info("  No segment-uniform LZ/DP topology found — 0 LZ/DP uniform rows")
+        return pd.DataFrame()
+
+    seg_to_bays: dict[str, list[str]] = {}
+    for _, br in bays.iterrows():
+        sid = str(br["roadsegmentid"]).strip()
+        bid = str(br["bay_id"]).strip()
+        seg_to_bays.setdefault(sid, []).append(bid)
+
+    up = signs["display_code"].astype(str).str.strip().str.upper()
+    lz_mask = up.str.startswith("LZ") | up.str.startswith("DP")
+    lz_signs = signs[lz_mask].copy()
+    if lz_signs.empty:
+        log.info("  No LZ/DP rows in sign_plates — 0 uniform expansion")
+        return pd.DataFrame()
+
+    n_uniform_segments = int(seg_uniform.fillna(False).sum())
+    if verbose:
+        log.info("  segment_is_uniform_lz_dp: %d / %d segments", n_uniform_segments, len(seg_uniform))
+
+    rows: list[dict] = []
+    for _, srow in lz_signs.iterrows():
+        display_code = str(srow["display_code"]).strip().upper()
+        pz = str(srow["parkingzone"]).strip()
+        seg_ids = zones.loc[zones["parkingzone"].astype(str).str.strip() == pz, "segment_id"].astype(str).str.strip().unique()
+        for seg_id in seg_ids:
+            if seg_id not in seg_uniform.index or not bool(seg_uniform.loc[seg_id]):
+                continue
+            typedesc = code_map.get(display_code, display_code)
+            duration = _parse_duration_from_sign_code(display_code)
+            day_range = _parse_restriction_days(srow[days_col]) if has_time_data else None
+            start_val = _normalise_time_str(srow[start_col]) if has_time_data else None
+            end_val = _normalise_time_str(srow[end_col]) if has_time_data else None
+            for bay_id in seg_to_bays.get(seg_id, []):
+                rows.append({
+                    "bay_id": bay_id,
+                    "slot_num": None,
+                    "typedesc": typedesc,
+                    "fromday": day_range[0] if day_range is not None else 1,
+                    "today": day_range[1] if day_range is not None else 5,
+                    "starttime": start_val if start_val else "07:30",
+                    "endtime": end_val if end_val else "18:30",
+                    "duration_mins": duration,
+                    "disabilityext_mins": None,
+                })
+
+    if not rows:
+        log.info("  LZ/DP uniform pass produced 0 rows (no LZ/DP plates on uniform segments)")
+        return pd.DataFrame()
+
+    out = pd.DataFrame(rows)
+    out = out.drop_duplicates(
+        subset=["bay_id", "typedesc", "fromday", "today", "starttime", "endtime"],
+        keep="first",
+    ).reset_index(drop=True)
+    out["slot_num"] = out.groupby("bay_id").cumcount() + 1
+
+    log.info(
+        "  LZ/DP uniform-segment rows built: %d rows across %d bays",
+        len(out),
+        out["bay_id"].nunique(),
+    )
+    return out
+
+
+def build_segment_restrictions(verbose: bool = False) -> tuple[pd.DataFrame, set[str], int]:
+    """Build restrictions via segment chain: bays -> zones_to_segments -> sign_plates.
+
+    Returns
+    -------
+    segment_df, signage_gap_bays, skipped_lz_dp_join_rows
+        ``skipped_lz_dp_join_rows`` counts (bay×plate) joins dropped by the LZ/DP continue guard.
+    """
+    log.info("--- Building segment-chain restrictions ---")
+    ctx = _segment_chain_prepare(verbose=verbose)
+    joined = ctx["joined"]
+    days_col = ctx["days_col"]
+    start_col = ctx["start_col"]
+    end_col = ctx["end_col"]
+    has_time_data: bool = ctx["has_time_data"]
+    code_map: dict = ctx["code_map"]
 
     # Bay-specific codes (loading zone, disabled parking) must not be fanned out
     # across the whole segment — they point at individual bays only.
@@ -958,7 +1113,7 @@ def build_segment_restrictions(verbose: bool = False) -> tuple[pd.DataFrame, set
 
     segment_df = pd.DataFrame(rows)
     if len(segment_df) == 0:
-        return segment_df, signage_gap_bays
+        return segment_df, signage_gap_bays, skipped_bay_specific
 
     segment_df = segment_df.drop_duplicates(
         subset=["bay_id", "typedesc", "fromday", "today", "starttime", "endtime"],
@@ -978,7 +1133,64 @@ def build_segment_restrictions(verbose: bool = False) -> tuple[pd.DataFrame, set
         segment_df["bay_id"].nunique(),
         len(signage_gap_bays),
     )
-    return segment_df, signage_gap_bays
+    return segment_df, signage_gap_bays, skipped_bay_specific
+
+
+def restrictions_from_synthetic_joined(
+    synthetic_joined: pd.DataFrame,
+    days_col: str | None,
+    start_col: str | None,
+    end_col: str | None,
+    has_time_data: bool,
+    code_map: dict,
+) -> pd.DataFrame:
+    """
+    Build long restriction rows from a joined frame shaped like ``ctx['joined']``.
+
+    Uses the **same** LZ/DP skip behaviour as ``build_segment_restrictions`` (no fan-out).
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns align with segment restrictions: bay_id, slot_num, typedesc, …
+    """
+    rows: list[dict] = []
+    for _, row in synthetic_joined.iterrows():
+        display_code = str(row["display_code"]).strip().upper()
+        if any(display_code.startswith(p) for p in SEGMENT_EXCLUDE_PREFIXES):
+            continue
+
+        typedesc = code_map.get(display_code, display_code)
+        duration = _parse_duration_from_sign_code(display_code)
+
+        day_range = _parse_restriction_days(row[days_col]) if has_time_data else None
+        start_val = _normalise_time_str(row[start_col]) if has_time_data else None
+        end_val = _normalise_time_str(row[end_col]) if has_time_data else None
+
+        rows.append({
+            "bay_id": row["bay_id"],
+            "restriction_bayid": pd.NA,
+            "slot_num": None,
+            "typedesc": typedesc,
+            "fromday": day_range[0] if day_range is not None else 1,
+            "today": day_range[1] if day_range is not None else 5,
+            "starttime": start_val if start_val else "07:30",
+            "endtime": end_val if end_val else "18:30",
+            "duration_mins": duration,
+            "disabilityext_mins": None,
+        })
+
+    segment_df = pd.DataFrame(rows)
+    if len(segment_df) == 0:
+        return segment_df
+
+    segment_df = segment_df.drop_duplicates(
+        subset=["bay_id", "typedesc", "fromday", "today", "starttime", "endtime"],
+        keep="first",
+    ).reset_index(drop=True)
+
+    segment_df["slot_num"] = segment_df.groupby("bay_id").cumcount() + 1
+    return segment_df
 
 
 # ─── JOIN ────────────────────────────────────────────────────────────────────
@@ -1058,6 +1270,7 @@ def write_metadata(
     coverage_stats: dict | None = None,
     segment_restrictions: pd.DataFrame | None = None,
     combined_restrictions: pd.DataFrame | None = None,
+    lzdp_uniform_restrictions: pd.DataFrame | None = None,
 ) -> None:
     """
     Write silver layer metadata JSON for audit and downstream use.
@@ -1099,6 +1312,10 @@ def write_metadata(
             "segment_restrictions_long": {
                 "rows": 0 if segment_restrictions is None else len(segment_restrictions),
                 "columns": [] if segment_restrictions is None else list(segment_restrictions.columns),
+            },
+            "lzdp_uniform_restrictions_long": {
+                "rows": 0 if lzdp_uniform_restrictions is None else len(lzdp_uniform_restrictions),
+                "columns": [] if lzdp_uniform_restrictions is None else list(lzdp_uniform_restrictions.columns),
             },
             "combined_restrictions_long": {
                 "rows": len(restrictions) if combined_restrictions is None else len(combined_restrictions),
@@ -1157,20 +1374,27 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
 
     segment_rest = None
     signage_gap_bays: set[str] = set()
+    skipped_lz_dp_join_rows = 0
     try:
-        segment_rest, signage_gap_bays = build_segment_restrictions(verbose=verbose)
+        segment_rest, signage_gap_bays, skipped_lz_dp_join_rows = build_segment_restrictions(verbose=verbose)
     except FileNotFoundError as e:
         log.warning("Segment chain data not available: %s", e)
         log.warning("Run fetch_bronze.py with zones_to_segments and sign_plates first.")
     except KeyError as e:
         log.warning("Segment chain column mapping failed: %s", e)
 
+    log.info(
+        "LZ/DP segment join rows skipped by legacy continue guard (not fanned out): %d",
+        skipped_lz_dp_join_rows,
+    )
+
+    direct_bays = set(restrictions_long["bay_id"].astype(str))
+
     if segment_rest is not None and len(segment_rest) > 0:
         # Direct (bay-specific) rules always win over segment-derived (street-level)
         # rules for the same bay. The two sources use different typedesc formats
         # (direct embeds day+time, segment is a bare code), so string-level
         # drop_duplicates can't match them — exclude at the bay level instead.
-        direct_bays = set(restrictions_long["bay_id"].astype(str))
         segment_to_add = segment_rest[~segment_rest["bay_id"].astype(str).isin(direct_bays)]
         combined_restrictions = pd.concat(
             [restrictions_long, segment_to_add], ignore_index=True
@@ -1186,8 +1410,54 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         combined_restrictions = restrictions_long
         log.info("Using direct restrictions only: %d rows", len(combined_restrictions))
 
+    restriction_bays_before_lzdp = set(combined_restrictions["bay_id"].astype(str))
+
+    lzdp_uniform_for_disk = pd.DataFrame()
+    lzdp_rest = build_lz_dp_uniform_segment_restrictions(verbose=verbose)
+    if lzdp_rest is not None and len(lzdp_rest) > 0:
+        lzdp_to_add = lzdp_rest[~lzdp_rest["bay_id"].astype(str).isin(direct_bays)]
+        lzdp_uniform_for_disk = lzdp_to_add.copy()
+        combined_restrictions = pd.concat([combined_restrictions, lzdp_to_add], ignore_index=True)
+
+        bays_new = set(lzdp_to_add["bay_id"].astype(str)) - restriction_bays_before_lzdp
+        log.info(
+            "LZ/DP uniform-segment recovery: %d rows added for %d bays (%d bays gained any restriction row)",
+            len(lzdp_to_add),
+            lzdp_to_add["bay_id"].nunique(),
+            len(bays_new),
+        )
+    else:
+        lzdp_rest = pd.DataFrame()
+        log.info("LZ/DP uniform-segment recovery: 0 rows (no qualifying uniform segments or sign data)")
+
     # Join
     merged = join_silver(sensors_clean, combined_restrictions)
+
+    segment_ctx = None
+    try:
+        segment_ctx = _segment_chain_prepare(verbose=verbose)
+    except (FileNotFoundError, KeyError) as exc:
+        log.warning("Could not prepare segment ctx for missing-rule diagnostics: %s", exc)
+
+    mpath = Path(__file__).resolve().parent / "missing_rule_recovery.py"
+    mrr_spec = importlib.util.spec_from_file_location("melopark.missing_rule_recovery", mpath)
+    mrr = importlib.util.module_from_spec(mrr_spec)
+    assert mrr_spec.loader is not None
+    mrr_spec.loader.exec_module(mrr)
+
+    mr_stats: dict = {}
+    _diag_mr, combined_restrictions, merged, mr_stats, mr_recovery_long = mrr.run_phase(
+        sensors_clean=sensors_clean,
+        bays_clean=bays_clean,
+        merged=merged,
+        combined_restrictions=combined_restrictions,
+        direct_bays=direct_bays,
+        ctx=segment_ctx,
+        cts=sys.modules[__name__],
+        dry_run=dry_run,
+        verbose=verbose,
+    )
+
     accessibility_join = build_accessibility_join(
         bays_clean=bays_clean,
         restrictions_long=combined_restrictions,
@@ -1238,16 +1508,23 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         )
 
     if dry_run:
-        log.info("DRY RUN — no files written.")
+        log.info("DRY RUN — silver Parquet outputs skipped (see data/diagnostics/missing_rule_bays.csv).")
         log.info("Would write:")
         log.info("  data/silver/sensors_clean.parquet      (%d rows)", len(sensors_clean))
         log.info("  data/silver/restrictions_long.parquet   (%d rows)", len(restrictions_long))
         if segment_rest is not None:
             log.info("  data/silver/segment_restrictions_long.parquet (%d rows)", len(segment_rest))
+        if lzdp_uniform_for_disk is not None and len(lzdp_uniform_for_disk) > 0:
+            log.info("  data/silver/lzdp_uniform_restrictions_long.parquet (%d rows)", len(lzdp_uniform_for_disk))
         log.info("  data/silver/signage_gap_flags.parquet  (%d bays)", len(signage_gap_bays))
         log.info("  data/silver/bays_clean.parquet         (%d rows)", len(bays_clean))
         log.info("  data/silver/accessibility_join.parquet (%d rows)", len(accessibility_join))
-        log.info("  data/silver/merged.parquet              (%d rows)", len(merged))
+        mrows = mr_stats.get("merged_row_count_post_recovery", len(merged))
+        log.info("  data/silver/merged.parquet              (%d rows)", mrows)
+        log.info(
+            "  data/silver/missing_rule_recovery_restrictions_long.parquet (%d rows)",
+            len(mr_recovery_long),
+        )
         if addresses_clean is not None and streets_clean is not None:
             log.info("  data/silver/addresses_clean.parquet (%d rows)", len(addresses_clean))
             log.info("  data/silver/streets_clean.parquet   (%d rows)", len(streets_clean))
@@ -1274,6 +1551,18 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         seg_path = SILVER_DIR / "segment_restrictions_long.parquet"
         segment_rest.to_parquet(seg_path, index=False, engine="pyarrow")
         log.info("Saved segment_restrictions_long.parquet  (%d rows)", len(segment_rest))
+
+    if lzdp_uniform_for_disk is not None and len(lzdp_uniform_for_disk) > 0:
+        lzdp_path = SILVER_DIR / "lzdp_uniform_restrictions_long.parquet"
+        lzdp_uniform_for_disk.to_parquet(lzdp_path, index=False, engine="pyarrow")
+        log.info("Saved lzdp_uniform_restrictions_long.parquet (%d rows)", len(lzdp_uniform_for_disk))
+
+    mr_rec_path = SILVER_DIR / "missing_rule_recovery_restrictions_long.parquet"
+    mr_recovery_long.to_parquet(mr_rec_path, index=False, engine="pyarrow")
+    log.info(
+        "Saved missing_rule_recovery_restrictions_long.parquet (%d rows)",
+        len(mr_recovery_long),
+    )
 
     gap_df = pd.DataFrame({"bay_id": sorted(signage_gap_bays)})
     gap_path = SILVER_DIR / "signage_gap_flags.parquet"
@@ -1310,9 +1599,10 @@ def main(dry_run: bool = False, verbose: bool = False) -> None:
         merged,
         addresses=addresses_clean,
         streets=streets_clean,
-        coverage_stats=None,
+        coverage_stats={"missing_rule_recovery": mr_stats},
         segment_restrictions=segment_rest,
         combined_restrictions=combined_restrictions,
+        lzdp_uniform_restrictions=lzdp_uniform_for_disk if len(lzdp_uniform_for_disk) > 0 else None,
     )
 
     log.info("=" * 60)

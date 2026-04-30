@@ -1,32 +1,14 @@
 {
   "pipeline_stage": "bronze",
-<<<<<<< HEAD
-  "fetched_at": "2026-04-28T13:29:23.906084+00:00",
-=======
-  "fetched_at": "2026-04-22T01:56:29.623611+00:00",
->>>>>>> origin/main
+  "fetched_at": "2026-04-29T11:12:45.267047+00:00",
   "api_base": "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets",
   "api_licence": "CC BY - City of Melbourne Open Data",
   "api_portal": "https://data.melbourne.vic.gov.au",
   "datasets": {
-<<<<<<< HEAD
-    "disability_parking_arcgis": {
-      "dataset_id": "arcgis_accessibility_map_layers_disabled_parking",
-      "description": "Disabled parking points (ArcGIS FeatureServer export as GeoJSON)",
-      "output_file": "C:\\Users\\Dell\\OneDrive\\Desktop\\FIT5120\\Git_Repo\\melopark\\data\\bronze\\disability_parking_arcgis.parquet",
-      "rows": 437,
-      "columns": [
-        "UNIQUE_ID",
-        "lat",
-        "lon",
-        "geometry_type"
-      ],
-      "fetched_at": "2026-04-28T13:29:25.650363+00:00"
-=======
     "sensors": {
       "dataset_id": "on-street-parking-bay-sensors",
       "description": "Live sensor snapshot \u2014 occupancy per bay",
-      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/sensors.parquet",
+      "output_file": "E:\\MelPark\\melopark\\data\\bronze\\sensors.parquet",
       "rows": 3309,
       "columns": [
         "lastupdated",
@@ -36,12 +18,12 @@
         "kerbsideid",
         "location"
       ],
-      "fetched_at": "2026-04-22T01:56:37.453398+00:00"
+      "fetched_at": "2026-04-29T11:12:52.149554+00:00"
     },
     "restrictions": {
       "dataset_id": "on-street-car-park-bay-restrictions",
       "description": "Static restriction rules per bay (up to 8 slots)",
-      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/restrictions.parquet",
+      "output_file": "E:\\MelPark\\melopark\\data\\bronze\\restrictions.parquet",
       "rows": 4263,
       "columns": [
         "bayid",
@@ -107,12 +89,12 @@
         "typedesc5",
         "typedesc6"
       ],
-      "fetched_at": "2026-04-22T01:56:46.104777+00:00"
+      "fetched_at": "2026-04-29T11:13:03.872852+00:00"
     },
     "bays": {
       "dataset_id": "on-street-parking-bays",
       "description": "Spatial polygon boundaries for each physical bay",
-      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/parking_bays.parquet",
+      "output_file": "E:\\MelPark\\melopark\\data\\bronze\\parking_bays.parquet",
       "rows": 23864,
       "columns": [
         "roadsegmentid",
@@ -123,12 +105,12 @@
         "lastupdated",
         "location"
       ],
-      "fetched_at": "2026-04-22T01:56:49.743933+00:00"
+      "fetched_at": "2026-04-29T11:13:06.102730+00:00"
     },
     "zones_to_segments": {
       "dataset_id": "parking-zones-linked-to-street-segments",
       "description": "Parking zone to street segment mapping",
-      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/zones_to_segments.parquet",
+      "output_file": "E:\\MelPark\\melopark\\data\\bronze\\zones_to_segments.parquet",
       "rows": 798,
       "columns": [
         "parkingzone",
@@ -137,12 +119,12 @@
         "streetto",
         "segment_id"
       ],
-      "fetched_at": "2026-04-22T01:56:50.948558+00:00"
+      "fetched_at": "2026-04-29T11:13:07.580329+00:00"
     },
     "sign_plates": {
       "dataset_id": "sign-plates-located-in-each-parking-zone",
       "description": "Sign plate restrictions per parking zone",
-      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/sign_plates.parquet",
+      "output_file": "E:\\MelPark\\melopark\\data\\bronze\\sign_plates.parquet",
       "rows": 2033,
       "columns": [
         "parkingzone",
@@ -151,31 +133,7 @@
         "time_restrictions_finish",
         "restriction_display"
       ],
-      "fetched_at": "2026-04-22T01:56:54.007842+00:00"
-    },
-    "addresses": {
-      "dataset_id": "street-addresses",
-      "description": "City of Melbourne street/property addresses for search",
-      "output_file": "/Users/sidharthsudhi/Documents/FIT5120 -IE/melopark/data/bronze/addresses.parquet",
-      "rows": 10000,
-      "columns": [
-        "geo_point_2d",
-        "geo_shape",
-        "suburb_id",
-        "latitude",
-        "street_no",
-        "str_name",
-        "address_pnt",
-        "easting",
-        "northing",
-        "gisid",
-        "longitude",
-        "suburb",
-        "street_id",
-        "add_comp"
-      ],
-      "fetched_at": "2026-04-22T01:57:13.862013+00:00"
->>>>>>> origin/main
+      "fetched_at": "2026-04-29T11:13:11.679045+00:00"
     }
   },
   "notes": [
