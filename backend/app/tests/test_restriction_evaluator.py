@@ -387,6 +387,30 @@ class TestEvaluateBayAt:
         result = evaluate_bay_at("1000", datetime(2026, 4, 14, 10, 0), 60, db)
         assert result["verdict"] == "no"
 
+    def test_free_restriction_active_yes(self):
+        """rule_category free (FREE signage) must be yes, not generic other/no."""
+        bay = _make_bay()
+        r = _make_restriction(
+            typedesc="FREE",
+            fromday=0,
+            today=6,
+            starttime=time(7, 30),
+            endtime=time(18, 30),
+            rule_category="free",
+            is_strict=False,
+            duration_mins=None,
+            plain_english=(
+                "Free parking — no time limit or payment required during these hours."
+            ),
+        )
+        db = _mock_db(bay=bay, restrictions=[r])
+        result = evaluate_bay_at("1000", datetime(2026, 4, 14, 10, 0), 60, db)
+        assert result["verdict"] == "yes"
+        assert result["active_restriction"]["rule_category"] == "free"
+        assert result["active_restriction"]["max_stay_mins"] is None
+        assert result["active_restriction"]["expires_at"] is None
+        assert "Special restriction" not in result["reason"]
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Mid-stay strict-restriction warnings
@@ -532,6 +556,11 @@ class TestGoverningRestriction:
         loading = _make_restriction(rule_category="loading", is_strict=True)
         timed = _make_restriction(rule_category="timed", is_strict=False)
         assert _pick_governing_restriction([timed, loading]).rule_category == "loading"
+
+    def test_timed_beats_free_when_both_active(self):
+        free = _make_restriction(rule_category="free", is_strict=False)
+        timed = _make_restriction(rule_category="timed", is_strict=False)
+        assert _pick_governing_restriction([free, timed]).rule_category == "timed"
 
     def test_empty_returns_none(self):
         assert _pick_governing_restriction([]) is None

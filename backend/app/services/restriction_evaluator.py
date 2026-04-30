@@ -24,6 +24,7 @@ from app.models.bay import Bay, BayRestriction
 logger = logging.getLogger(__name__)
 _MELBOURNE_TZ = ZoneInfo("Australia/Melbourne")
 
+
 _COM_DAY_NAMES = {
     0: "Sunday",
     1: "Monday",
@@ -42,6 +43,7 @@ _CATEGORY_PRIORITY: dict[str, int] = {
     "loading": 2,
     "disabled": 3,
     "timed": 4,
+    # Unmetered / no-payment windows from classify_rule() (FREE, P FREE, …).
     "free": 5,
     "other": 6,
 }
@@ -176,7 +178,6 @@ def _normalise_arrival_to_melbourne_naive(arrival: datetime) -> datetime:
 def _to_melbourne_iso(dt: datetime) -> str:
     """Serialize naive Melbourne-local datetime with explicit Melbourne offset."""
     return dt.replace(tzinfo=_MELBOURNE_TZ).isoformat()
-
 
 def _format_clock(t: time) -> str:
     """Format a time as '7:30 AM' in Melbourne locale."""
@@ -431,6 +432,23 @@ def _verdict_for_restriction(
             expires_at,
         )
 
+    # Free / unmetered parking windows (build_gold classify_rule → rule_category "free").
+    # Must not fall through to "other", which incorrectly returns verdict "no".
+    if cat == "free":
+        max_stay = r.duration_mins
+        if max_stay is None:
+            return ("yes", r.plain_english, None, None)
+        expires_at = _to_melbourne_iso(arrival + timedelta(minutes=max_stay))
+        if duration_mins <= max_stay:
+            return ("yes", r.plain_english, max_stay, expires_at)
+        return (
+            "no",
+            f"You plan to stay {duration_mins} min but the limit is {max_stay} min. "
+            + r.plain_english,
+            max_stay,
+            expires_at,
+        )
+
     # "other" (bus, taxi, permit, etc.)
     return (
         "no",
@@ -548,6 +566,7 @@ def _evaluate_from_db(
             "data_source": "db",
             "data_coverage": data_coverage,
             "translator_rules": _build_translator_rules(restrictions, arrival, None, warning),
+
         }
 
     verdict, reason, max_stay, expires_at = _verdict_for_restriction(
@@ -575,6 +594,7 @@ def _evaluate_from_db(
         "data_source": "db",
         "data_coverage": data_coverage,
         "translator_rules": _build_translator_rules(restrictions, arrival, governing, warning),
+
     }
 
 
