@@ -10,6 +10,7 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
+import PressureLayer from '../pressure/PressureLayer'
 import {
   bayLatLng,
   destinationLatLng,
@@ -163,6 +164,10 @@ export default function ParkingMap({
   destZoom = DESTINATION_MAP_ZOOM,
   isMobile = false,
   hideHint = false,
+  pressureHulls = null,
+  pressureZones = null,
+  pressureEnabled = false,
+  onPressureZoneClick = null,
 }) {
   const [isDark, setIsDark] = useState(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -310,6 +315,15 @@ export default function ParkingMap({
         <MapBoundsNotifier onBoundsChange={onBoundsChange} />
         <MapZoomTracker onZoomChange={setZoomLevel} />
         <MapEmptyClick onEmptyClick={() => onBayClick(null)} />
+
+        {pressureEnabled && pressureHulls && pressureZones?.length > 0 && (
+          <PressureLayer
+            hulls={pressureHulls}
+            zones={pressureZones}
+            isDark={isDark}
+            onZoneClick={onPressureZoneClick}
+          />
+        )}
 
         {destination && destLatLng && (
           <Circle

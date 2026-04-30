@@ -31,7 +31,6 @@ class TranslatorRule(BaseModel):
     state: Literal["current", "upcoming", "normal", "outside"]
     heading: str
     body: str
-    # For upcoming rules: e.g. "THIS RULE WILL BE IN EFFECT IN 1 HOUR"
     banner: Optional[str] = None
 
 
