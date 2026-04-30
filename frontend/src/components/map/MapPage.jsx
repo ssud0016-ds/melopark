@@ -4,7 +4,12 @@ import OnboardingOverlay from './OnboardingOverlay'
 import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import FilterChips from '../feedback/FilterChips'
+import DecisionCard from '../pressure/DecisionCard'
+import ZoneDetailPanel from '../pressure/ZoneDetailPanel'
+import PressureLegend from '../pressure/PressureLegend'
+import TimeHorizonSelector from '../pressure/TimeHorizonSelector'
 import { useMapState } from '../../hooks/useMapState'
+import { usePressure, useAlternatives } from '../../hooks/usePressure'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
 import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
@@ -57,6 +62,33 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [mapBaysAtPlannedTime, setMapBaysAtPlannedTime] = useState(false)
   /** Bump to force sheet form reset when banner or Clear resets live mode. */
   const [plannerResetNonce, setPlannerResetNonce] = useState(0)
+
+  // ── Epic 5: Pressure map state ──
+  const [pressureEnabled, setPressureEnabled] = useState(false)
+  const [selectedZone, setSelectedZone] = useState(null)
+  const { zones: pressureZones, hulls: pressureHulls, horizon, setHorizon, loading: pressureLoading } =
+    usePressure(pressureEnabled)
+  const { data: alternativesData } = useAlternatives(
+    destination?.lat, destination?.lng, null, !!(pressureEnabled && destination),
+  )
+
+  const togglePressure = useCallback(() => {
+    setPressureEnabled((v) => {
+      if (!v) setMapBaysAtPlannedTime(false) // mutual exclusion with planner
+      return !v
+    })
+  }, [])
+
+  const handlePressureZoneClick = useCallback((zone) => {
+    setSelectedZone(zone)
+  }, [])
+
+  const handleAlternativeClick = useCallback((alt) => {
+    setSelectedZone(null)
+    if (mapRef.current) {
+      mapRef.current.flyTo([alt.centroid_lat, alt.centroid_lon], 17, { duration: 0.8 })
+    }
+  }, [])
 
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -334,6 +366,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           destZoom={destinationMapZoom}
           isMobile={isMobile}
           hideHint={isMobile && legendOpen}
+          pressureEnabled={pressureEnabled}
+          pressureHulls={pressureHulls}
+          pressureZones={pressureZones}
+          onPressureZoneClick={handlePressureZoneClick}
         />
 
         {accessibilityMode && (
@@ -451,6 +487,23 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           style={{ right: rightInsetPx }}
         >
           <div className="relative flex items-start gap-2">
+            <button
+              type="button"
+              onClick={togglePressure}
+              aria-pressed={pressureEnabled}
+              aria-label={pressureEnabled ? 'Hide parking pressure' : 'Show parking pressure'}
+              className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
+                pressureEnabled
+                  ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
+                  : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+              }`}
+              title={pressureEnabled ? 'Pressure map: ON' : 'Pressure map: OFF'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M3 17h4V9H3v8zm6 0h4V3H9v14zm6 0h4v-6h-4v6z" fill="currentColor" />
+              </svg>
+              <span className="text-[9px] font-semibold leading-none">{pressureEnabled ? 'Pressure' : 'Pressure'}</span>
+            </button>
             <button
               type="button"
               onClick={toggleAccessibilityMode}
@@ -657,6 +710,37 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             </div>
           )
         })()}
+
+        {/* ── Epic 5: Pressure overlays ── */}
+        {pressureEnabled && (
+          <div className="absolute left-3.5 top-[168px] z-[520] sm:top-[128px]">
+            <TimeHorizonSelector value={horizon} onChange={setHorizon} />
+          </div>
+        )}
+
+        {pressureEnabled && (
+          <div className="absolute bottom-28 left-3.5 z-[510] sm:bottom-20">
+            <PressureLegend />
+          </div>
+        )}
+
+        {selectedZone && !destination && (
+          <div className="absolute bottom-28 right-3 z-[520] w-72 sm:bottom-6">
+            <ZoneDetailPanel zone={selectedZone} onClose={() => setSelectedZone(null)} />
+          </div>
+        )}
+
+        {pressureEnabled && destination && alternativesData && (
+          <div className="absolute bottom-28 right-3 z-[520] w-80 sm:bottom-6">
+            <DecisionCard
+              target={alternativesData.target}
+              alternatives={alternativesData.alternatives}
+              destinationName={destination?.name || destination?.label}
+              onAlternativeClick={handleAlternativeClick}
+              onClose={() => setPressureEnabled(false)}
+            />
+          </div>
+        )}
 
         {showOnboarding && (
           <OnboardingOverlay onPick={handleOnboardingPick} onSkip={dismissOnboarding} />

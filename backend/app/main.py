@@ -12,6 +12,7 @@ from app.routers.bays import router as bays_router
 from app.routers.db_test import router as db_test_router
 from app.routers.health import router as health_router
 from app.routers.parking import router as parking_router
+from app.routers.pressure import router as pressure_router
 from app.routers.search import router as search_router
 
 #Rate limittinh
@@ -29,8 +30,10 @@ async def lifespan(app: FastAPI):
     from app.services.parking_service import start_background_refresh
     from app.services.restriction_lookup_service import start_background_restrictions_refresh
 
+    from app.services.pressure_service import load_gold_data
     await start_background_refresh()
     await start_background_restrictions_refresh()
+    load_gold_data()
     yield
     # No teardown needed — background tasks are cancelled automatically by the runtime.
 
@@ -71,4 +74,5 @@ app.include_router(parking_router)
 app.include_router(bays_router)
 app.include_router(search_router)
 app.include_router(accessibility_router)
+app.include_router(pressure_router)
 

@@ -72,3 +72,22 @@
 *:focus-visible {
   @apply outline-2 outline-offset-2 outline-brand;
 }
+
+/* Pressure zone tooltip */
+.pressure-tooltip {
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  padding: 6px 10px;
+  font-family: inherit;
+  pointer-events: none;
+}
+.pressure-tooltip::before {
+  display: none;
+}
+.dark .pressure-tooltip {
+  background: rgba(30, 30, 50, 0.97);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+}
