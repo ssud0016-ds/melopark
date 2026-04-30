@@ -1,6 +1,6 @@
 {
   "pipeline_stage": "silver",
-  "cleaned_at": "2026-04-28T13:29:51.675153+00:00",
+  "cleaned_at": "2026-04-29T14:06:48.468211+00:00",
   "notes": [
     "CoM sensors use kerbsideid (not bay_id) and status_description (not status).",
     "CoM restrictions use bayid (internal key) + deviceid (= kerbsideid).",
@@ -11,10 +11,45 @@
     "Restrictions melted from wide (description1..8) to long (one row per slot).",
     "Segment-chain restrictions can be merged from sign plates via zones_to_segments."
   ],
-  "restriction_coverage": {},
+  "restriction_coverage": {
+    "missing_rule_recovery": {
+      "by_category_initial": {
+        "A": 100,
+        "C": 44,
+        "D": 3
+      },
+      "missing_before": 147,
+      "recovered_bays": 37,
+      "recovery_rows": 149,
+      "attempted": {
+        "C": 44,
+        "A": 100,
+        "B": 0
+      },
+      "skipped_threshold": {
+        "C": 7,
+        "A": 62,
+        "B": 0
+      },
+      "skipped_direct_bay": 0,
+      "skipped_c_cross_street": 37,
+      "skipped_c_inconsistent_segment": 0,
+      "skipped_a_borderline_inconsistent_segment": 0,
+      "missing_after": 110,
+      "merged_row_count_post_recovery": 10535,
+      "by_category_after": {
+        "A": 63,
+        "C": 44,
+        "D": 3
+      },
+      "recovery_safety_strip_bay_count": 0,
+      "recovery_safety_strip_bay_ids": [],
+      "recovery_rows_after_safety_strip": 149
+    }
+  },
   "datasets": {
     "sensors_clean": {
-      "rows": 3261,
+      "rows": 3309,
       "columns": [
         "lastupdated",
         "status_timestamp",
@@ -29,7 +64,7 @@
       ]
     },
     "restrictions_long": {
-      "rows": 8056,
+      "rows": 8035,
       "columns": [
         "bay_id",
         "restriction_bayid",
@@ -44,7 +79,7 @@
       ]
     },
     "merged": {
-      "rows": 10322,
+      "rows": 10535,
       "columns": [
         "lastupdated",
         "status_timestamp",
@@ -67,7 +102,7 @@
         "disabilityext_mins",
         "_silver_joined_at"
       ],
-      "unique_bays": 3261
+      "unique_bays": 3309
     },
     "segment_restrictions_long": {
       "rows": 18034,
@@ -83,8 +118,12 @@
         "disabilityext_mins"
       ]
     },
+    "lzdp_uniform_restrictions_long": {
+      "rows": 0,
+      "columns": []
+    },
     "combined_restrictions_long": {
-      "rows": 25202,
+      "rows": 25263,
       "columns": [
         "bay_id",
         "restriction_bayid",
@@ -96,26 +135,6 @@
         "endtime",
         "duration_mins",
         "disabilityext_mins"
-      ]
-    },
-    "addresses_clean": {
-      "rows": 3157,
-      "columns": [
-        "name",
-        "sub",
-        "category",
-        "lat",
-        "lng"
-      ]
-    },
-    "streets_clean": {
-      "rows": 221,
-      "columns": [
-        "name",
-        "sub",
-        "category",
-        "lat",
-        "lng"
       ]
     }
   }

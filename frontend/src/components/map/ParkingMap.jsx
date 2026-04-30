@@ -22,6 +22,9 @@ import {
 import { bayHeading } from '../../utils/bayLabels'
 const CLUSTER_ZOOM_CUTOFF = 18
 
+/** Mobile cluster-mode hint (non-interactive). */
+export const MOBILE_CLUSTER_ZOOM_HINT = 'Zoom in to view individual bays'
+
 /** Bay-dot fill colours (match map legend): lime / peach / red. */
 const VERIFIED_FILL = {
   available: '#a3ec48',
@@ -186,6 +189,7 @@ export default function ParkingMap({
   const destLatLng = destination ? destinationLatLng(destination) : null
 
   const { verifiedBays, limitedBays } = useMemo(() => {
+    // hasRules === parking has_restriction_data. limited = no CoM row in cache.
     // Always render from already-filtered visibleBays so mode-level filtering
     // (e.g. accessibility mode) cannot be bypassed by "All bays".
     const byType = visibleBays
@@ -377,14 +381,15 @@ export default function ParkingMap({
             if (!inRadius) opacity = 0.12
             else if (!inFilter) opacity = 0.22
             const fillColor = sensorOccupancyFillColor(bay)
-            /* Smaller than verified CircleMarkers (9/11) so the two tiers stay visually distinct */
-            const markerRadius = isMobile ? 7 : 5
+            /* Same radius as verified dots for hit target; tier is colour-only (sensor vs planner/verified palette). */
+            const markerRadius = isMobile ? 11 : 9
+            const selected = bay.id === selectedBayId
+            const selectedRadius = isMobile ? 15 : 13
             return (
               <CircleMarker
                 key={`ltd-${bay.id}`}
                 center={[ll.lat, ll.lng]}
-                radius={markerRadius}
-                interactive={false}
+                radius={selected ? selectedRadius : markerRadius}
                 pathOptions={{
                   color: fillColor,
                   fillColor,
@@ -392,7 +397,24 @@ export default function ParkingMap({
                   opacity,
                   weight: 0,
                 }}
-              />
+                eventHandlers={{
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e)
+                    onBayClick(bay)
+                  },
+                }}
+              >
+                <Popup>
+                  <div className="min-w-[120px] text-xs leading-snug">
+                    <div className="font-semibold text-gray-900 dark:text-gray-100">
+                      Bay #{bay.id} {bay.name ? `\u00b7 ${bay.name}` : ''}
+                    </div>
+                    <div className="mt-1 text-gray-600 dark:text-gray-400">
+                      {bayPopupCopy(bay, verdictByBayId)}
+                    </div>
+                  </div>
+                </Popup>
+              </CircleMarker>
             )
           })}
 
@@ -469,7 +491,7 @@ export default function ParkingMap({
         >
           {zoomLevel < CLUSTER_ZOOM_CUTOFF ? (
             <>
-              <div>{isMobile ? 'Zoom in for bays' : 'Zoom in to see individual parking bays.'}</div>
+              <div>{isMobile ? MOBILE_CLUSTER_ZOOM_HINT : 'Zoom in to see individual parking bays.'}</div>
               {!isMobile && (
                 <div className="mt-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300">
                   Cluster numbers show available/total bays and change as you zoom.

@@ -34,7 +34,6 @@ _COM_DAY_NAMES = {
     6: "Saturday",
 }
 
-
 # Priority order: lower number = stricter.  When multiple restrictions are
 # active simultaneously the most restrictive one governs the verdict.
 _CATEGORY_PRIORITY: dict[str, int] = {
@@ -259,7 +258,6 @@ def _build_translator_rules(
         }
     )
     return items
-
 
 def _effective_end_mins(start: time, end: time, fromday: int, today: int) -> int:
     """Return the active-window end as minutes-from-midnight.

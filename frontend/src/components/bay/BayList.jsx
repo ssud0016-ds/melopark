@@ -65,7 +65,7 @@ export default function BayList({ visibleBays, selectedBayId, destination, onSel
     <div role="listbox" aria-label="Parking bays">
       {rulesCount > 0 && (
         <div className="text-[11px] font-semibold text-[#35338c] dark:text-[#a3a1e6] mb-2 px-4 pt-1">
-          {rulesCount} bay{rulesCount !== 1 ? 's' : ''} with restriction rules shown first
+          {rulesCount} bay{rulesCount !== 1 ? 's' : ''} with CoM restriction data shown first
           {destination && ' · sorted by distance'}
         </div>
       )}

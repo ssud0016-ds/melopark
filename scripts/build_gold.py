@@ -571,7 +571,7 @@ def load_manual_overrides() -> pd.DataFrame:
     empty = pd.DataFrame(columns=_cols)
     if not path.exists():
         return empty
-    with path.open() as fh:
+    with path.open(encoding="utf-8") as fh:
         entries = yaml.safe_load(fh) or []
     if not entries:
         return empty
@@ -650,6 +650,28 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
         )
     else:
         log.warning("segment_restrictions_long.parquet not found — direct restrictions only")
+
+    lzdp_path = SILVER_DIR / "lzdp_uniform_restrictions_long.parquet"
+    if lzdp_path.exists():
+        lzdp_df = pd.read_parquet(lzdp_path)
+        log.info("Loaded lzdp_uniform_restrictions_long.parquet: %d rows", len(lzdp_df))
+        all_rest = pd.concat([all_rest, lzdp_df], ignore_index=True)
+        log.info(
+            "After LZ/DP uniform segment rows: %d rows, %d bays",
+            len(all_rest),
+            all_rest["bay_id"].nunique(),
+        )
+
+    mr_rec_path = SILVER_DIR / "missing_rule_recovery_restrictions_long.parquet"
+    if mr_rec_path.exists():
+        mr_rec = pd.read_parquet(mr_rec_path)
+        log.info("Loaded missing_rule_recovery_restrictions_long.parquet: %d rows", len(mr_rec))
+        all_rest = pd.concat([all_rest, mr_rec], ignore_index=True)
+        log.info(
+            "After missing-rule recovery rows: %d rows, %d bays",
+            len(all_rest),
+            all_rest["bay_id"].nunique(),
+        )
 
     # Normalise dtypes
     all_rest["bay_id"] = all_rest["bay_id"].astype(str)
