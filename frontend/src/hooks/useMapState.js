@@ -93,7 +93,8 @@ export function useMapState() {
     (id) => {
       if (id == null) return _setSelectedBayId(null)
       const bay = baysRef.current.find((b) => b.id === id)
-      if (bay && !bay.hasRules) return
+      // Detail sheet always allowed for live bays (allowDetail); hasRules is display-only.
+      if (bay && bay.allowDetail === false) return
       _setSelectedBayId(id)
     },
     [],

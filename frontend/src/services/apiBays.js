@@ -28,9 +28,10 @@
  *   spots           – Always 1; each CoM sensor monitors a single kerbside bay
  *   free            – 0 or 1 from sensor (real)
  *   bayType         – Raw CoM type string, e.g. "Loading Zone", "Timed", "Other"
- *   hasRules        – True for live bays: rule truth comes from `/api/bays/{id}/evaluate`
- *                     (DB-first with API fallback), not the sparse `/api/parking`
- *                     `has_restriction_data` enrichment flag.
+ *   hasRules        – Mirrors `/api/parking` `has_restriction_data` (CoM restrictions
+ *                     cache hit). Badge / sort / map counts only — Epic 2 verdicts
+ *                     still come from `/api/bays/{id}/evaluate`.
+ *   allowDetail     – Live bays may always open the detail sheet (evaluate).
  *   sensorLastUpdated – Timestamp from CoM sensor feed (real)
  *   source          – "live" when from API, "demo" when from static fallback
  */
@@ -39,6 +40,7 @@ export function mapApiRecordToBay(record) {
   const status = (record.status || 'unknown').toLowerCase()
   const isFree = status === 'free'
   const bayType = record.bay_type || 'Other'
+  const hasRules = record.has_restriction_data === true
 
   // Map dot colour category – derived from real API data (not rule inference).
   // "trap" applies to absolute restrictions (Loading Zone, No Standing) which
@@ -58,9 +60,8 @@ export function mapApiRecordToBay(record) {
     spots: 1,                           // CoM model: 1 sensor = 1 kerbside bay
     free: isFree ? 1 : 0,
     bayType,                            // raw CoM type string (real external API)
-    // All live bays are rule-evaluable via /api/bays/{id}/evaluate.
-    // Keep this true so UI does not treat most live bays as "sensor-only".
-    hasRules: true,
+    hasRules,
+    allowDetail: true,
     sensorLastUpdated: record.last_updated ?? null,
     source: 'live',
   }
@@ -117,8 +118,8 @@ export async function fetchParkingBays() {
  * Omit or null for live (server uses now + default duration).
  *
  * Time contract:
- *   - If `arrivalIso` includes an offset (e.g. +10:00/+11:00), backend uses that instant.
- *   - If `arrivalIso` is naive (no offset), backend interprets it as Melbourne local time.
+ *   - Prefer timezone-aware ISO-8601 with explicit offset (e.g. +10:00/+11:00 or Z); the app sends Melbourne offset from planner UI.
+ *   - Naive strings (no offset) remain supported: backend interprets them as Australia/Melbourne local wall time.
  */
 export async function fetchBayEvaluation(bayId, options = null) {
   if (!bayId) return null
