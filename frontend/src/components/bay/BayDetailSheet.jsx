@@ -1,10 +1,25 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
 import { bayHeading, bayMissingStreetNote, streetShort } from '../../utils/bayLabels'
 import { cn } from '../../utils/cn'
 import { fetchBayEvaluation } from '../../services/apiBays'
 import ParkingVerdictPanel from './ParkingVerdictPanel'
 import BayStatusAndLimits from './BayStatusAndLimits'
 import ParkingSignTranslator from './ParkingSignTranslator'
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function listFocusable(root) {
+  if (typeof document === 'undefined' || !root) return []
+  return Array.from(root.querySelectorAll(FOCUSABLE_SELECTOR)).filter((el) => {
+    if (!(el instanceof HTMLElement)) return false
+    const r = el.getBoundingClientRect()
+    if (r.width === 0 && r.height === 0) return false
+    const st = window.getComputedStyle(el)
+    if (st.visibility === 'hidden' || st.display === 'none') return false
+    return true
+  })
+}
 
 export default function BayDetailSheet({
   bay,
@@ -24,6 +39,78 @@ export default function BayDetailSheet({
   const [evaluation, setEvaluation] = useState(null)
   const [evalLoading, setEvalLoading] = useState(false)
   const durationMins = savedPlannerDurationMins ?? 60
+
+  const dialogRef = useRef(null)
+  const closeButtonRef = useRef(null)
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  useLayoutEffect(() => {
+    if (!bay?.id) return
+
+    const previous =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+
+    const focusInitial = () => {
+      const closeEl = closeButtonRef.current
+      if (closeEl && typeof closeEl.focus === 'function') {
+        closeEl.focus()
+        return
+      }
+      const root = dialogRef.current
+      if (!root) return
+      const first = listFocusable(root)[0]
+      first?.focus?.()
+    }
+    focusInitial()
+
+    const onKeyDown = (e) => {
+      const root = dialogRef.current
+      if (!root) return
+
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        onCloseRef.current()
+        return
+      }
+
+      if (e.key !== 'Tab') return
+
+      const elems = listFocusable(root)
+      if (elems.length === 0) return
+
+      const active = document.activeElement
+      if (!root.contains(active)) return
+
+      if (elems.length === 1) {
+        e.preventDefault()
+        elems[0].focus()
+        return
+      }
+
+      const first = elems[0]
+      const last = elems[elems.length - 1]
+
+      if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault()
+        last.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true)
+      if (previous && document.body.contains(previous) && typeof previous.focus === 'function') {
+        previous.focus()
+      }
+    }
+  }, [bay?.id])
 
   const fetchOpts = useMemo(() => {
     if (!savedPlannerArrivalIso || savedPlannerDurationMins == null) return null
@@ -114,6 +201,7 @@ export default function BayDetailSheet({
 
   return (
     <div
+      ref={dialogRef}
       className={cn(
         'flex flex-col bg-white dark:bg-surface-dark overflow-y-auto overscroll-contain',
         isMobile
@@ -122,6 +210,7 @@ export default function BayDetailSheet({
       )}
       style={!isMobile ? { bottom: reserveBottomPx } : undefined}
       role="dialog"
+      aria-modal="true"
       aria-label={`${bayDisplayName}, parking details`}
     >
       {/* 1. Header strip: ID + close, then street short on next line */}
@@ -136,6 +225,7 @@ export default function BayDetailSheet({
               {occupancyBadge}
             </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             aria-label="Close"

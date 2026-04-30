@@ -1,4 +1,5 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import BayDetailSheet from './BayDetailSheet'
@@ -183,5 +184,157 @@ describe('BayDetailSheet responsive layout', () => {
     expect(dialog.className).toContain('min-w-[280px]')
     expect(dialog.className).toContain('max-w-[min(420px,calc(100vw-24px))]')
     expect(dialog.className).toContain('w-[380px]')
+  })
+})
+
+describe('BayDetailSheet focus and keyboard', () => {
+  beforeEach(() => {
+    cleanup()
+    fetchBayEvaluation.mockClear()
+  })
+
+  it('sets aria-modal and moves initial focus to the close control', async () => {
+    renderSheetWithEvaluation({ translator_rules: [] })
+    const dialog = await screen.findByRole('dialog', { name: /parking details/i })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
+    })
+  })
+
+  it('calls onClose when Escape is pressed', async () => {
+    const onClose = vi.fn()
+    fetchBayEvaluation.mockResolvedValue({
+      bay_id: '1000',
+      verdict: 'yes',
+      reason: 'ok',
+      active_restriction: null,
+      warning: null,
+      data_source: 'db',
+      data_coverage: 'full',
+      translator_rules: [],
+    })
+    render(
+      <BayDetailSheet
+        bay={{
+          id: '1000',
+          type: 'available',
+          bayType: 'Other',
+          hasRules: true,
+          free: 1,
+          name: 'Test St',
+          sensorLastUpdated: null,
+        }}
+        destination={null}
+        onClose={onClose}
+        isMobile={false}
+        lastUpdated={null}
+      />,
+    )
+    await waitFor(() => expect(fetchBayEvaluation).toHaveBeenCalled())
+    fireEvent.keyDown(document, { key: 'Escape', bubbles: true })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('restores focus to the element that had focus before open', async () => {
+    fetchBayEvaluation.mockResolvedValue({
+      bay_id: '1000',
+      verdict: 'yes',
+      reason: 'ok',
+      active_restriction: null,
+      warning: null,
+      data_source: 'db',
+      data_coverage: 'full',
+      translator_rules: [],
+    })
+
+    function Harness() {
+      const [open, setOpen] = useState(false)
+      return (
+        <div>
+          <button type="button" data-testid="before-sheet" onClick={() => setOpen(true)}>
+            Open sheet
+          </button>
+          {open ? (
+            <BayDetailSheet
+              bay={{
+                id: '1000',
+                type: 'available',
+                bayType: 'Other',
+                hasRules: true,
+                free: 1,
+                name: 'Test St',
+                sensorLastUpdated: null,
+              }}
+              destination={null}
+              onClose={() => setOpen(false)}
+              isMobile={false}
+              lastUpdated={null}
+            />
+          ) : null}
+        </div>
+      )
+    }
+
+    render(<Harness />)
+    const opener = screen.getByTestId('before-sheet')
+    opener.focus()
+    expect(opener).toHaveFocus()
+    fireEvent.click(opener)
+
+    await screen.findByRole('dialog')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus())
+
+    fireEvent.keyDown(document, { key: 'Escape', bubbles: true })
+    await waitFor(() => expect(opener).toHaveFocus())
+  })
+
+  it('keeps Tab inside the dialog when there is only one focusable control', async () => {
+    fetchBayEvaluation.mockResolvedValue({
+      bay_id: '1000',
+      verdict: 'yes',
+      reason: 'x'.repeat(500),
+      active_restriction: null,
+      warning: null,
+      data_source: 'db',
+      data_coverage: 'full',
+      translator_rules: [],
+    })
+
+    function Harness() {
+      const [open, setOpen] = useState(true)
+      return (
+        <div>
+          <button type="button" data-testid="outside">
+            Outside
+          </button>
+          {open ? (
+            <BayDetailSheet
+              bay={{
+                id: '1000',
+                type: 'available',
+                bayType: 'Other',
+                hasRules: true,
+                free: 1,
+                name: 'Test St',
+                sensorLastUpdated: null,
+              }}
+              destination={null}
+              onClose={() => setOpen(false)}
+              isMobile={false}
+              lastUpdated={null}
+            />
+          ) : null}
+        </div>
+      )
+    }
+
+    render(<Harness />)
+    const closeBtn = await screen.findByRole('button', { name: 'Close' })
+    await waitFor(() => expect(closeBtn).toHaveFocus())
+    const outside = screen.getByTestId('outside')
+    fireEvent.keyDown(document, { key: 'Tab', bubbles: true })
+    expect(closeBtn).toHaveFocus()
+    expect(outside).not.toHaveFocus()
   })
 })
