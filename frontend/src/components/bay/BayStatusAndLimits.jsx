@@ -39,28 +39,23 @@ export default function BayStatusAndLimits({ bay, evaluation }) {
         Bay Status and Limits
       </div>
 
-      <div className="flex">
-        <div className="flex flex-col items-center mr-4 pt-1">
-          {items.map((_, i) => (
-            <div key={i} className="flex flex-col items-center">
-              <div className={dot(i === 1)} aria-hidden />
+      <div className="flex flex-col">
+        {items.map((t, i) => (
+          <div key={t.title} className="flex items-stretch">
+            <div className="mr-4 flex w-3 shrink-0 flex-col items-center">
+              <div className={cn(dot(i === 1), 'mt-0.5')} aria-hidden />
               {i < items.length - 1 && (
-                <div className="w-0.5 flex-1 bg-gray-100 dark:bg-gray-700 my-1 min-h-[22px]" />
+                <div className="mt-1 w-0.5 flex-1 min-h-[12px] bg-gray-100 dark:bg-gray-700" />
               )}
             </div>
-          ))}
-        </div>
-
-        <div className="flex-1">
-          {items.map((t) => (
-            <div key={t.title} className="mb-5">
+            <div className={cn('min-w-0 flex-1', i < items.length - 1 && 'pb-5')}>
               <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t.title}</div>
-              <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+              <div className="mt-0.5 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
                 {t.desc}
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   )
