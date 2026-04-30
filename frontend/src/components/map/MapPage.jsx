@@ -19,6 +19,7 @@ import {
   melbourneWallClockToAwareIso,
   toMelbourneDateTimeInputValue,
 } from '../../utils/plannerTime'
+import { getStatusFillColor } from './ParkingMap'
 
 function splitMelbourneDateTimeParts(iso) {
   const dt = toMelbourneDateTimeInputValue(iso)
@@ -283,6 +284,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   }, [])
 
   const [legendOpen, setLegendOpen] = useState(false)
+  const [colorBlindMode, setColorBlindMode] = useState(false)
   useEffect(() => {
     if (!isMobile) setLegendOpen(true)
     else setLegendOpen(false)
@@ -361,6 +363,23 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           <path d="M3 17h4V9H3v8zm6 0h4V3H9v14zm6 0h4v-6h-4v6z" fill="currentColor" />
         </svg>
         <span className="text-[9px] font-semibold leading-none">Pressure</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setColorBlindMode((v) => !v)}
+        aria-pressed={colorBlindMode}
+        aria-label={colorBlindMode ? 'Disable color-blind mode' : 'Enable color-blind mode'}
+        className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
+          colorBlindMode
+            ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
+            : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+        }`}
+        title={colorBlindMode ? 'Color-blind palette: ON' : 'Color-blind palette: OFF'}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M4 12h16M4 7h16M4 17h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+        <span className="text-[9px] font-semibold leading-none">{colorBlindMode ? 'CB ON' : 'CB OFF'}</span>
       </button>
       <button
         type="button"
@@ -491,6 +510,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           pressureHulls={pressureHulls}
           pressureZones={pressureZones}
           onPressureZoneClick={handlePressureZoneClick}
+          colorBlindMode={colorBlindMode}
         />
 
         {accessibilityMode && (
@@ -730,19 +750,25 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         </div>
 
         {(() => {
+          const availableColor = getStatusFillColor('available', colorBlindMode)
+          const cautionColor = getStatusFillColor('caution', colorBlindMode)
+          const occupiedColor = getStatusFillColor('occupied', colorBlindMode)
           const rows = [
             {
-              dotClass: 'bg-[#a3ec48]',
+              dotClass: '',
+              color: availableColor,
               label: 'Available parking spots',
               symbolClass: 'legend-symbol-available',
             },
             {
-              dotClass: 'bg-[#FFB382]',
+              dotClass: '',
+              color: cautionColor,
               label: 'Caution: Tow Away / Loading Zone',
               symbolClass: 'legend-symbol-caution',
             },
             {
-              dotClass: 'bg-[#ed6868]',
+              dotClass: '',
+              color: occupiedColor,
               label: 'Parking spots occupied',
               symbolClass: 'legend-symbol-occupied',
             },
@@ -759,8 +785,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                   aria-label="Show legend"
                   className="flex items-center gap-1.5 px-2.5 py-1.5 cursor-pointer"
                 >
-                  {rows.map(({ dotClass, symbolClass }) => (
-                    <span key={symbolClass} className={`${dotClass} ${symbolClass} h-2.5 w-2.5 shrink-0 rounded-full`} />
+                  {rows.map(({ dotClass, symbolClass, color }) => (
+                    <span
+                      key={symbolClass}
+                      className={`${dotClass} ${symbolClass} h-2.5 w-2.5 shrink-0 rounded-full`}
+                      style={{ backgroundColor: color }}
+                    />
                   ))}
                   <span className="ml-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/85 dark:text-brand-800/90">
                     Legend
@@ -783,9 +813,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                       </button>
                     )}
                   </div>
-                  {rows.map(({ dotClass, label, symbolClass }) => (
+                  {rows.map(({ dotClass, label, symbolClass, color }) => (
                     <div key={label} className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
-                      <div className={`${dotClass} ${symbolClass} h-2.5 w-2.5 shrink-0 rounded-full`} />
+                      <div
+                        className={`${dotClass} ${symbolClass} h-2.5 w-2.5 shrink-0 rounded-full`}
+                        style={{ backgroundColor: color }}
+                      />
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
