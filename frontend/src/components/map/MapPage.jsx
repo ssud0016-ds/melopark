@@ -8,21 +8,15 @@ import { useMapState } from '../../hooks/useMapState'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
 import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
-import { formatAtDateTime, formatDurationLabel } from '../../utils/plannerTime'
+import {
+  formatAtDateTime,
+  formatDurationLabel,
+  melbourneWallClockToAwareIso,
+  toMelbourneDateTimeInputValue,
+} from '../../utils/plannerTime'
 
-function toLocalDateTimeInputValue(iso) {
-  const d = iso ? new Date(iso) : new Date()
-  if (Number.isNaN(d.getTime())) return ''
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const da = String(d.getDate()).padStart(2, '0')
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${y}-${m}-${da}T${hh}:${mm}`
-}
-
-function splitLocalDateTimeParts(iso) {
-  const dt = toLocalDateTimeInputValue(iso)
+function splitMelbourneDateTimeParts(iso) {
+  const dt = toMelbourneDateTimeInputValue(iso)
   if (!dt) return { date: '', time: '' }
   const [date, time] = dt.split('T')
   return { date: date || '', time: time || '' }
@@ -225,6 +219,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     proxLimitedCount,
     proxModeLabel,
   } = useMemo(() => {
+    // hasRules === parking API has_restriction_data (CoM cache); not evaluate coverage.
     const verified = mapVisibleBays.filter((b) => b.hasRules)
     const limited = mapVisibleBays.filter((b) => !b.hasRules)
     const proxVerified = mapProximityBays.filter((b) => b.hasRules)
@@ -304,11 +299,14 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     return 'All bays'
   }, [activeFilter])
 
-  const { date: arriveDate, time: arriveTime } = splitLocalDateTimeParts(plannerArrivalIso)
+  const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plannerArrivalIso)
 
   const updateArriveBy = useCallback((nextDate, nextTime) => {
     if (!nextDate || !nextTime) return
-    setPlannerArrivalIso(`${nextDate}T${nextTime}:00`)
+    const [ys, mos, ds] = nextDate.split('-').map(Number)
+    const [hh, mm] = nextTime.split(':').map(Number)
+    if (![ys, mos, ds, hh, mm].every((n) => Number.isFinite(n))) return
+    setPlannerArrivalIso(melbourneWallClockToAwareIso(ys, mos, ds, hh, mm, 0))
     setPlannerDurationMins((prev) => (prev == null ? 60 : prev))
     setMapBaysAtPlannedTime(true)
   }, [])
@@ -567,7 +565,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             </span>
             {!showLimitedBays && proxLimitedCount > 0 && (
               <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                +{proxLimitedCount} sensor-only nearby
+                +{proxLimitedCount} no CoM row nearby
               </span>
             )}
           </div>
@@ -586,12 +584,13 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         <div
           className="group absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-2.5 py-1 sm:px-3.5 sm:py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col cursor-help max-w-[45vw] sm:max-w-none"
-          aria-label="Verified bays are bays with parking rule data available in MeloPark"
+          aria-label="Bays with CoM restriction data on the parking feed (has_restriction_data)"
         >
           <div className="pointer-events-none absolute bottom-full left-0 mb-2 hidden w-64 rounded-lg border border-brand-800/80 bg-brand px-3 py-2.5 text-xs text-white shadow-card-lg group-hover:block dark:border-brand-300/70 dark:bg-surface-dark-secondary dark:text-gray-100">
             <div className="font-semibold text-white dark:text-white">What are verified bays?</div>
             <div className="mt-1 leading-relaxed">
-              Verified bays have parking rule data available in MeloPark. Tap a bay to view its parking rules and limits.
+              Count matches live parking API <span className="whitespace-nowrap">has_restriction_data</span> (CoM restrictions cache).
+              All bays can be opened; full verdicts come from the evaluate API.
             </div>
           </div>
           <span className="text-xs sm:text-sm font-semibold text-white dark:text-brand-900 whitespace-nowrap">
@@ -599,7 +598,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </span>
           {!showLimitedBays && limitedCount > 0 && (
             <span className="text-[10px] sm:text-[11px] font-medium text-white/65 dark:text-brand-900/55 whitespace-nowrap">
-              +{limitedCount} sensor only
+              +{limitedCount} no CoM row
             </span>
           )}
         </div>
