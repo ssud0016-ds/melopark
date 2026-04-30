@@ -14,8 +14,8 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
 import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
 import {
+  DEFAULT_PLANNER_DURATION_MINS,
   formatAtDateTime,
-  formatDurationLabel,
   melbourneWallClockToAwareIso,
   toMelbourneDateTimeInputValue,
 } from '../../utils/plannerTime'
@@ -107,7 +107,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     }
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
-      setPlannerDurationMins(60)
+      setPlannerDurationMins(DEFAULT_PLANNER_DURATION_MINS)
       setMapBaysAtPlannedTime(true)
     }
     dismissOnboarding()
@@ -339,7 +339,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     const [hh, mm] = nextTime.split(':').map(Number)
     if (![ys, mos, ds, hh, mm].every((n) => Number.isFinite(n))) return
     setPlannerArrivalIso(melbourneWallClockToAwareIso(ys, mos, ds, hh, mm, 0))
-    setPlannerDurationMins((prev) => (prev == null ? 60 : prev))
+    setPlannerDurationMins((prev) => (prev == null ? DEFAULT_PLANNER_DURATION_MINS : prev))
     setMapBaysAtPlannedTime(true)
   }, [])
 

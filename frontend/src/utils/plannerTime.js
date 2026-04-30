@@ -1,5 +1,18 @@
 /** Display formats and planner arrival_iso: calendar clock in Australia/Melbourne. */
 
+/** Default “how long I plan to park” when the planner has no stored value yet. */
+export const DEFAULT_PLANNER_DURATION_MINS = 60
+
+/** Canonical UI / API duration chips (minutes); order matches user-facing labels. */
+export const PLANNER_DURATION_PRESETS_MINS = Object.freeze([30, 60, 90, 120, 180, 240])
+
+const PLANNER_DURATION_PRESET_LABEL_BY_MINS = new Map(
+  PLANNER_DURATION_PRESETS_MINS.map((m, i) => {
+    const labels = ['30 min', '1 hr', '1.5 hr', '2 hr', '3 hr', '4 hr']
+    return [m, labels[i]]
+  }),
+)
+
 const MELBOURNE_TZ = 'Australia/Melbourne'
 
 const DATE_OPTS = {
@@ -196,7 +209,7 @@ export function nextQuarterHourDefaults() {
       dateStr: `${p.y}-${pad2(p.m)}-${pad2(p.d)}`,
       timeStr: `${pad2(p.h)}:${pad2(p.min)}`,
       iso: melbourneWallClockToAwareIso(p.y, p.m, p.d, p.h, p.min, 0),
-      durationMins: 60,
+      durationMins: DEFAULT_PLANNER_DURATION_MINS,
     }
   }
   const totalMin = p.h * 60 + p.min
@@ -208,19 +221,15 @@ export function nextQuarterHourDefaults() {
     dateStr: `${p2.y}-${pad2(p2.m)}-${pad2(p2.d)}`,
     timeStr: `${pad2(p2.h)}:${pad2(p2.min)}`,
     iso: melbourneWallClockToAwareIso(p2.y, p2.m, p2.d, p2.h, p2.min, 0),
-    durationMins: 60,
+    durationMins: DEFAULT_PLANNER_DURATION_MINS,
   }
 }
 
 export function formatDurationLabel(mins) {
   const m = Number(mins)
   if (!Number.isFinite(m)) return ''
-  if (m === 30) return '30 min'
-  if (m === 60) return '1 hr'
-  if (m === 90) return '1.5 hr'
-  if (m === 120) return '2 hr'
-  if (m === 180) return '3 hr'
-  if (m === 240) return '4 hr'
+  const presetLabel = PLANNER_DURATION_PRESET_LABEL_BY_MINS.get(m)
+  if (presetLabel != null) return presetLabel
   if (m < 60) return `${m} min`
   if (m % 60 === 0) return `${m / 60} hr`
   return `${m} min`
