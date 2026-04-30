@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
+import { DEFAULT_PLANNER_DURATION_MINS } from '../../utils/plannerTime'
 import { bayHeading, bayMissingStreetNote, streetShort } from '../../utils/bayLabels'
 import { cn } from '../../utils/cn'
 import { fetchBayEvaluation } from '../../services/apiBays'
@@ -38,7 +39,7 @@ export default function BayDetailSheet({
 }) {
   const [evaluation, setEvaluation] = useState(null)
   const [evalLoading, setEvalLoading] = useState(false)
-  const durationMins = savedPlannerDurationMins ?? 60
+  const durationMins = savedPlannerDurationMins ?? DEFAULT_PLANNER_DURATION_MINS
 
   const dialogRef = useRef(null)
   const closeButtonRef = useRef(null)
