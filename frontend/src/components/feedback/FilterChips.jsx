@@ -28,10 +28,10 @@ export default function FilterChips({
           aria-label={collapsed ? 'Expand filters' : 'Collapse filters'}
           title={collapsed ? 'Expand filters' : 'Collapse filters'}
           className={cn(
-            'flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border sm:h-[74px] sm:w-[74px]',
-            'border-gray-200/90 bg-white/98 text-gray-700 shadow-card transition-colors',
-            'hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark',
-            !collapsed && 'border-brand/50 text-brand dark:border-brand-300/80 dark:text-brand-100',
+            'flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px]',
+            collapsed
+              ? 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+              : 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100',
           )}
         >
           <svg

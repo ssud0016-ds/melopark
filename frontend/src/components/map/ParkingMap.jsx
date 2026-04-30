@@ -21,6 +21,9 @@ import {
 import { bayHeading } from '../../utils/bayLabels'
 const CLUSTER_ZOOM_CUTOFF = 18
 
+/** Mobile cluster-mode hint (non-interactive). */
+export const MOBILE_CLUSTER_ZOOM_HINT = 'Zoom in to view individual bays'
+
 /** Bay-dot fill colours (match map legend): lime / peach / red. */
 const VERIFIED_FILL = {
   available: '#a3ec48',
@@ -474,7 +477,7 @@ export default function ParkingMap({
         >
           {zoomLevel < CLUSTER_ZOOM_CUTOFF ? (
             <>
-              <div>{isMobile ? 'Zoom in for bays' : 'Zoom in to see individual parking bays.'}</div>
+              <div>{isMobile ? MOBILE_CLUSTER_ZOOM_HINT : 'Zoom in to see individual parking bays.'}</div>
               {!isMobile && (
                 <div className="mt-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300">
                   Cluster numbers show available/total bays and change as you zoom.
