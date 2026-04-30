@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import MapPage from './MapPage'
@@ -83,5 +83,34 @@ describe('MapPage toolbar layout', () => {
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
     expect(screen.getByTestId('map-toolbar-desktop')).toBeInTheDocument()
     expect(screen.queryByTestId('map-toolbar-mobile-stack')).not.toBeInTheDocument()
+  })
+})
+
+describe('MapPage verified bays legend', () => {
+  beforeEach(() => {
+    cleanup()
+  })
+
+  it('shows full Verified bays legend by default on desktop with status labels', () => {
+    setViewportWidth(1200)
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    expect(screen.getByText('Verified bays')).toBeInTheDocument()
+    expect(screen.getByText('Available parking spots')).toBeInTheDocument()
+    expect(screen.getByText('Caution: Tow Away / Loading Zone')).toBeInTheDocument()
+    expect(screen.getByText('Parking spots occupied')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Show legend' })).not.toBeInTheDocument()
+  })
+
+  it('starts with compact Legend on mobile and expands to show Verified bays and Hide legend', () => {
+    setViewportWidth(414)
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    expect(screen.getByRole('button', { name: 'Show legend' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Hide legend' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show legend' }))
+
+    expect(screen.getByText('Verified bays')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Hide legend' })).toBeInTheDocument()
+    expect(screen.getByText('Available parking spots')).toBeInTheDocument()
   })
 })
