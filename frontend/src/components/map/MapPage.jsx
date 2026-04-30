@@ -731,9 +731,21 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {(() => {
           const rows = [
-            ['bg-[#a3ec48]', 'Available parking spots'],
-            ['bg-[#FFB382]', 'Caution: Tow Away / Loading Zone'],
-            ['bg-[#ed6868]', 'Parking spots occupied'],
+            {
+              dotClass: 'bg-[#a3ec48]',
+              label: 'Available parking spots',
+              symbolClass: 'legend-symbol-available',
+            },
+            {
+              dotClass: 'bg-[#FFB382]',
+              label: 'Caution: Tow Away / Loading Zone',
+              symbolClass: 'legend-symbol-caution',
+            },
+            {
+              dotClass: 'bg-[#ed6868]',
+              label: 'Parking spots occupied',
+              symbolClass: 'legend-symbol-occupied',
+            },
           ]
           return (
             <div
@@ -747,8 +759,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                   aria-label="Show legend"
                   className="flex items-center gap-1.5 px-2.5 py-1.5 cursor-pointer"
                 >
-                  {rows.map(([bg]) => (
-                    <span key={bg} className={`${bg} h-2.5 w-2.5 shrink-0 rounded-full`} />
+                  {rows.map(({ dotClass, symbolClass }) => (
+                    <span key={symbolClass} className={`${dotClass} ${symbolClass} h-2.5 w-2.5 shrink-0 rounded-full`} />
                   ))}
                   <span className="ml-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/85 dark:text-brand-800/90">
                     Legend
@@ -771,9 +783,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                       </button>
                     )}
                   </div>
-                  {rows.map(([bg, label]) => (
+                  {rows.map(({ dotClass, label, symbolClass }) => (
                     <div key={label} className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
-                      <div className={`${bg} h-2.5 w-2.5 shrink-0 rounded-full`} />
+                      <div className={`${dotClass} ${symbolClass} h-2.5 w-2.5 shrink-0 rounded-full`} />
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
