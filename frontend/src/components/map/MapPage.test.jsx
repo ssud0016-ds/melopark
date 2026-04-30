@@ -93,11 +93,14 @@ describe('MapPage verified bays legend', () => {
 
   it('shows full Verified bays legend by default on desktop with status labels', () => {
     setViewportWidth(1200)
-    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    const { container } = render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
     expect(screen.getByText('Verified bays')).toBeInTheDocument()
     expect(screen.getByText('Available parking spots')).toBeInTheDocument()
     expect(screen.getByText('Caution: Tow Away / Loading Zone')).toBeInTheDocument()
     expect(screen.getByText('Parking spots occupied')).toBeInTheDocument()
+    expect(container.querySelector('.legend-symbol-available')).toBeTruthy()
+    expect(container.querySelector('.legend-symbol-caution')).toBeTruthy()
+    expect(container.querySelector('.legend-symbol-occupied')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Show legend' })).not.toBeInTheDocument()
   })
 

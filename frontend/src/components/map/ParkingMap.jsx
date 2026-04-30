@@ -32,6 +32,29 @@ const VERIFIED_FILL = {
   occupied: '#ed6868',
 }
 
+function markerStatusFromBay(bay, plannerMapActive, verdictByBayId) {
+  if (plannerMapActive && verdictByBayId) {
+    const pv = verdictByBayId[bay.id]
+    if (pv === 'yes') return bay.free === 1 ? 'available' : 'occupied'
+    if (pv === 'no') return 'occupied'
+    return 'unknown'
+  }
+  if (bay.type === 'trap') return 'caution'
+  if (bay.type === 'occupied') return 'occupied'
+  return 'available'
+}
+
+export function getBayMarkerPathOptions(status, fillColor, opacity) {
+  void status
+  return {
+    color: fillColor,
+    fillColor,
+    fillOpacity: opacity,
+    opacity,
+    weight: 0,
+  }
+}
+
 function verifiedBayFillColor(bay, plannerMapActive, verdictByBayId) {
   if (plannerMapActive && verdictByBayId) {
     const pv = verdictByBayId[bay.id]
@@ -381,6 +404,7 @@ export default function ParkingMap({
             if (!inRadius) opacity = 0.12
             else if (!inFilter) opacity = 0.22
             const fillColor = sensorOccupancyFillColor(bay)
+            const markerStatus = markerStatusFromBay(bay, false, null)
             /* Same radius as verified dots for hit target; tier is colour-only (sensor vs planner/verified palette). */
             const markerRadius = isMobile ? 11 : 9
             const selected = bay.id === selectedBayId
@@ -390,13 +414,7 @@ export default function ParkingMap({
                 key={`ltd-${bay.id}`}
                 center={[ll.lat, ll.lng]}
                 radius={selected ? selectedRadius : markerRadius}
-                pathOptions={{
-                  color: fillColor,
-                  fillColor,
-                  fillOpacity: opacity,
-                  opacity,
-                  weight: 0,
-                }}
+                pathOptions={getBayMarkerPathOptions(markerStatus, fillColor, opacity)}
                 eventHandlers={{
                   click: (e) => {
                     L.DomEvent.stopPropagation(e)
@@ -426,6 +444,7 @@ export default function ParkingMap({
           if (!inRadius) opacity = 0.12
           else if (!inFilter) opacity = 0.22
           const selected = bay.id === selectedBayId
+          const markerStatus = markerStatusFromBay(bay, plannerMapActive, verdictByBayId)
           const fillColor = verifiedBayFillColor(bay, plannerMapActive, verdictByBayId)
           const markerRadius = isMobile ? 11 : 9
           const selectedRadius = isMobile ? 15 : 13
@@ -434,13 +453,7 @@ export default function ParkingMap({
               key={bay.id}
               center={[ll.lat, ll.lng]}
               radius={selected ? selectedRadius : markerRadius}
-              pathOptions={{
-                color: fillColor,
-                fillColor,
-                fillOpacity: opacity,
-                opacity,
-                weight: 0,
-              }}
+              pathOptions={getBayMarkerPathOptions(markerStatus, fillColor, opacity)}
               eventHandlers={{
                 click: (e) => {
                   L.DomEvent.stopPropagation(e)
