@@ -31,6 +31,39 @@ const VERIFIED_FILL = {
   trap: '#FFB382',
   occupied: '#ed6868',
 }
+const VERIFIED_FILL_COLOR_BLIND = {
+  available: '#3b82f6',
+  trap: '#f59e0b',
+  occupied: '#374151',
+}
+
+export function getStatusFillColor(status, colorBlindMode = false) {
+  const palette = colorBlindMode ? VERIFIED_FILL_COLOR_BLIND : VERIFIED_FILL
+  if (status === 'caution' || status === 'trap' || status === 'unknown') return palette.trap
+  if (status === 'occupied') return palette.occupied
+  return palette.available
+}
+
+export function getClusterBadgeColors({ available, occupied, trap, total, isDark, colorBlindMode = false }) {
+  let bg = isDark ? '#35338c' : '#dce8ff'
+  let text = isDark ? '#f4f6ff' : '#35338c'
+
+  if (total > 0 && available === total) bg = getStatusFillColor('available', colorBlindMode)
+  else if (total > 0 && occupied === total) bg = getStatusFillColor('occupied', colorBlindMode)
+  else if (total > 0 && trap === total) bg = getStatusFillColor('caution', colorBlindMode)
+
+  if (colorBlindMode) {
+    if (bg === getStatusFillColor('available', true)) text = '#f3f4f6'
+    else if (bg === getStatusFillColor('caution', true)) text = '#512500'
+    else if (bg === getStatusFillColor('occupied', true)) text = '#f3f4f6'
+  } else {
+    if (bg === '#a3ec48') text = '#3f5618'
+    else if (bg === '#FFB382') text = '#8f3f22'
+    else if (bg === '#ed6868') text = '#611d1d'
+  }
+
+  return { bg, text }
+}
 
 function markerStatusFromBay(bay, plannerMapActive, verdictByBayId) {
   if (plannerMapActive && verdictByBayId) {
@@ -44,8 +77,9 @@ function markerStatusFromBay(bay, plannerMapActive, verdictByBayId) {
   return 'available'
 }
 
-export function getBayMarkerPathOptions(status, fillColor, opacity) {
+export function getBayMarkerPathOptions(status, fillColor, opacity, colorBlindMode = false) {
   void status
+  void colorBlindMode
   return {
     color: fillColor,
     fillColor,
@@ -55,25 +89,25 @@ export function getBayMarkerPathOptions(status, fillColor, opacity) {
   }
 }
 
-function verifiedBayFillColor(bay, plannerMapActive, verdictByBayId) {
+function verifiedBayFillColor(bay, plannerMapActive, verdictByBayId, colorBlindMode = false) {
   if (plannerMapActive && verdictByBayId) {
     const pv = verdictByBayId[bay.id]
     if (pv === 'yes') {
       // Rules allow: free bays are green; occupied stays red (3-state legend only).
-      return bay.free === 1 ? VERIFIED_FILL.available : VERIFIED_FILL.occupied
+      return getStatusFillColor(bay.free === 1 ? 'available' : 'occupied', colorBlindMode)
     }
-    if (pv === 'no') return VERIFIED_FILL.occupied
+    if (pv === 'no') return getStatusFillColor('occupied', colorBlindMode)
     // Strict 3-state legend semantics: unknown maps to occupied/red (conservative).
-    return VERIFIED_FILL.occupied
+    return getStatusFillColor('unknown', colorBlindMode)
   }
-  const t = bay.type === 'trap' ? 'trap' : bay.type === 'occupied' ? 'occupied' : 'available'
-  return VERIFIED_FILL[t] || VERIFIED_FILL.available
+  const status = bay.type === 'trap' ? 'caution' : bay.type === 'occupied' ? 'occupied' : 'available'
+  return getStatusFillColor(status, colorBlindMode)
 }
 
 /** Sensor-only bays: colour from occupancy only (same palette as verified legend). */
-function sensorOccupancyFillColor(bay) {
-  const t = bay.type === 'trap' ? 'trap' : bay.type === 'occupied' ? 'occupied' : 'available'
-  return VERIFIED_FILL[t] || VERIFIED_FILL.available
+function sensorOccupancyFillColor(bay, colorBlindMode = false) {
+  const status = bay.type === 'trap' ? 'caution' : bay.type === 'occupied' ? 'occupied' : 'available'
+  return getStatusFillColor(status, colorBlindMode)
 }
 
 function bayPopupCopy(bay, verdictByBayId) {
@@ -191,6 +225,7 @@ export default function ParkingMap({
   pressureZones = null,
   pressureEnabled = false,
   onPressureZoneClick = null,
+  colorBlindMode = false,
 }) {
   const [isDark, setIsDark] = useState(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -280,15 +315,14 @@ export default function ParkingMap({
     const t = Number(total) || 0
     const label = `${a}/${t}`
     const labelLen = label.length
-    let bg = isDark ? '#35338c' : '#dce8ff'
-    let text = isDark ? '#f4f6ff' : '#35338c'
-    if (total > 0 && available === total) bg = '#a3ec48'
-    else if (total > 0 && occupied === total) bg = '#ed6868'
-    else if (total > 0 && trap === total) bg = '#FFB382'
-
-    if (bg === '#a3ec48') text = '#3f5618'
-    else if (bg === '#FFB382') text = '#8f3f22'
-    else if (bg === '#ed6868') text = '#611d1d'
+    const { bg, text } = getClusterBadgeColors({
+      available,
+      occupied,
+      trap,
+      total,
+      isDark,
+      colorBlindMode,
+    })
     const ring = '#ffffff'
 
     const fontSize = labelLen >= 10 ? 7 : labelLen >= 8 ? 8 : labelLen >= 6 ? 9 : 11
@@ -403,7 +437,7 @@ export default function ParkingMap({
             let opacity = 1
             if (!inRadius) opacity = 0.12
             else if (!inFilter) opacity = 0.22
-            const fillColor = sensorOccupancyFillColor(bay)
+            const fillColor = sensorOccupancyFillColor(bay, colorBlindMode)
             const markerStatus = markerStatusFromBay(bay, false, null)
             /* Same radius as verified dots for hit target; tier is colour-only (sensor vs planner/verified palette). */
             const markerRadius = isMobile ? 11 : 9
@@ -414,7 +448,7 @@ export default function ParkingMap({
                 key={`ltd-${bay.id}`}
                 center={[ll.lat, ll.lng]}
                 radius={selected ? selectedRadius : markerRadius}
-                pathOptions={getBayMarkerPathOptions(markerStatus, fillColor, opacity)}
+                pathOptions={getBayMarkerPathOptions(markerStatus, fillColor, opacity, colorBlindMode)}
                 eventHandlers={{
                   click: (e) => {
                     L.DomEvent.stopPropagation(e)
@@ -445,7 +479,7 @@ export default function ParkingMap({
           else if (!inFilter) opacity = 0.22
           const selected = bay.id === selectedBayId
           const markerStatus = markerStatusFromBay(bay, plannerMapActive, verdictByBayId)
-          const fillColor = verifiedBayFillColor(bay, plannerMapActive, verdictByBayId)
+          const fillColor = verifiedBayFillColor(bay, plannerMapActive, verdictByBayId, colorBlindMode)
           const markerRadius = isMobile ? 11 : 9
           const selectedRadius = isMobile ? 15 : 13
           return (
@@ -453,7 +487,7 @@ export default function ParkingMap({
               key={bay.id}
               center={[ll.lat, ll.lng]}
               radius={selected ? selectedRadius : markerRadius}
-              pathOptions={getBayMarkerPathOptions(markerStatus, fillColor, opacity)}
+              pathOptions={getBayMarkerPathOptions(markerStatus, fillColor, opacity, colorBlindMode)}
               eventHandlers={{
                 click: (e) => {
                   L.DomEvent.stopPropagation(e)

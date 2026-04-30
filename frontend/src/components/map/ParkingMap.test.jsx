@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { getBayMarkerPathOptions, MOBILE_CLUSTER_ZOOM_HINT } from './ParkingMap'
+import {
+  getBayMarkerPathOptions,
+  getClusterBadgeColors,
+  getStatusFillColor,
+  MOBILE_CLUSTER_ZOOM_HINT,
+} from './ParkingMap'
 
 describe('ParkingMap map hints', () => {
   it('uses clear mobile cluster-mode zoom copy', () => {
@@ -31,5 +36,40 @@ describe('ParkingMap marker accessibility styles', () => {
     expect(unknown.weight).toBe(0)
     expect(unknown.dashArray).toBeUndefined()
     expect(unknown.color).toBe('#ed6868')
+  })
+})
+
+describe('ParkingMap color-blind palette', () => {
+  it('uses default palette when color-blind mode is off', () => {
+    expect(getStatusFillColor('available', false)).toBe('#a3ec48')
+    expect(getStatusFillColor('caution', false)).toBe('#FFB382')
+    expect(getStatusFillColor('occupied', false)).toBe('#ed6868')
+  })
+
+  it('uses color-blind palette when mode is on', () => {
+    expect(getStatusFillColor('available', true)).toBe('#3b82f6')
+    expect(getStatusFillColor('caution', true)).toBe('#f59e0b')
+    expect(getStatusFillColor('occupied', true)).toBe('#374151')
+  })
+
+  it('applies color-blind palette to cluster badges', () => {
+    const normal = getClusterBadgeColors({
+      available: 6,
+      occupied: 0,
+      trap: 0,
+      total: 6,
+      isDark: false,
+      colorBlindMode: false,
+    })
+    const cb = getClusterBadgeColors({
+      available: 6,
+      occupied: 0,
+      trap: 0,
+      total: 6,
+      isDark: false,
+      colorBlindMode: true,
+    })
+    expect(normal.bg).toBe('#a3ec48')
+    expect(cb.bg).toBe('#3b82f6')
   })
 })
