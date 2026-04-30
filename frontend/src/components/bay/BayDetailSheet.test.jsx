@@ -76,28 +76,24 @@ describe('BayDetailSheet parking tab UI', () => {
     expect(screen.getByText("Outside all these times (nights, public holidays)")).toBeInTheDocument()
   })
 
-  it('sends planner params contract from parent (naive arrival_iso)', async () => {
+  it('sends planner params with timezone-aware arrival_iso (Melbourne offset)', async () => {
+    const aware = '2026-12-22T14:00:00+11:00'
     renderSheetWithEvaluation(
       { translator_rules: [] },
       {
-        savedPlannerArrivalIso: '2026-12-22T14:00:00',
+        savedPlannerArrivalIso: aware,
         savedPlannerDurationMins: 120,
       },
     )
 
     await waitFor(() => {
-      const plannerCall = fetchBayEvaluation.mock.calls.find(
-        (c) => c?.[1]?.arrivalIso === '2026-12-22T14:00:00',
-      )
+      const plannerCall = fetchBayEvaluation.mock.calls.find((c) => c?.[1]?.arrivalIso === aware)
       expect(plannerCall).toBeTruthy()
     })
 
-    const plannerCall = fetchBayEvaluation.mock.calls.find(
-      (c) => c?.[1]?.arrivalIso === '2026-12-22T14:00:00',
-    )
+    const plannerCall = fetchBayEvaluation.mock.calls.find((c) => c?.[1]?.arrivalIso === aware)
     expect(plannerCall[1].durationMins).toBe(120)
-    expect(plannerCall[1].arrivalIso).not.toMatch(/[+-]\d{2}:\d{2}$/)
-    expect(plannerCall[1].arrivalIso.endsWith('Z')).toBe(false)
+    expect(plannerCall[1].arrivalIso).toMatch(/[+-]\d{2}:\d{2}$/)
   })
 
   it('requests live evaluation when planner props are absent', async () => {

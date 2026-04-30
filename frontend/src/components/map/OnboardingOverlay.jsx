@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import SearchBar from '../search/SearchBar'
 import { LANDMARKS } from '../../data/mapData'
+import { melbourneAwareIsoFromDateTimeLocal, toMelbourneDateTimeInputValue } from '../../utils/plannerTime'
 
 const QUICK_PICK_NAMES = ['Flinders Street Station', 'Melbourne Central', 'Queen Victoria Market']
 const PARKING_TYPES = [
@@ -26,19 +27,10 @@ const REQUIREMENT_CHIPS = [
   { id: '4h', label: '4 Hour' },
 ]
 
-function toLocalDateTimeInputValue(date = new Date()) {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  const hh = String(date.getHours()).padStart(2, '0')
-  const mm = String(date.getMinutes()).padStart(2, '0')
-  return `${y}-${m}-${d}T${hh}:${mm}`
-}
-
 export default function OnboardingOverlay({ onPick, onSkip }) {
   const [step, setStep] = useState('hero')
   const [localDestination, setLocalDestination] = useState(null)
-  const [arriveByLocal, setArriveByLocal] = useState(() => toLocalDateTimeInputValue())
+  const [arriveByLocal, setArriveByLocal] = useState(() => toMelbourneDateTimeInputValue(null))
   const [parkingType, setParkingType] = useState('general')
   const [parkingRequirement, setParkingRequirement] = useState('all')
   const isHero = step === 'hero'
@@ -61,7 +53,7 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
 
   const handleContinue = () => {
     if (!localDestination) return
-    const arrivalIso = arriveByLocal ? `${arriveByLocal}:00` : null
+    const arrivalIso = arriveByLocal ? melbourneAwareIsoFromDateTimeLocal(arriveByLocal) : null
     onPick(localDestination, arrivalIso, {
       activeFilter: parkingRequirement,
       parkingType,
