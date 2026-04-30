@@ -6,6 +6,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  DEFAULT_PLANNER_DURATION_MINS,
+  PLANNER_DURATION_PRESETS_MINS,
+  formatDurationLabel,
   melbourneAwareIsoFromDateTimeLocal,
   melbourneWallClockToAwareIso,
   nextQuarterHourDefaults,
@@ -24,6 +27,36 @@ const SUMMER_WALL = { y: 2026, mo: 1, d: 15, hh: 9, mm: 30 }
 const WINTER_WALL = { y: 2026, mo: 7, d: 15, hh: 14, mm: 30 }
 
 describe('Bug 3 — plannerTime Melbourne arrival_iso', () => {
+  describe('planner duration defaults and presets', () => {
+    it('uses DEFAULT_PLANNER_DURATION_MINS (60) in nextQuarterHourDefaults', () => {
+      expect(DEFAULT_PLANNER_DURATION_MINS).toBe(60)
+      const { durationMins } = nextQuarterHourDefaults()
+      expect(durationMins).toBe(DEFAULT_PLANNER_DURATION_MINS)
+    })
+
+    it('formatDurationLabel matches preset list labels', () => {
+      const expected = [
+        [30, '30 min'],
+        [60, '1 hr'],
+        [90, '1.5 hr'],
+        [120, '2 hr'],
+        [180, '3 hr'],
+        [240, '4 hr'],
+      ]
+      expect(PLANNER_DURATION_PRESETS_MINS).toEqual([30, 60, 90, 120, 180, 240])
+      for (const [mins, label] of expected) {
+        expect(formatDurationLabel(mins)).toBe(label)
+      }
+    })
+
+    it('formatDurationLabel keeps non-preset behaviour (hours and minutes)', () => {
+      expect(formatDurationLabel(45)).toBe('45 min')
+      expect(formatDurationLabel(300)).toBe('5 hr')
+      expect(formatDurationLabel(75)).toBe('75 min')
+      expect(formatDurationLabel(Number.NaN)).toBe('')
+    })
+  })
+
   describe('nextQuarterHourDefaults', () => {
     it('returns iso with explicit numeric timezone offset (+/-HH:MM)', () => {
       const { iso } = nextQuarterHourDefaults()
