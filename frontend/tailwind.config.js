@@ -80,6 +80,7 @@ export default {
         'card': '0 2px 10px rgba(0,0,0,0.1)',
         'card-lg': '0 8px 32px rgba(0,0,0,0.10)',
         'overlay': '0 4px 20px rgba(0,0,0,0.12)',
+        'map-float': '0 6px 18px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.05)',
       },
       animation: {
         'pulse-dot': 'pulse-dot 2s ease-in-out infinite',
