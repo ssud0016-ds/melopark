@@ -92,7 +92,7 @@ export default function BayCard({ bay, selected, destination, onSelect }) {
         <div className="flex gap-1 flex-wrap">
           {bay.hasRules && (
             <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#35338c]/30 text-[#35338c] dark:text-[#a3a1e6] bg-[#35338c]/5 dark:bg-[#35338c]/20 font-semibold">
-              📋 Has Rules
+              📋 CoM rules data
             </span>
           )}
           {typeLabel && (

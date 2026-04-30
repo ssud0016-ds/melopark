@@ -21,6 +21,32 @@ router = APIRouter(prefix="/api/bays", tags=["bays"])
 _DEFAULT_DURATION = 60  # minutes
 _MELBOURNE_TZ = ZoneInfo("Australia/Melbourne")
 
+_ARRIVAL_ISO_QUERY_DESC = (
+    "ISO-8601 arrival instant. "
+    "Timezone-aware values (e.g. 2026-04-14T10:30:00+10:00, ending with Z for UTC) are preferred. "
+    "If no offset is given, the time is interpreted as Australia/Melbourne local wall clock (backward compatible). "
+    "Omitted: use current time in Melbourne."
+)
+
+
+def _parse_query_arrival_iso(arrival_iso: str) -> datetime:
+    """Parse ``arrival_iso`` from evaluate query strings.
+
+    - Aware ISO-8601: use the encoded instant (``evaluate_bay_at`` normalises to
+      Melbourne naive internally).
+    - Naive ISO (no offset): treat components as **Australia/Melbourne** local time
+      (legacy clients).
+    - Trailing ``Z`` is normalised to ``+00:00`` for ``fromisoformat`` on older
+      Python versions.
+    """
+    s = arrival_iso.strip()
+    if s.endswith("Z") or s.endswith("z"):
+        s = s[:-1] + "+00:00"
+    arrival = datetime.fromisoformat(s)
+    if arrival.tzinfo is None:
+        arrival = arrival.replace(tzinfo=_MELBOURNE_TZ)
+    return arrival
+
 
 @router.get(
     "/{bay_id}/evaluate",
@@ -33,7 +59,7 @@ def evaluate_bay(
     bay_id: str,
     arrival_iso: Optional[str] = Query(
         default=None,
-        description="ISO-8601 arrival time (e.g. 2026-04-14T10:30:00). Defaults to now.",
+        description=_ARRIVAL_ISO_QUERY_DESC,
     ),
     duration_mins: int = Query(
         default=_DEFAULT_DURATION,
@@ -52,9 +78,7 @@ def evaluate_bay(
     """
     arrival = datetime.now(_MELBOURNE_TZ)
     if arrival_iso is not None:
-        arrival = datetime.fromisoformat(arrival_iso)
-        if arrival.tzinfo is None:
-            arrival = arrival.replace(tzinfo=_MELBOURNE_TZ)
+        arrival = _parse_query_arrival_iso(arrival_iso)
 
     return evaluate_bay_at(bay_id, arrival, duration_mins, db)
 
@@ -73,7 +97,7 @@ def evaluate_bulk(
     ),
     arrival_iso: Optional[str] = Query(
         default=None,
-        description="ISO-8601 arrival time. Defaults to now.",
+        description=_ARRIVAL_ISO_QUERY_DESC,
     ),
     duration_mins: int = Query(
         default=_DEFAULT_DURATION,
@@ -99,8 +123,6 @@ def evaluate_bulk(
 
     arrival = datetime.now(_MELBOURNE_TZ)
     if arrival_iso is not None:
-        arrival = datetime.fromisoformat(arrival_iso)
-        if arrival.tzinfo is None:
-            arrival = arrival.replace(tzinfo=_MELBOURNE_TZ)
+        arrival = _parse_query_arrival_iso(arrival_iso)
 
     return evaluate_bays_in_bbox(south, west, north, east, arrival, duration_mins, db)

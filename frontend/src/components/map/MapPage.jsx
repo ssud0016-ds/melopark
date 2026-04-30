@@ -13,21 +13,15 @@ import { usePressure, useAlternatives } from '../../hooks/usePressure'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
 import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
-import { formatAtDateTime, formatDurationLabel } from '../../utils/plannerTime'
+import {
+  formatAtDateTime,
+  formatDurationLabel,
+  melbourneWallClockToAwareIso,
+  toMelbourneDateTimeInputValue,
+} from '../../utils/plannerTime'
 
-function toLocalDateTimeInputValue(iso) {
-  const d = iso ? new Date(iso) : new Date()
-  if (Number.isNaN(d.getTime())) return ''
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const da = String(d.getDate()).padStart(2, '0')
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${y}-${m}-${da}T${hh}:${mm}`
-}
-
-function splitLocalDateTimeParts(iso) {
-  const dt = toLocalDateTimeInputValue(iso)
+function splitMelbourneDateTimeParts(iso) {
+  const dt = toMelbourneDateTimeInputValue(iso)
   if (!dt) return { date: '', time: '' }
   const [date, time] = dt.split('T')
   return { date: date || '', time: time || '' }
@@ -257,6 +251,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     proxLimitedCount,
     proxModeLabel,
   } = useMemo(() => {
+    // hasRules === parking API has_restriction_data (CoM cache); not evaluate coverage.
     const verified = mapVisibleBays.filter((b) => b.hasRules)
     const limited = mapVisibleBays.filter((b) => !b.hasRules)
     const proxVerified = mapProximityBays.filter((b) => b.hasRules)
@@ -336,14 +331,140 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     return 'All bays'
   }, [activeFilter])
 
-  const { date: arriveDate, time: arriveTime } = splitLocalDateTimeParts(plannerArrivalIso)
+  const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plannerArrivalIso)
 
   const updateArriveBy = useCallback((nextDate, nextTime) => {
     if (!nextDate || !nextTime) return
-    setPlannerArrivalIso(`${nextDate}T${nextTime}:00`)
+    const [ys, mos, ds] = nextDate.split('-').map(Number)
+    const [hh, mm] = nextTime.split(':').map(Number)
+    if (![ys, mos, ds, hh, mm].every((n) => Number.isFinite(n))) return
+    setPlannerArrivalIso(melbourneWallClockToAwareIso(ys, mos, ds, hh, mm, 0))
     setPlannerDurationMins((prev) => (prev == null ? 60 : prev))
     setMapBaysAtPlannedTime(true)
   }, [])
+
+  const mapTopRightControls = (
+    <div className="relative flex flex-nowrap items-start gap-2">
+      <button
+        type="button"
+        onClick={togglePressure}
+        aria-pressed={pressureEnabled}
+        aria-label={pressureEnabled ? 'Hide parking pressure' : 'Show parking pressure'}
+        className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
+          pressureEnabled
+            ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
+            : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+        }`}
+        title={pressureEnabled ? 'Pressure map: ON' : 'Pressure map: OFF'}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M3 17h4V9H3v8zm6 0h4V3H9v14zm6 0h4v-6h-4v6z" fill="currentColor" />
+        </svg>
+        <span className="text-[9px] font-semibold leading-none">Pressure</span>
+      </button>
+      <button
+        type="button"
+        onClick={toggleAccessibilityMode}
+        aria-pressed={accessibilityMode}
+        aria-label={accessibilityMode ? 'Disable accessibility mode' : 'Enable accessibility mode'}
+        className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
+          accessibilityMode
+            ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
+            : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+        }`}
+        title={accessibilityMode ? 'Accessibility mode: ON' : 'Accessibility mode: OFF'}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <circle cx="12" cy="5.6" r="2.1" stroke="currentColor" strokeWidth="1.75" />
+          <path d="M12 8.2v5.1l3 2.1" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+          <path d="M8.6 11.7h3.4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+          <circle cx="13.8" cy="15.7" r="4.5" stroke="currentColor" strokeWidth="1.75" />
+        </svg>
+        <span className="text-[9px] font-semibold leading-none">{accessibilityMode ? 'A11y ON' : 'A11y OFF'}</span>
+      </button>
+      <div className="relative flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setLegendOpen((v) => !v)}
+          aria-pressed={legendOpen}
+          aria-label={legendOpen ? 'Hide heatmap legend' : 'Show heatmap legend'}
+          className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
+            legendOpen
+              ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
+              : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+          }`}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="7" cy="8" r="2.25" stroke="currentColor" strokeWidth="1.75" />
+            <circle cx="16.5" cy="6.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
+            <circle cx="14.5" cy="15.5" r="2.5" stroke="currentColor" strokeWidth="1.75" />
+            <circle cx="6.5" cy="16.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
+          </svg>
+          <span className="text-[10px] font-semibold leading-none">Heatmap</span>
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            setShowArrivePicker((v) => {
+              const next = !v
+              if (next) setFilterCollapsed(true)
+              return next
+            })
+          }
+          aria-expanded={showArrivePicker}
+          aria-label={showArrivePicker ? 'Hide arrive by picker' : 'Show arrive by picker'}
+          className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
+            showArrivePicker
+              ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
+              : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+          }`}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.75" />
+            <path d="M12 7.5v5l3.5 2.2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+          </svg>
+          <span className="text-[10px] font-semibold leading-none">Time</span>
+        </button>
+      </div>
+      <FilterChips
+        activeFilter={activeFilter}
+        onFilterChange={setActiveFilter}
+        collapsed={filterCollapsed}
+        onToggleCollapsed={(nextCollapsed) => {
+          if (!nextCollapsed) setShowArrivePicker(false)
+          setFilterCollapsed(nextCollapsed)
+        }}
+      />
+      {showArrivePicker && (
+        <div className="absolute right-0 top-[calc(100%+8px)] z-[700] w-[min(280px,calc(100vw-24px))] rounded-xl border border-gray-200/90 bg-white/98 p-2 shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/98">
+          <div className="flex flex-col gap-2">
+            <label className="rounded-lg border border-gray-200/80 bg-white px-2 py-1.5 dark:border-gray-700 dark:bg-surface-dark-secondary">
+              <span className="mb-1 block text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Date
+              </span>
+              <input
+                type="date"
+                value={arriveDate}
+                onChange={(e) => updateArriveBy(e.target.value, arriveTime)}
+                className="h-8 w-full rounded-md border border-gray-200/80 bg-white px-2 py-0.5 text-xs font-semibold text-gray-800 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100"
+              />
+            </label>
+            <label className="rounded-lg border border-gray-200/80 bg-white px-2 py-1.5 dark:border-gray-700 dark:bg-surface-dark-secondary">
+              <span className="mb-1 block text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Time
+              </span>
+              <input
+                type="time"
+                value={arriveTime}
+                onChange={(e) => updateArriveBy(arriveDate, e.target.value)}
+                className="h-8 w-full rounded-md border border-gray-200/80 bg-white px-2 py-0.5 text-xs font-semibold text-gray-800 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100"
+              />
+            </label>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden">
@@ -374,7 +495,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {accessibilityMode && (
           <div
-            className="absolute left-3.5 top-[84px] z-[510] rounded-xl border border-brand bg-white/95 px-3 py-2 text-xs font-semibold text-brand shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
+            className={`absolute left-3.5 z-[510] rounded-xl border border-brand bg-white/95 px-3 py-2 text-xs font-semibold text-brand shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100 ${
+              isMobile ? 'top-[204px]' : 'top-[84px]'
+            }`}
             aria-label="Accessibility mode enabled: showing disability bays only"
           >
             Accessibility mode: DIS bays only
@@ -391,7 +514,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           <div
             className={`absolute z-[520] max-w-[min(420px,92vw)] bg-trap-50 border border-trap-300 text-orange-800 dark:text-orange-200 rounded-xl shadow-overlay ${
               isMobile
-                ? 'top-[120px] px-2.5 py-1.5 text-xs leading-snug'
+                ? 'top-[204px] px-2.5 py-1.5 text-xs leading-snug'
                 : 'top-[72px] px-3.5 py-2.5 text-sm leading-relaxed'
             }`}
             style={
@@ -413,200 +536,144 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </div>
         )}
 
-        <div
-          className="absolute top-3.5 flex flex-col items-center gap-2.5 z-[500] pointer-events-none"
-          style={
-            desktopSheetReservePx
-              ? {
-                  /* Centre within strip [14px, 100% − rightInset] so it matches "main" feel with sheet open */
-                  left: `calc(14px + (100% - 14px - ${rightInsetPx}px) / 2)`,
-                  transform: 'translateX(-50%)',
-                  width: `min(${TOOLBAR_MAX_PX}px, calc(100% - ${14 + rightInsetPx}px))`,
-                  maxWidth: TOOLBAR_MAX_PX,
-                }
-              : {
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  width: 'calc(100% - 28px)',
-                  maxWidth: TOOLBAR_MAX_PX,
-                }
-          }
-        >
+        {isMobile ? (
           <div
-            className="flex items-center gap-2 w-full pointer-events-auto"
-            style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
+            data-testid="map-toolbar-mobile-stack"
+            className="absolute top-3.5 left-3.5 right-3.5 z-[500] flex flex-col gap-2 pointer-events-none"
           >
-            <div className="min-w-0 flex-1 max-w-[580px]">
-              <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
-            </div>
-            <div className="flex flex-row gap-1">
-              <button
-                type="button"
-                onClick={() => setAccessibilityAvailableOnly((v) => !v)}
-                aria-label={accessibilityAvailableOnly ? 'Disable accessibility filter' : 'Enable accessibility filter'}
-                title={accessibilityAvailableOnly ? 'Accessibility filter ON' : 'Accessibility filter OFF'}
-                className="flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg border border-gray-200/60 bg-white px-2 font-sans text-sm font-semibold text-gray-700 shadow-card transition-colors hover:bg-gray-50 dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
-              >
-                ♿
-              </button>
-              {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => zoomBy(delta)}
-                  aria-label={delta > 0 ? 'Zoom in' : 'Zoom out'}
-                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-gray-200/60 bg-white font-sans text-base font-semibold text-gray-700 shadow-card transition-colors hover:bg-gray-50 dark:border-gray-700/60 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div
-            className="w-full pointer-events-auto"
-            style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
-          >
-            <div
-              className="mt-1 rounded-lg border border-gray-200/80 bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-card backdrop-blur-[1px] dark:border-gray-700/70 dark:bg-surface-dark-secondary/85 dark:text-gray-100"
-              style={{ width: `calc(100% - ${ZOOM_GROUP_WIDTH_PX}px)`, maxWidth: 'calc(580px - 72px)' }}
-            >
-              {!isMobile && <span>Currently showing: </span>}
-              <span className="text-brand dark:text-brand-100">{activeFilterLabel}</span>
-              {' · '}{!isMobile && <span>Date: </span>}
-              <span className="text-brand dark:text-brand-100">{arriveDate || '-'}</span>
-              {' · '}{!isMobile && <span>Time: </span>}
-              <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
-            </div>
-          </div>
-
-        </div>
-
-        <div
-          className="absolute top-5 z-[600] pointer-events-auto"
-          style={{ right: rightInsetPx }}
-        >
-          <div className="relative flex items-start gap-2">
-            <button
-              type="button"
-              onClick={togglePressure}
-              aria-pressed={pressureEnabled}
-              aria-label={pressureEnabled ? 'Hide parking pressure' : 'Show parking pressure'}
-              className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
-                pressureEnabled
-                  ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
-                  : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-              }`}
-              title={pressureEnabled ? 'Pressure map: ON' : 'Pressure map: OFF'}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M3 17h4V9H3v8zm6 0h4V3H9v14zm6 0h4v-6h-4v6z" fill="currentColor" />
-              </svg>
-              <span className="text-[9px] font-semibold leading-none">{pressureEnabled ? 'Pressure' : 'Pressure'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={toggleAccessibilityMode}
-              aria-pressed={accessibilityMode}
-              aria-label={accessibilityMode ? 'Disable accessibility mode' : 'Enable accessibility mode'}
-              className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
-                accessibilityMode
-                  ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
-                  : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-              }`}
-              title={accessibilityMode ? 'Accessibility mode: ON' : 'Accessibility mode: OFF'}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <circle cx="12" cy="5.6" r="2.1" stroke="currentColor" strokeWidth="1.75" />
-                <path d="M12 8.2v5.1l3 2.1" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-                <path d="M8.6 11.7h3.4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-                <circle cx="13.8" cy="15.7" r="4.5" stroke="currentColor" strokeWidth="1.75" />
-              </svg>
-              <span className="text-[9px] font-semibold leading-none">{accessibilityMode ? 'A11y ON' : 'A11y OFF'}</span>
-            </button>
-            <div className="relative flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setLegendOpen((v) => !v)}
-                aria-pressed={legendOpen}
-                aria-label={legendOpen ? 'Hide heatmap legend' : 'Show heatmap legend'}
-                className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
-                  legendOpen
-                    ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
-                    : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-                }`}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <circle cx="7" cy="8" r="2.25" stroke="currentColor" strokeWidth="1.75" />
-                  <circle cx="16.5" cy="6.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
-                  <circle cx="14.5" cy="15.5" r="2.5" stroke="currentColor" strokeWidth="1.75" />
-                  <circle cx="6.5" cy="16.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
-                </svg>
-                <span className="text-[10px] font-semibold leading-none">Heatmap</span>
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setShowArrivePicker((v) => {
-                    const next = !v
-                    if (next) setFilterCollapsed(true)
-                    return next
-                  })
-                }
-                aria-expanded={showArrivePicker}
-                aria-label={showArrivePicker ? 'Hide arrive by picker' : 'Show arrive by picker'}
-                className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl border shadow-card transition-colors sm:h-[74px] sm:w-[74px] ${
-                  showArrivePicker
-                    ? 'border-brand/60 bg-brand-50 text-brand dark:border-brand-300/80 dark:bg-brand-100/20 dark:text-brand-100'
-                    : 'border-gray-200/90 bg-white/98 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-                }`}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.75" />
-                  <path d="M12 7.5v5l3.5 2.2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-                </svg>
-                <span className="text-[10px] font-semibold leading-none">Time</span>
-              </button>
-            </div>
-            <FilterChips
-              activeFilter={activeFilter}
-              onFilterChange={setActiveFilter}
-              collapsed={filterCollapsed}
-              onToggleCollapsed={(nextCollapsed) => {
-                if (!nextCollapsed) setShowArrivePicker(false)
-                setFilterCollapsed(nextCollapsed)
-              }}
-            />
-            {showArrivePicker && (
-              <div className="absolute right-0 top-[calc(100%+8px)] z-[700] w-[min(280px,calc(100vw-24px))] rounded-xl border border-gray-200/90 bg-white/98 p-2 shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/98">
-                <div className="flex flex-col gap-2">
-                  <label className="rounded-lg border border-gray-200/80 bg-white px-2 py-1.5 dark:border-gray-700 dark:bg-surface-dark-secondary">
-                    <span className="mb-1 block text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      Date
-                    </span>
-                    <input
-                      type="date"
-                      value={arriveDate}
-                      onChange={(e) => updateArriveBy(e.target.value, arriveTime)}
-                      className="h-8 w-full rounded-md border border-gray-200/80 bg-white px-2 py-0.5 text-xs font-semibold text-gray-800 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100"
-                    />
-                  </label>
-                  <label className="rounded-lg border border-gray-200/80 bg-white px-2 py-1.5 dark:border-gray-700 dark:bg-surface-dark-secondary">
-                    <span className="mb-1 block text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      Time
-                    </span>
-                    <input
-                      type="time"
-                      value={arriveTime}
-                      onChange={(e) => updateArriveBy(arriveDate, e.target.value)}
-                      className="h-8 w-full rounded-md border border-gray-200/80 bg-white px-2 py-0.5 text-xs font-semibold text-gray-800 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100"
-                    />
-                  </label>
+            <div className="flex flex-col gap-2.5 w-full pointer-events-auto">
+              <div className="flex items-center gap-2 w-full">
+                <div className="min-w-0 flex-1">
+                  <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
+                </div>
+                <div className="flex flex-row gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setAccessibilityAvailableOnly((v) => !v)}
+                    aria-label={accessibilityAvailableOnly ? 'Disable accessibility filter' : 'Enable accessibility filter'}
+                    title={accessibilityAvailableOnly ? 'Accessibility filter ON' : 'Accessibility filter OFF'}
+                    className={`flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg px-2 font-sans text-sm font-semibold shadow-map-float transition-colors ${
+                      accessibilityAvailableOnly
+                        ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
+                        : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary'
+                    }`}
+                  >
+                    ♿
+                  </button>
+                  {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => zoomBy(delta)}
+                      aria-label={delta > 0 ? 'Zoom in' : 'Zoom out'}
+                      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white font-sans text-base font-semibold text-gray-700 shadow-map-float transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
-            )}
+
+              <div className="w-full">
+                <div className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-map-float dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100">
+                  <span className="text-brand dark:text-brand-100">{activeFilterLabel}</span>
+                  {' · '}
+                  <span className="text-brand dark:text-brand-100">{arriveDate || '-'}</span>
+                  {' · '}
+                  <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
+                </div>
+              </div>
+
+              <div className="w-full min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin]">
+                <div className="pointer-events-auto ml-auto w-max max-w-full min-w-0 pl-1">{mapTopRightControls}</div>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <>
+            <div
+              data-testid="map-toolbar-desktop"
+              className="absolute top-3.5 flex flex-col items-center gap-2.5 z-[500] pointer-events-none"
+              style={
+                desktopSheetReservePx
+                  ? {
+                      /* Centre within strip [14px, 100% − rightInset] so it matches "main" feel with sheet open */
+                      left: `calc(14px + (100% - 14px - ${rightInsetPx}px) / 2)`,
+                      transform: 'translateX(-50%)',
+                      width: `min(${TOOLBAR_MAX_PX}px, calc(100% - ${14 + rightInsetPx}px))`,
+                      maxWidth: TOOLBAR_MAX_PX,
+                    }
+                  : {
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: 'calc(100% - 28px)',
+                      maxWidth: TOOLBAR_MAX_PX,
+                    }
+              }
+            >
+              <div
+                className="flex items-center gap-2 w-full pointer-events-auto"
+                style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
+              >
+                <div className="min-w-0 flex-1 max-w-[580px]">
+                  <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
+                </div>
+                <div className="flex flex-row gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setAccessibilityAvailableOnly((v) => !v)}
+                    aria-label={accessibilityAvailableOnly ? 'Disable accessibility filter' : 'Enable accessibility filter'}
+                    title={accessibilityAvailableOnly ? 'Accessibility filter ON' : 'Accessibility filter OFF'}
+                    className={`flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg px-2 font-sans text-sm font-semibold shadow-map-float transition-colors ${
+                      accessibilityAvailableOnly
+                        ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
+                        : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary'
+                    }`}
+                  >
+                    ♿
+                  </button>
+                  {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => zoomBy(delta)}
+                      aria-label={delta > 0 ? 'Zoom in' : 'Zoom out'}
+                      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white font-sans text-base font-semibold text-gray-700 shadow-map-float transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                className="w-full pointer-events-auto"
+                style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
+              >
+                <div
+                  className="mt-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-map-float dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100"
+                  style={{ width: `calc(100% - ${ZOOM_GROUP_WIDTH_PX}px)`, maxWidth: 'calc(580px - 72px)' }}
+                >
+                  <span>Currently showing: </span>
+                  <span className="text-brand dark:text-brand-100">{activeFilterLabel}</span>
+                  {' · '}
+                  <span>Date: </span>
+                  <span className="text-brand dark:text-brand-100">{arriveDate || '-'}</span>
+                  {' · '}
+                  <span>Time: </span>
+                  <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              className="absolute top-5 z-[600] pointer-events-auto"
+              style={{ right: rightInsetPx }}
+            >
+              {mapTopRightControls}
+            </div>
+          </>
+        )}
 
         {destination && (
           <div
@@ -620,14 +687,18 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             </span>
             {!showLimitedBays && proxLimitedCount > 0 && (
               <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                +{proxLimitedCount} sensor-only nearby
+                +{proxLimitedCount} no CoM row nearby
               </span>
             )}
           </div>
         )}
 
         {accessibilityAvailableOnly && (accessibilityLoading || accessibilityError) && (
-          <div className="absolute left-3.5 top-[126px] z-[510] rounded-xl border border-gray-200/80 bg-white/95 px-3 py-2 text-xs shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/95">
+          <div
+            className={`absolute left-3.5 z-[510] rounded-xl border border-gray-200/80 bg-white/95 px-3 py-2 text-xs shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/95 ${
+              isMobile ? 'top-[260px]' : 'top-[126px]'
+            }`}
+          >
             {accessibilityLoading && (
               <div className="text-gray-600 dark:text-gray-300">Loading accessible bays...</div>
             )}
@@ -639,12 +710,13 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         <div
           className="group absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-2.5 py-1 sm:px-3.5 sm:py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col cursor-help max-w-[45vw] sm:max-w-none"
-          aria-label="Verified bays are bays with parking rule data available in MeloPark"
+          aria-label="Bays with CoM restriction data on the parking feed (has_restriction_data)"
         >
           <div className="pointer-events-none absolute bottom-full left-0 mb-2 hidden w-64 rounded-lg border border-brand-800/80 bg-brand px-3 py-2.5 text-xs text-white shadow-card-lg group-hover:block dark:border-brand-300/70 dark:bg-surface-dark-secondary dark:text-gray-100">
             <div className="font-semibold text-white dark:text-white">What are verified bays?</div>
             <div className="mt-1 leading-relaxed">
-              Verified bays have parking rule data available in MeloPark. Tap a bay to view its parking rules and limits.
+              Count matches live parking API <span className="whitespace-nowrap">has_restriction_data</span> (CoM restrictions cache).
+              All bays can be opened; full verdicts come from the evaluate API.
             </div>
           </div>
           <span className="text-xs sm:text-sm font-semibold text-white dark:text-brand-900 whitespace-nowrap">
@@ -652,7 +724,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </span>
           {!showLimitedBays && limitedCount > 0 && (
             <span className="text-[10px] sm:text-[11px] font-medium text-white/65 dark:text-brand-900/55 whitespace-nowrap">
-              +{limitedCount} sensor only
+              +{limitedCount} no CoM row
             </span>
           )}
         </div>

@@ -32,7 +32,10 @@ def get_nearby_disability_bays(
             available_only=available_only,
         )
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Accessibility data unavailable",
+        ) from exc
 
 
 @router.get(
@@ -46,5 +49,7 @@ def get_raw_accessibility_points(
     try:
         return get_accessibility_points(top_n=top_n)
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
+        raise HTTPException(
+            status_code=503,
+            detail="Accessibility data unavailable",
+        ) from exc
