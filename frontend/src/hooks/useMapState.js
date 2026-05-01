@@ -12,6 +12,63 @@ import { SNAP_PEEK } from '../components/layout/BottomSheet'
 
 const ACCESSIBILITY_MODE_STORAGE_KEY = 'melopark.accessibility_mode'
 
+/**
+ * @typedef {Object} MapBay
+ * @property {string | number} id
+ * @property {string} [type]
+ * @property {string | null | undefined} [bayType]
+ * @property {number} [lat]
+ * @property {number} [lng]
+ * @property {number} [x]
+ * @property {number} [y]
+ * @property {boolean} [allowDetail]
+ */
+
+/**
+ * @typedef {Object} Destination
+ * @property {number} [lat]
+ * @property {number} [lng]
+ * @property {number} [x]
+ * @property {number} [y]
+ */
+
+/**
+ * @typedef {'all' | 'available' | 'trap' | 'lt1h' | '1h' | '2h' | '3h' | '4h'} ActiveFilter
+ */
+
+/**
+ * @callback AccessibilityModeUpdater
+ * @param {boolean} prev
+ * @returns {boolean}
+ */
+
+/**
+ * @typedef {Object} UseMapStateResult
+ * @property {string | number | null} selectedBayId
+ * @property {(id: string | number | null) => void} setSelectedBayId
+ * @property {ActiveFilter} activeFilter
+ * @property {(next: ActiveFilter) => void} setActiveFilter
+ * @property {Destination | null} destination
+ * @property {(lm: Destination) => void} pickDestination
+ * @property {() => void} clearDestination
+ * @property {number} sheetSnap
+ * @property {(next: number) => void} setSheetSnap
+ * @property {boolean} showLimitedBays
+ * @property {(next: boolean) => void} setShowLimitedBays
+ * @property {boolean} accessibilityMode
+ * @property {(next: boolean | AccessibilityModeUpdater) => void} setAccessibilityMode
+ * @property {(bays: MapBay[]) => void} setBaysRef
+ * @property {(bays: MapBay[]) => MapBay[]} getVisibleBays
+ * @property {(bays: MapBay[]) => MapBay[]} getProximityBays
+ * @property {[number, number]} defaultMapCenter
+ * @property {number} defaultMapZoom
+ * @property {number} destinationMapZoom
+ */
+
+/**
+ * @param {MapBay} bay
+ * @returns {boolean}
+ */
 function isAccessibilityBay(bay) {
   const raw = String(bay?.bayType || '').trim().toUpperCase()
   // Epic 4: accept both "DIS ONLY" and "DIS" signage tags.
@@ -22,6 +79,10 @@ function isAccessibilityBay(bay) {
 }
 
 
+/**
+ * @param {MapBay} bay
+ * @returns {number | null}
+ */
 function extractParkingMinutes(bay) {
   const raw = String(bay?.bayType || '').toUpperCase()
   if (!raw || raw === 'OTHER') return null
@@ -73,6 +134,9 @@ export function useMapState() {
 
   const baysRef = useRef([])
 
+  /**
+   * @param {boolean | AccessibilityModeUpdater} next
+   */
   const setAccessibilityMode = useCallback((next) => {
     _setAccessibilityMode((prev) => {
       const value = typeof next === 'function' ? next(prev) : next
@@ -90,6 +154,9 @@ export function useMapState() {
 
 
   const setSelectedBayId = useCallback(
+    /**
+     * @param {string | number | null} id
+     */
     (id) => {
       if (id == null) return _setSelectedBayId(null)
       const bay = baysRef.current.find((b) => b.id === id)
@@ -100,10 +167,16 @@ export function useMapState() {
     [],
   )
 
+  /**
+   * @param {MapBay[]} bays
+   */
   const setBaysRef = useCallback((bays) => {
     baysRef.current = bays
   }, [])
 
+  /**
+   * @param {Destination} lm
+   */
   const pickDestination = useCallback((lm) => {
     setDestination(lm)
     _setSelectedBayId(null)
@@ -115,6 +188,10 @@ export function useMapState() {
   }, [])
 
   const getVisibleBays = useCallback(
+    /**
+     * @param {MapBay[]} bays
+     * @returns {MapBay[]}
+     */
     (bays) => {
       const pool = destination
         ? bays.filter((b) => {
@@ -144,6 +221,10 @@ export function useMapState() {
   )
 
   const getProximityBays = useCallback(
+    /**
+     * @param {MapBay[]} bays
+     * @returns {MapBay[]}
+     */
     (bays) => {
       if (!destination) return accessibilityMode ? bays.filter(isAccessibilityBay) : bays
       const inRadius = bays.filter((b) => {
@@ -156,6 +237,7 @@ export function useMapState() {
     [destination, accessibilityMode],
   )
 
+  /** @type {UseMapStateResult} */
   return {
     selectedBayId,
     setSelectedBayId,
