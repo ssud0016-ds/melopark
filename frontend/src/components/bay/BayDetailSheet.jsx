@@ -159,8 +159,16 @@ export default function BayDetailSheet({
     return cat === 'clearway' || cat === 'loading' || cat === 'no_standing'
   })()
 
+  const isFuturePlanningMode = (() => {
+    if (!savedPlannerArrivalIso) return false
+    const planned = new Date(savedPlannerArrivalIso)
+    if (Number.isNaN(planned.getTime())) return false
+    // Treat near-now planner values as "current" to avoid jitter from click-to-render delay.
+    return planned.getTime() > Date.now() + 60 * 1000
+  })()
+
   const verdictVariant = (() => {
-    if (bay?.free === 0) return 'no'
+    if (!isFuturePlanningMode && bay?.free === 0) return 'no'
     if (!evaluation || evalLoading) return null
     if (evaluation.verdict === 'no') return 'no'
     if (evaluation.verdict === 'yes' && evaluation.warning && isTowAwayOrLoadingCaution) return 'caution'
