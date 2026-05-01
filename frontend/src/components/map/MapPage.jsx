@@ -117,7 +117,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [mapBounds, setMapBounds] = useState(null)
   const [bulkVerdictById, setBulkVerdictById] = useState({})
   const [showArrivePicker, setShowArrivePicker] = useState(false)
-  const [filterCollapsed, setFilterCollapsed] = useState(true)
   const [accessibilityNearby, setAccessibilityNearby] = useState([])
   const [accessibilityLoading, setAccessibilityLoading] = useState(false)
   const [accessibilityError, setAccessibilityError] = useState(null)
@@ -329,6 +328,14 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plannerArrivalIso)
 
+  const isCustomScope = activeFilter !== 'all' || Boolean(plannerArrivalIso)
+  const scopePill = isCustomScope ? (
+    <div className="shrink-0 rounded-md border border-brand-300 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-900 shadow-sm dark:border-brand-300/80 dark:bg-brand-50 dark:text-brand-900">
+      {activeFilterLabel}
+      {plannerArrivalIso ? ` · ${arriveDate || '-'} ${arriveTime || ''}` : ''}
+    </div>
+  ) : null
+
   const updateArriveBy = useCallback((nextDate, nextTime) => {
     if (!nextDate || !nextTime) return
     const [ys, mos, ds] = nextDate.split('-').map(Number)
@@ -378,32 +385,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
       <div className="relative flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setLegendOpen((v) => !v)}
-          aria-pressed={legendOpen}
-          aria-label={legendOpen ? 'Hide heatmap legend' : 'Show heatmap legend'}
-          className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
-            legendOpen
-              ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-              : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-          }`}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <circle cx="7" cy="8" r="2.25" stroke="currentColor" strokeWidth="1.75" />
-            <circle cx="16.5" cy="6.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
-            <circle cx="14.5" cy="15.5" r="2.5" stroke="currentColor" strokeWidth="1.75" />
-            <circle cx="6.5" cy="16.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
-          </svg>
-          <span className="text-[10px] font-semibold leading-none">Heatmap</span>
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            setShowArrivePicker((v) => {
-              const next = !v
-              if (next) setFilterCollapsed(true)
-              return next
-            })
-          }
+          onClick={() => setShowArrivePicker((v) => !v)}
           aria-expanded={showArrivePicker}
           aria-label={showArrivePicker ? 'Hide arrive by picker' : 'Show arrive by picker'}
           className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
@@ -419,15 +401,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           <span className="text-[10px] font-semibold leading-none">Time</span>
         </button>
       </div>
-      <FilterChips
-        activeFilter={activeFilter}
-        onFilterChange={setActiveFilter}
-        collapsed={filterCollapsed}
-        onToggleCollapsed={(nextCollapsed) => {
-          if (!nextCollapsed) setShowArrivePicker(false)
-          setFilterCollapsed(nextCollapsed)
-        }}
-      />
       {showArrivePicker && (
         <div className="absolute right-0 top-[calc(100%+8px)] z-[700] w-[min(280px,calc(100vw-24px))] rounded-xl border border-gray-200/90 bg-white/98 p-2 shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/98">
           <div className="flex flex-col gap-2">
@@ -568,14 +541,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 </div>
               </div>
 
-              <div className="w-full">
-                <div className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-map-float dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100">
-                  <span className="text-brand dark:text-brand-100">{activeFilterLabel}</span>
-                  {' · '}
-                  <span className="text-brand dark:text-brand-100">{arriveDate || '-'}</span>
-                  {' · '}
-                  <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
+              <div className="mt-1 flex w-full items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} />
                 </div>
+                {scopePill}
               </div>
 
               <div className="w-full min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin]">
@@ -645,17 +615,13 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
               >
                 <div
-                  className="mt-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-map-float dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100"
+                  className="mt-1 flex items-center gap-2"
                   style={{ width: `calc(100% - ${ZOOM_GROUP_WIDTH_PX}px)`, maxWidth: 'calc(580px - 72px)' }}
                 >
-                  <span>Currently showing: </span>
-                  <span className="text-brand dark:text-brand-100">{activeFilterLabel}</span>
-                  {' · '}
-                  <span>Date: </span>
-                  <span className="text-brand dark:text-brand-100">{arriveDate || '-'}</span>
-                  {' · '}
-                  <span>Time: </span>
-                  <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
+                  <div className="min-w-0 flex-1">
+                    <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+                  </div>
+                  {scopePill}
                 </div>
               </div>
             </div>
