@@ -328,13 +328,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plannerArrivalIso)
 
-  const isCustomScope = activeFilter !== 'all' || Boolean(plannerArrivalIso)
-  const scopePill = isCustomScope ? (
-    <div className="shrink-0 rounded-md border border-brand-300 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-900 shadow-sm dark:border-brand-300/80 dark:bg-brand-50 dark:text-brand-900">
-      {activeFilterLabel}
+  const scopeStrip = (
+    <div className="px-1 text-[10px] font-medium text-gray-600 dark:text-gray-300 truncate">
+      Showing: <span className="text-brand-900 dark:text-brand-900 font-semibold">{activeFilterLabel}</span>
       {plannerArrivalIso ? ` · ${arriveDate || '-'} ${arriveTime || ''}` : ''}
     </div>
-  ) : null
+  )
 
   const updateArriveBy = useCallback((nextDate, nextTime) => {
     if (!nextDate || !nextTime) return
@@ -514,19 +513,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                   <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
                 </div>
                 <div className="flex flex-row gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setAccessibilityAvailableOnly((v) => !v)}
-                    aria-label={accessibilityAvailableOnly ? 'Disable accessibility filter' : 'Enable accessibility filter'}
-                    title={accessibilityAvailableOnly ? 'Accessibility filter ON' : 'Accessibility filter OFF'}
-                    className={`flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg px-2 font-sans text-sm font-semibold shadow-map-float transition-colors ${
-                      accessibilityAvailableOnly
-                        ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-                        : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary'
-                    }`}
-                  >
-                    ♿
-                  </button>
                   {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
                     <button
                       key={label}
@@ -541,11 +527,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 </div>
               </div>
 
-              <div className="mt-1 flex w-full items-center gap-2">
-                <div className="min-w-0 flex-1">
-                  <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} />
-                </div>
-                {scopePill}
+              <div className="mt-1 flex w-full flex-col gap-0.5">
+                <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} accessibleOn={accessibilityAvailableOnly} onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)} />
+                {scopeStrip}
               </div>
 
               <div className="w-full min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin]">
@@ -583,19 +567,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                   <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
                 </div>
                 <div className="flex flex-row gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setAccessibilityAvailableOnly((v) => !v)}
-                    aria-label={accessibilityAvailableOnly ? 'Disable accessibility filter' : 'Enable accessibility filter'}
-                    title={accessibilityAvailableOnly ? 'Accessibility filter ON' : 'Accessibility filter OFF'}
-                    className={`flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg px-2 font-sans text-sm font-semibold shadow-map-float transition-colors ${
-                      accessibilityAvailableOnly
-                        ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-                        : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary'
-                    }`}
-                  >
-                    ♿
-                  </button>
                   {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
                     <button
                       key={label}
@@ -615,13 +586,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
               >
                 <div
-                  className="mt-1 flex items-center gap-2"
+                  className="mt-1 flex flex-col gap-0.5"
                   style={{ width: `calc(100% - ${ZOOM_GROUP_WIDTH_PX}px)`, maxWidth: 'calc(580px - 72px)' }}
                 >
-                  <div className="min-w-0 flex-1">
-                    <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} />
-                  </div>
-                  {scopePill}
+                  <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} accessibleOn={accessibilityAvailableOnly} onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)} />
+                  {scopeStrip}
                 </div>
               </div>
             </div>
