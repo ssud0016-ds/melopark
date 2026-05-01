@@ -639,23 +639,20 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         <div
           className="group absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-2.5 py-1 sm:px-3.5 sm:py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col cursor-help max-w-[45vw] sm:max-w-none"
-          aria-label="Bays with CoM restriction data on the parking feed (has_restriction_data)"
+          aria-label="Total parking bays on the live feed"
         >
           <div className="pointer-events-none absolute bottom-full left-0 mb-2 hidden w-64 rounded-lg border border-brand-800/80 bg-brand px-3 py-2.5 text-xs text-white shadow-card-lg group-hover:block dark:border-brand-300/70 dark:bg-surface-dark-secondary dark:text-gray-100">
-            <div className="font-semibold text-white dark:text-white">What are verified bays?</div>
+            <div className="font-semibold text-white dark:text-white">Total parking bays</div>
             <div className="mt-1 leading-relaxed">
-              Count matches live parking API <span className="whitespace-nowrap">has_restriction_data</span> (CoM restrictions cache).
-              All bays can be opened; full verdicts come from the evaluate API.
+              Total bays loaded from the live parking feed across the City of Melbourne.
+              {verifiedCount > 0 && (
+                <> Currently in view: {verifiedCount} with CoM restriction data{limitedCount > 0 ? `, ${limitedCount} without` : ''}.</>
+              )}
             </div>
           </div>
           <span className="text-xs sm:text-sm font-semibold text-white dark:text-brand-900 whitespace-nowrap">
-            {verifiedCount} verified bay{verifiedCount !== 1 ? 's' : ''}
+            {(bays?.length ?? 0).toLocaleString()} total bay{(bays?.length ?? 0) !== 1 ? 's' : ''}
           </span>
-          {!showLimitedBays && limitedCount > 0 && (
-            <span className="text-[10px] sm:text-[11px] font-medium text-white/65 dark:text-brand-900/55 whitespace-nowrap">
-              +{limitedCount} no CoM row
-            </span>
-          )}
         </div>
 
         {(() => {
