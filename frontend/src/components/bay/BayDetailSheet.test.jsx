@@ -107,6 +107,126 @@ describe('BayDetailSheet parking tab UI', () => {
     expect(first[0]).toBe('1000')
     expect(first[1]).toBeNull()
   })
+
+  it('does not let current occupancy override future yes verdict', async () => {
+    const futureIso = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+    fetchBayEvaluation.mockResolvedValue({
+      bay_id: '1000',
+      verdict: 'yes',
+      reason: 'Rules allow parking at selected time.',
+      active_restriction: null,
+      warning: null,
+      data_source: 'db',
+      data_coverage: 'full',
+      translator_rules: [],
+    })
+
+    render(
+      <BayDetailSheet
+        bay={{
+          id: '1000',
+          type: 'occupied',
+          bayType: 'Other',
+          hasRules: true,
+          free: 0,
+          name: 'Test St',
+          sensorLastUpdated: null,
+        }}
+        destination={null}
+        onClose={() => {}}
+        isMobile={false}
+        lastUpdated={null}
+        savedPlannerArrivalIso={futureIso}
+        savedPlannerDurationMins={120}
+      />,
+    )
+
+    await waitFor(() => expect(fetchBayEvaluation).toHaveBeenCalled())
+    expect(await screen.findByText('YES')).toBeInTheDocument()
+    expect(screen.getByText('You can park here')).toBeInTheDocument()
+    expect(screen.getByText('SPACE OCCUPIED')).toBeInTheDocument()
+  })
+
+  it('keeps future no verdict as no when bay is currently occupied', async () => {
+    const futureIso = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+    fetchBayEvaluation.mockResolvedValue({
+      bay_id: '1000',
+      verdict: 'no',
+      reason: 'Restriction active at selected time.',
+      active_restriction: {
+        typedesc: 'No Stopping',
+        rule_category: 'clearway',
+        plain_english: 'No stopping applies',
+        max_stay_mins: null,
+        expires_at: null,
+      },
+      warning: null,
+      data_source: 'db',
+      data_coverage: 'full',
+      translator_rules: [],
+    })
+
+    render(
+      <BayDetailSheet
+        bay={{
+          id: '1000',
+          type: 'occupied',
+          bayType: 'Other',
+          hasRules: true,
+          free: 0,
+          name: 'Test St',
+          sensorLastUpdated: null,
+        }}
+        destination={null}
+        onClose={() => {}}
+        isMobile={false}
+        lastUpdated={null}
+        savedPlannerArrivalIso={futureIso}
+        savedPlannerDurationMins={120}
+      />,
+    )
+
+    await waitFor(() => expect(fetchBayEvaluation).toHaveBeenCalled())
+    expect(await screen.findByText('NO')).toBeInTheDocument()
+    expect(screen.getByText('You cannot park here')).toBeInTheDocument()
+    expect(screen.getByText('SPACE OCCUPIED')).toBeInTheDocument()
+  })
+
+  it('keeps current-time occupied override behavior', async () => {
+    fetchBayEvaluation.mockResolvedValue({
+      bay_id: '1000',
+      verdict: 'yes',
+      reason: 'Rules allow parking now.',
+      active_restriction: null,
+      warning: null,
+      data_source: 'db',
+      data_coverage: 'full',
+      translator_rules: [],
+    })
+
+    render(
+      <BayDetailSheet
+        bay={{
+          id: '1000',
+          type: 'occupied',
+          bayType: 'Other',
+          hasRules: true,
+          free: 0,
+          name: 'Test St',
+          sensorLastUpdated: null,
+        }}
+        destination={null}
+        onClose={() => {}}
+        isMobile={false}
+        lastUpdated={null}
+      />,
+    )
+
+    await waitFor(() => expect(fetchBayEvaluation).toHaveBeenCalled())
+    expect(await screen.findByText('NO')).toBeInTheDocument()
+    expect(screen.getByText('You cannot park here')).toBeInTheDocument()
+    expect(screen.getByText('SPACE OCCUPIED')).toBeInTheDocument()
+  })
 })
 
 describe('BayDetailSheet responsive layout', () => {
