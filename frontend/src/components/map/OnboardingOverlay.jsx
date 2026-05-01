@@ -64,7 +64,7 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
     <div
       className={
         isHero
-          ? "absolute inset-0 z-[800] flex items-center justify-center bg-brand-dark px-6"
+          ? "absolute inset-0 z-[800] flex items-center justify-center bg-black/30 backdrop-blur-[2px] px-6"
           : "absolute inset-0 z-[800] flex items-center justify-center bg-black/35 dark:bg-black/55 backdrop-blur-[2px] px-4"
       }
       role="dialog"
