@@ -148,7 +148,7 @@ export default function BayDetailSheet({
   const missingStreetNote = resolvedName ? null : bayMissingStreetNote(bay)
   const streetLine = resolvedName ? streetShort(resolvedName) : null
 
-  const occupancyBadge = bay?.free === 1 ? 'SPACE FREE' : bay?.free === 0 ? 'SPACE OCCUPIED' : 'SPACE UNKNOWN'
+  const occupancyBadge = bay?.free === 1 ? 'FREE NOW' : bay?.free === 0 ? 'OCCUPIED NOW' : 'STATUS UNKNOWN'
   const occupancyDotClass = bay?.free === 1 ? 'bg-emerald-400' : bay?.free === 0 ? 'bg-red-500' : 'bg-gray-400'
 
   const disabilityOnly =
