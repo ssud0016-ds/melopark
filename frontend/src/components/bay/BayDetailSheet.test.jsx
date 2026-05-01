@@ -144,7 +144,7 @@ describe('BayDetailSheet parking tab UI', () => {
     await waitFor(() => expect(fetchBayEvaluation).toHaveBeenCalled())
     expect(await screen.findByText('YES')).toBeInTheDocument()
     expect(screen.getByText('You can park here')).toBeInTheDocument()
-    expect(screen.getByText('SPACE OCCUPIED')).toBeInTheDocument()
+    expect(screen.getByText('OCCUPIED NOW')).toBeInTheDocument()
   })
 
   it('keeps future no verdict as no when bay is currently occupied', async () => {
@@ -189,7 +189,7 @@ describe('BayDetailSheet parking tab UI', () => {
     await waitFor(() => expect(fetchBayEvaluation).toHaveBeenCalled())
     expect(await screen.findByText('NO')).toBeInTheDocument()
     expect(screen.getByText('You cannot park here')).toBeInTheDocument()
-    expect(screen.getByText('SPACE OCCUPIED')).toBeInTheDocument()
+    expect(screen.getByText('OCCUPIED NOW')).toBeInTheDocument()
   })
 
   it('keeps current-time occupied override behavior', async () => {
@@ -225,7 +225,7 @@ describe('BayDetailSheet parking tab UI', () => {
     await waitFor(() => expect(fetchBayEvaluation).toHaveBeenCalled())
     expect(await screen.findByText('NO')).toBeInTheDocument()
     expect(screen.getByText('You cannot park here')).toBeInTheDocument()
-    expect(screen.getByText('SPACE OCCUPIED')).toBeInTheDocument()
+    expect(screen.getByText('OCCUPIED NOW')).toBeInTheDocument()
   })
 })
 
