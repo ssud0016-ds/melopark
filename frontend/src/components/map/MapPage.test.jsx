@@ -90,6 +90,7 @@ describe('MapPage toolbar layout', () => {
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
     expect(screen.getByTestId('map-toolbar-mobile-stack')).toBeInTheDocument()
     expect(screen.queryByTestId('map-toolbar-desktop')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /accessibility mode/i })).not.toBeInTheDocument()
   })
 
   it('uses desktop-centered toolbar and separate right control column on wide viewports', () => {
@@ -97,6 +98,7 @@ describe('MapPage toolbar layout', () => {
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
     expect(screen.getByTestId('map-toolbar-desktop')).toBeInTheDocument()
     expect(screen.queryByTestId('map-toolbar-mobile-stack')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /accessibility mode/i })).not.toBeInTheDocument()
   })
 })
 

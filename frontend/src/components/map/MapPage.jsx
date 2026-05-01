@@ -303,12 +303,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     else m.zoomOut()
   }, [])
 
-  const toggleAccessibilityMode = useCallback(() => {
-    setAccessibilityMode((v) => !v)
-    setFilterCollapsed(true)
-    setShowArrivePicker(false)
-  }, [setAccessibilityMode])
-
   const handleBayClick = useCallback(
     (bay) => setSelectedBayId(bay ? bay.id : null),
     [setSelectedBayId],
@@ -380,26 +374,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           <path d="M4 12h16M4 7h16M4 17h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
         </svg>
         <span className="text-[9px] font-semibold leading-none">{colorBlindMode ? 'CB ON' : 'CB OFF'}</span>
-      </button>
-      <button
-        type="button"
-        onClick={toggleAccessibilityMode}
-        aria-pressed={accessibilityMode}
-        aria-label={accessibilityMode ? 'Disable accessibility mode' : 'Enable accessibility mode'}
-        className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
-          accessibilityMode
-            ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-            : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-        }`}
-        title={accessibilityMode ? 'Accessibility mode: ON' : 'Accessibility mode: OFF'}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <circle cx="12" cy="5.6" r="2.1" stroke="currentColor" strokeWidth="1.75" />
-          <path d="M12 8.2v5.1l3 2.1" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-          <path d="M8.6 11.7h3.4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-          <circle cx="13.8" cy="15.7" r="4.5" stroke="currentColor" strokeWidth="1.75" />
-        </svg>
-        <span className="text-[9px] font-semibold leading-none">{accessibilityMode ? 'A11y ON' : 'A11y OFF'}</span>
       </button>
       <div className="relative flex items-center gap-2">
         <button
