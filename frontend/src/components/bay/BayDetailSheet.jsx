@@ -24,6 +24,7 @@ function listFocusable(root) {
 
 export default function BayDetailSheet({
   bay,
+  accessibilityRuleFallback = null,
   destination,
   onClose,
   isMobile,
@@ -143,7 +144,36 @@ export default function BayDetailSheet({
 
   if (!bay) return null
 
-  const resolvedName = bay.name?.trim() || evaluation?.street_name || null
+  const renderEvaluation = useMemo(() => {
+    if (evalLoading) return null
+    if (evaluation?.translator_rules?.length) return evaluation
+
+    const plainEnglish = accessibilityRuleFallback?.plain_english
+    const typedesc = accessibilityRuleFallback?.typedesc
+    if (!plainEnglish && !typedesc) return evaluation
+
+    const heading = typedesc ? `Rule: ${typedesc}` : 'Accessible bay rule'
+    const body = plainEnglish || 'Accessibility rule is available for this bay.'
+    return {
+      ...(evaluation || {}),
+      active_restriction: {
+        ...(evaluation?.active_restriction || {}),
+        typedesc: typedesc || evaluation?.active_restriction?.typedesc || null,
+        plain_english: plainEnglish || evaluation?.active_restriction?.plain_english || null,
+        rule_category: evaluation?.active_restriction?.rule_category || 'disabled',
+      },
+      translator_rules: [
+        {
+          heading,
+          body,
+          state: 'current',
+          banner: null,
+        },
+      ],
+    }
+  }, [evalLoading, evaluation, accessibilityRuleFallback])
+
+  const resolvedName = bay.name?.trim() || renderEvaluation?.street_name || null
   const bayDisplayName = resolvedName || bayHeading(bay)
   const missingStreetNote = resolvedName ? null : bayMissingStreetNote(bay)
   const streetLine = resolvedName ? streetShort(resolvedName) : null
@@ -152,10 +182,10 @@ export default function BayDetailSheet({
   const occupancyDotClass = bay?.free === 1 ? 'bg-emerald-400' : bay?.free === 0 ? 'bg-red-500' : 'bg-gray-400'
 
   const disabilityOnly =
-    evaluation?.active_restriction?.rule_category === 'disabled' || evaluation?.warning?.type === 'disabled'
+    renderEvaluation?.active_restriction?.rule_category === 'disabled' || renderEvaluation?.warning?.type === 'disabled'
 
   const isTowAwayOrLoadingCaution = (() => {
-    const cat = (evaluation?.warning?.type || evaluation?.active_restriction?.rule_category || '').toLowerCase()
+    const cat = (renderEvaluation?.warning?.type || renderEvaluation?.active_restriction?.rule_category || '').toLowerCase()
     return cat === 'clearway' || cat === 'loading' || cat === 'no_standing'
   })()
 
@@ -169,10 +199,10 @@ export default function BayDetailSheet({
 
   const verdictVariant = (() => {
     if (!isFuturePlanningMode && bay?.free === 0) return 'no'
-    if (!evaluation || evalLoading) return null
-    if (evaluation.verdict === 'no') return 'no'
-    if (evaluation.verdict === 'yes' && evaluation.warning && isTowAwayOrLoadingCaution) return 'caution'
-    if (evaluation.verdict === 'yes') return 'yes'
+    if (!renderEvaluation || evalLoading) return null
+    if (renderEvaluation.verdict === 'no') return 'no'
+    if (renderEvaluation.verdict === 'yes' && renderEvaluation.warning && isTowAwayOrLoadingCaution) return 'caution'
+    if (renderEvaluation.verdict === 'yes') return 'yes'
     // Keep strict 3-state behaviour: unknown / unsupported warnings are conservative "NO".
     return 'no'
   })()
@@ -283,15 +313,15 @@ export default function BayDetailSheet({
         <ParkingVerdictPanel
           variant={verdictVariant}
           durationMins={durationMins}
-          evaluation={evalLoading ? null : evaluation}
+            evaluation={renderEvaluation}
         />
       )}
 
       {/* 5. Bay status and limits */}
-      <BayStatusAndLimits bay={bay} evaluation={evalLoading ? null : evaluation} />
+      <BayStatusAndLimits bay={bay} evaluation={renderEvaluation} />
 
       {/* 6. Parking sign translator */}
-      <ParkingSignTranslator evaluation={evalLoading ? null : evaluation} />
+      <ParkingSignTranslator evaluation={renderEvaluation} />
     </div>
   )
 }
