@@ -34,6 +34,9 @@ function durationLabel(durationMins) {
 export default function ParkingVerdictPanel({ variant, durationMins, evaluation }) {
   const restriction = evaluation?.active_restriction ?? null
   const warning = evaluation?.warning ?? null
+  const permitOnly =
+    (warning?.type || '').toLowerCase() === 'disabled' ||
+    (restriction?.rule_category || '').toLowerCase() === 'disabled'
 
   const paymentRequired = evaluation ? 'Yes' : null
 
@@ -51,17 +54,21 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
   const requested = durationLabel(durationMins)
 
   const panelTone =
-    variant === 'yes'
+    permitOnly
+      ? 'bg-[#F7B38A]'
+      : variant === 'yes'
       ? 'bg-[#CFF57A]'
       : variant === 'no'
         ? 'bg-[#F59A9A]'
         : 'bg-[#F7B38A]'
 
   const word =
-    variant === 'yes' ? 'YES' : variant === 'no' ? 'NO' : 'Caution'
+    permitOnly ? 'PERMIT' : (variant === 'yes' ? 'YES' : variant === 'no' ? 'NO' : 'Caution')
 
   const sentence =
-    variant === 'yes'
+    permitOnly
+      ? 'Disability permit required to park here'
+      : variant === 'yes'
       ? 'You can park here'
       : variant === 'no'
         ? 'You cannot park here'
@@ -88,6 +95,13 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
 
   const noBody = (() => {
     if (!evaluation) return null
+    if (permitOnly) {
+      return (
+        restriction?.plain_english ||
+        warning?.description ||
+        'This bay is reserved for drivers displaying a valid disability parking permit.'
+      )
+    }
     if (variant === 'no' && evaluation?.verdict === 'no' && restriction?.max_stay_mins != null && typeof durationMins === 'number') {
       if (durationMins > restriction.max_stay_mins) {
         const hrs = restriction.max_stay_mins % 60 === 0 ? `${restriction.max_stay_mins / 60} hours` : `${restriction.max_stay_mins} minutes`
@@ -118,7 +132,7 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
 
         {paymentRequired && (
           <div className="flex items-center justify-between gap-3">
-            <div className="font-semibold">Payment Required:</div>
+            <div className="font-semibold">{permitOnly ? 'Permit Required:' : 'Payment Required:'}</div>
             <div className="font-semibold">{paymentRequired}</div>
           </div>
         )}

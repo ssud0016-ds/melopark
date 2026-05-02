@@ -12,7 +12,7 @@ import { useMapState } from '../../hooks/useMapState'
 import { usePressure, useAlternatives } from '../../hooks/usePressure'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
-import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
+import { fetchAccessibilityAll, fetchEvaluateBulk } from '../../services/apiBays'
 import {
   DEFAULT_PLANNER_DURATION_MINS,
   formatAtDateTime,
@@ -40,7 +40,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     pickDestination,
     clearDestination,
     showLimitedBays,
-    accessibilityMode,
     setAccessibilityMode,
     setBaysRef,
     getVisibleBays,
@@ -101,10 +100,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     pickDestination(lm)
     if (opts?.activeFilter) setActiveFilter(opts.activeFilter)
     if (opts?.parkingType === 'accessible') {
-      setAccessibilityMode(true)
+      setAccessibilityMode(false)
       setAccessibilityAvailableOnly(true)
     } else {
       setAccessibilityMode(false)
+      setAccessibilityAvailableOnly(false)
     }
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
@@ -187,13 +187,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setAccessibilityLoading(true)
     setAccessibilityError(null)
 
-    const targetLat = destination?.lat ?? defaultMapCenter[0]
-    const targetLon = destination?.lng ?? defaultMapCenter[1]
-
-    fetchAccessibilityNearby({
-      lat: targetLat,
-      lon: targetLon,
-      radiusM: 20000,
+    fetchAccessibilityAll({
       topN: 1500,
       availableOnly: false,
     })
@@ -213,7 +207,13 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     return () => {
       cancelled = true
     }
-  }, [accessibilityAvailableOnly, destination, defaultMapCenter])
+  }, [accessibilityAvailableOnly])
+
+  useEffect(() => {
+    if (!accessibilityAvailableOnly) return
+    // Keep one source of truth for accessible filtering to avoid intersecting filters.
+    setAccessibilityMode(false)
+  }, [accessibilityAvailableOnly, setAccessibilityMode])
 
   useEffect(() => {
     setBaysRef(bays)
@@ -225,6 +225,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     () => new Set(accessibilityNearby.map((b) => String(b.bay_id))),
     [accessibilityNearby],
   )
+  const accessibleRulesByBayId = useMemo(() => {
+    const out = {}
+    for (const row of accessibilityNearby) {
+      const key = String(row?.bay_id ?? '')
+      if (!key) continue
+      out[key] = row
+    }
+    return out
+  }, [accessibilityNearby])
 
   const mapBays = useMemo(() => {
     if (!accessibilityAvailableOnly) return bays
@@ -242,6 +251,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   }, [proximityBays, accessibilityAvailableOnly, accessibleBayIds])
 
   const selectedBay = mapBays.find((b) => b.id === selectedBayId) || null
+  const accessibleShownCount = accessibilityAvailableOnly ? mapBays.length : 0
 
   const {
     verifiedCount,
@@ -459,14 +469,14 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           colorBlindMode={colorBlindMode}
         />
 
-        {accessibilityMode && (
+        {accessibilityAvailableOnly && (
           <div
             className={`absolute left-3.5 z-[510] rounded-xl border border-brand bg-white/95 px-3 py-2 text-xs font-semibold text-brand shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100 ${
               isMobile ? 'top-[204px]' : 'top-[84px]'
             }`}
-            aria-label="Accessibility mode enabled: showing disability bays only"
+            aria-label="Accessibility mode enabled: showing accessibility overlay bays"
           >
-            Accessibility mode: DIS bays only
+            Accessibility mode: accessible bays only
           </div>
         )}
 
@@ -653,6 +663,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           <span className="text-xs sm:text-sm font-semibold text-white dark:text-brand-900 whitespace-nowrap">
             {(bays?.length ?? 0).toLocaleString()} total bay{(bays?.length ?? 0) !== 1 ? 's' : ''}
           </span>
+          {accessibilityAvailableOnly && (
+            <span className="text-[10px] sm:text-xs font-semibold text-white/90 dark:text-brand-900 whitespace-nowrap">
+              {accessibleShownCount.toLocaleString()} accessible shown
+            </span>
+          )}
         </div>
 
         {(() => {
@@ -772,6 +787,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         {selectedBay && (
           <BayDetailSheet
             bay={selectedBay}
+            accessibilityRuleFallback={accessibleRulesByBayId[String(selectedBay.id)] ?? null}
             destination={destination}
             onClose={() => setSelectedBayId(null)}
             isMobile={isMobile}
