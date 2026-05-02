@@ -224,3 +224,30 @@ export async function fetchAccessibilityPoints({ topN = 5000 } = {}) {
   const data = await res.json()
   return data && typeof data === 'object' ? data : { total_points: 0, points: [] }
 }
+
+/**
+ * Fetch all disability-only bays from Epic 4 accessibility gold output.
+ * Backend: GET /api/accessibility/all
+ */
+export async function fetchAccessibilityAll({ topN = 5000, availableOnly = false } = {}) {
+  const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+  const params = new URLSearchParams()
+  params.set('top_n', String(topN))
+  params.set('available_only', String(Boolean(availableOnly)))
+  const url = `${base}/api/accessibility/all?${params.toString()}`
+
+  const res = await fetch(url)
+  if (!res.ok) {
+    let detail = ''
+    try {
+      const body = await res.json()
+      const d = body?.detail
+      detail = d == null ? '' : (typeof d === 'string' ? d : JSON.stringify(d))
+    } catch {
+      // ignore
+    }
+    throw new Error(`Could not load accessibility bays (${res.status})${detail ? `: ${detail}` : ''}`)
+  }
+  const data = await res.json()
+  return data && typeof data === 'object' ? data : { total_candidates: 0, returned: 0, bays: [] }
+}
