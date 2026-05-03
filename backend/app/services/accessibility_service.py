@@ -2,12 +2,30 @@
 
 from __future__ import annotations
 
+import logging
 import math
+import time
 from datetime import datetime as dt_datetime
 from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+
+def _all_step(phase: str, t0: float, t_prev: float, *, top_n: int, available_only: bool) -> float:
+    """Lightweight timing for /api/accessibility/all (no row data, only query params)."""
+    now = time.perf_counter()
+    logger.info(
+        "accessibility_all phase=%s delta_ms=%.1f total_ms=%.1f top_n=%s available_only=%s",
+        phase,
+        (now - t_prev) * 1000.0,
+        (now - t0) * 1000.0,
+        top_n,
+        available_only,
+    )
+    return now
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 GOLD_ACCESSIBILITY_PATH = ROOT / "data" / "gold" / "gold_accessibility_bays.parquet"
@@ -188,17 +206,29 @@ def _get_all_disability_bays_cached(top_n: int, available_only: bool) -> dict:
     Gold parquet is static for the process lifetime; repeated requests must not
     re-scan and normalize the full frame (avoids gateway timeouts).
     """
+    t0 = time.perf_counter()
+    tp = t0
+
     base = load_accessibility_gold()
+    tp = _all_step("load_accessibility_gold", t0, tp, top_n=top_n, available_only=available_only)
+
     mask = base["is_disability_only"] & base["lat"].notna() & base["lon"].notna()
+    tp = _all_step("disability_filtering", t0, tp, top_n=top_n, available_only=available_only)
+
     use_cols = [c for c in _ALL_BAYS_PIPELINE_COLS if c in base.columns]
     if "bay_id" not in use_cols and "bay_id" in base.columns:
         use_cols = ["bay_id", *[c for c in use_cols if c != "bay_id"]]
+    tp = _all_step("column_selection", t0, tp, top_n=top_n, available_only=available_only)
+
     df = base.loc[mask, use_cols].copy() if use_cols else base.loc[mask].copy()
+    tp = _all_step("slice_and_copy", t0, tp, top_n=top_n, available_only=available_only)
 
     if available_only:
         df = df[df["is_available_now"]].copy()
+        tp = _all_step("available_only_filter", t0, tp, top_n=top_n, available_only=available_only)
 
     if df.empty:
+        _all_step("empty_result", t0, tp, top_n=top_n, available_only=available_only)
         return {
             "total_candidates": 0,
             "returned": 0,
@@ -206,12 +236,15 @@ def _get_all_disability_bays_cached(top_n: int, available_only: bool) -> dict:
         }
 
     df = _dedupe_best_row_per_bay_id(df)
+    tp = _all_step("dedupe", t0, tp, top_n=top_n, available_only=available_only)
 
     total_candidates = len(df)
     if top_n > 0:
         df = df.head(top_n)
+    tp = _all_step("head_top_n", t0, tp, top_n=top_n, available_only=available_only)
 
     df = _normalize_accessibility_rows_for_response(df)
+    tp = _all_step("normalization", t0, tp, top_n=top_n, available_only=available_only)
 
     cols = [
         "bay_id", "lat", "lon", "status", "is_available_now",
@@ -223,6 +256,7 @@ def _get_all_disability_bays_cached(top_n: int, available_only: bool) -> dict:
     out_df = df[cols].copy().astype(object)
     out_df = out_df.where(pd.notna(out_df), None)
     bays = out_df.to_dict(orient="records")
+    _all_step("response_build", t0, tp, top_n=top_n, available_only=available_only)
 
     return {
         "total_candidates": total_candidates,
