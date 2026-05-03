@@ -12,7 +12,7 @@ import { useMapState } from '../../hooks/useMapState'
 import { usePressure, useAlternatives } from '../../hooks/usePressure'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
-import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
+import { fetchAccessibilityAll, fetchEvaluateBulk } from '../../services/apiBays'
 import {
   DEFAULT_PLANNER_DURATION_MINS,
   formatAtDateTime,
@@ -40,7 +40,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     pickDestination,
     clearDestination,
     showLimitedBays,
-    accessibilityMode,
     setAccessibilityMode,
     setBaysRef,
     getVisibleBays,
@@ -101,10 +100,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     pickDestination(lm)
     if (opts?.activeFilter) setActiveFilter(opts.activeFilter)
     if (opts?.parkingType === 'accessible') {
-      setAccessibilityMode(true)
+      setAccessibilityMode(false)
       setAccessibilityAvailableOnly(true)
     } else {
       setAccessibilityMode(false)
+      setAccessibilityAvailableOnly(false)
     }
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
@@ -117,7 +117,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [mapBounds, setMapBounds] = useState(null)
   const [bulkVerdictById, setBulkVerdictById] = useState({})
   const [showArrivePicker, setShowArrivePicker] = useState(false)
-  const [filterCollapsed, setFilterCollapsed] = useState(true)
   const [accessibilityNearby, setAccessibilityNearby] = useState([])
   const [accessibilityLoading, setAccessibilityLoading] = useState(false)
   const [accessibilityError, setAccessibilityError] = useState(null)
@@ -188,13 +187,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setAccessibilityLoading(true)
     setAccessibilityError(null)
 
-    const targetLat = destination?.lat ?? defaultMapCenter[0]
-    const targetLon = destination?.lng ?? defaultMapCenter[1]
-
-    fetchAccessibilityNearby({
-      lat: targetLat,
-      lon: targetLon,
-      radiusM: 20000,
+    fetchAccessibilityAll({
       topN: 1500,
       availableOnly: false,
     })
@@ -214,7 +207,13 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     return () => {
       cancelled = true
     }
-  }, [accessibilityAvailableOnly, destination, defaultMapCenter])
+  }, [accessibilityAvailableOnly])
+
+  useEffect(() => {
+    if (!accessibilityAvailableOnly) return
+    // Keep one source of truth for accessible filtering to avoid intersecting filters.
+    setAccessibilityMode(false)
+  }, [accessibilityAvailableOnly, setAccessibilityMode])
 
   useEffect(() => {
     setBaysRef(bays)
@@ -226,6 +225,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     () => new Set(accessibilityNearby.map((b) => String(b.bay_id))),
     [accessibilityNearby],
   )
+  const accessibleRulesByBayId = useMemo(() => {
+    const out = {}
+    for (const row of accessibilityNearby) {
+      const key = String(row?.bay_id ?? '')
+      if (!key) continue
+      out[key] = row
+    }
+    return out
+  }, [accessibilityNearby])
 
   const mapBays = useMemo(() => {
     if (!accessibilityAvailableOnly) return bays
@@ -243,6 +251,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   }, [proximityBays, accessibilityAvailableOnly, accessibleBayIds])
 
   const selectedBay = mapBays.find((b) => b.id === selectedBayId) || null
+  const accessibleShownCount = accessibilityAvailableOnly ? mapBays.length : 0
 
   const {
     verifiedCount,
@@ -329,6 +338,13 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plannerArrivalIso)
 
+  const scopeStrip = (
+    <div className="px-1 text-[10px] font-medium text-gray-600 dark:text-gray-300 truncate">
+      Showing: <span className="text-brand-900 dark:text-brand-900 font-semibold">{activeFilterLabel}</span>
+      {plannerArrivalIso ? ` · ${arriveDate || '-'} ${arriveTime || ''}` : ''}
+    </div>
+  )
+
   const updateArriveBy = useCallback((nextDate, nextTime) => {
     if (!nextDate || !nextTime) return
     const [ys, mos, ds] = nextDate.split('-').map(Number)
@@ -378,32 +394,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
       <div className="relative flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setLegendOpen((v) => !v)}
-          aria-pressed={legendOpen}
-          aria-label={legendOpen ? 'Hide heatmap legend' : 'Show heatmap legend'}
-          className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
-            legendOpen
-              ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-              : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-          }`}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <circle cx="7" cy="8" r="2.25" stroke="currentColor" strokeWidth="1.75" />
-            <circle cx="16.5" cy="6.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
-            <circle cx="14.5" cy="15.5" r="2.5" stroke="currentColor" strokeWidth="1.75" />
-            <circle cx="6.5" cy="16.5" r="1.75" stroke="currentColor" strokeWidth="1.75" />
-          </svg>
-          <span className="text-[10px] font-semibold leading-none">Heatmap</span>
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            setShowArrivePicker((v) => {
-              const next = !v
-              if (next) setFilterCollapsed(true)
-              return next
-            })
-          }
+          onClick={() => setShowArrivePicker((v) => !v)}
           aria-expanded={showArrivePicker}
           aria-label={showArrivePicker ? 'Hide arrive by picker' : 'Show arrive by picker'}
           className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
@@ -419,15 +410,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           <span className="text-[10px] font-semibold leading-none">Time</span>
         </button>
       </div>
-      <FilterChips
-        activeFilter={activeFilter}
-        onFilterChange={setActiveFilter}
-        collapsed={filterCollapsed}
-        onToggleCollapsed={(nextCollapsed) => {
-          if (!nextCollapsed) setShowArrivePicker(false)
-          setFilterCollapsed(nextCollapsed)
-        }}
-      />
       {showArrivePicker && (
         <div className="absolute right-0 top-[calc(100%+8px)] z-[700] w-[min(280px,calc(100vw-24px))] rounded-xl border border-gray-200/90 bg-white/98 p-2 shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/98">
           <div className="flex flex-col gap-2">
@@ -487,14 +469,14 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           colorBlindMode={colorBlindMode}
         />
 
-        {accessibilityMode && (
+        {accessibilityAvailableOnly && (
           <div
             className={`absolute left-3.5 z-[510] rounded-xl border border-brand bg-white/95 px-3 py-2 text-xs font-semibold text-brand shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100 ${
               isMobile ? 'top-[204px]' : 'top-[84px]'
             }`}
-            aria-label="Accessibility mode enabled: showing disability bays only"
+            aria-label="Accessibility mode enabled: showing accessibility overlay bays"
           >
-            Accessibility mode: DIS bays only
+            Accessibility mode: accessible bays only
           </div>
         )}
 
@@ -541,19 +523,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                   <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
                 </div>
                 <div className="flex flex-row gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setAccessibilityAvailableOnly((v) => !v)}
-                    aria-label={accessibilityAvailableOnly ? 'Disable accessibility filter' : 'Enable accessibility filter'}
-                    title={accessibilityAvailableOnly ? 'Accessibility filter ON' : 'Accessibility filter OFF'}
-                    className={`flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg px-2 font-sans text-sm font-semibold shadow-map-float transition-colors ${
-                      accessibilityAvailableOnly
-                        ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-                        : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary'
-                    }`}
-                  >
-                    ♿
-                  </button>
                   {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
                     <button
                       key={label}
@@ -568,14 +537,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 </div>
               </div>
 
-              <div className="w-full">
-                <div className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-map-float dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100">
-                  <span className="text-brand dark:text-brand-100">{activeFilterLabel}</span>
-                  {' · '}
-                  <span className="text-brand dark:text-brand-100">{arriveDate || '-'}</span>
-                  {' · '}
-                  <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
-                </div>
+              <div className="mt-1 flex w-full flex-col gap-0.5">
+                <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} accessibleOn={accessibilityAvailableOnly} onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)} />
+                {scopeStrip}
               </div>
 
               <div className="w-full min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin]">
@@ -613,19 +577,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                   <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
                 </div>
                 <div className="flex flex-row gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setAccessibilityAvailableOnly((v) => !v)}
-                    aria-label={accessibilityAvailableOnly ? 'Disable accessibility filter' : 'Enable accessibility filter'}
-                    title={accessibilityAvailableOnly ? 'Accessibility filter ON' : 'Accessibility filter OFF'}
-                    className={`flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-lg px-2 font-sans text-sm font-semibold shadow-map-float transition-colors ${
-                      accessibilityAvailableOnly
-                        ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-                        : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary'
-                    }`}
-                  >
-                    ♿
-                  </button>
                   {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
                     <button
                       key={label}
@@ -645,17 +596,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
               >
                 <div
-                  className="mt-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-map-float dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100"
+                  className="mt-1 flex flex-col gap-0.5"
                   style={{ width: `calc(100% - ${ZOOM_GROUP_WIDTH_PX}px)`, maxWidth: 'calc(580px - 72px)' }}
                 >
-                  <span>Currently showing: </span>
-                  <span className="text-brand dark:text-brand-100">{activeFilterLabel}</span>
-                  {' · '}
-                  <span>Date: </span>
-                  <span className="text-brand dark:text-brand-100">{arriveDate || '-'}</span>
-                  {' · '}
-                  <span>Time: </span>
-                  <span className="text-brand dark:text-brand-100">{arriveTime || '-'}</span>
+                  <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} accessibleOn={accessibilityAvailableOnly} onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)} />
+                  {scopeStrip}
                 </div>
               </div>
             </div>
@@ -704,21 +649,23 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         <div
           className="group absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-2.5 py-1 sm:px-3.5 sm:py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col cursor-help max-w-[45vw] sm:max-w-none"
-          aria-label="Bays with CoM restriction data on the parking feed (has_restriction_data)"
+          aria-label="Total parking bays on the live feed"
         >
           <div className="pointer-events-none absolute bottom-full left-0 mb-2 hidden w-64 rounded-lg border border-brand-800/80 bg-brand px-3 py-2.5 text-xs text-white shadow-card-lg group-hover:block dark:border-brand-300/70 dark:bg-surface-dark-secondary dark:text-gray-100">
-            <div className="font-semibold text-white dark:text-white">What are verified bays?</div>
+            <div className="font-semibold text-white dark:text-white">Total parking bays</div>
             <div className="mt-1 leading-relaxed">
-              Count matches live parking API <span className="whitespace-nowrap">has_restriction_data</span> (CoM restrictions cache).
-              All bays can be opened; full verdicts come from the evaluate API.
+              Total bays loaded from the live parking feed across the City of Melbourne.
+              {verifiedCount > 0 && (
+                <> Currently in view: {verifiedCount} with CoM restriction data{limitedCount > 0 ? `, ${limitedCount} without` : ''}.</>
+              )}
             </div>
           </div>
           <span className="text-xs sm:text-sm font-semibold text-white dark:text-brand-900 whitespace-nowrap">
-            {verifiedCount} verified bay{verifiedCount !== 1 ? 's' : ''}
+            {(bays?.length ?? 0).toLocaleString()} total bay{(bays?.length ?? 0) !== 1 ? 's' : ''}
           </span>
-          {!showLimitedBays && limitedCount > 0 && (
-            <span className="text-[10px] sm:text-[11px] font-medium text-white/65 dark:text-brand-900/55 whitespace-nowrap">
-              +{limitedCount} no CoM row
+          {accessibilityAvailableOnly && (
+            <span className="text-[10px] sm:text-xs font-semibold text-white/90 dark:text-brand-900 whitespace-nowrap">
+              {accessibleShownCount.toLocaleString()} accessible shown
             </span>
           )}
         </div>
@@ -840,6 +787,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         {selectedBay && (
           <BayDetailSheet
             bay={selectedBay}
+            accessibilityRuleFallback={accessibleRulesByBayId[String(selectedBay.id)] ?? null}
             destination={destination}
             onClose={() => setSelectedBayId(null)}
             isMobile={isMobile}

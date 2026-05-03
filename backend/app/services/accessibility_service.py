@@ -88,6 +88,87 @@ def get_accessibility_points(top_n: int = 5000) -> dict:
     }
 
 
+def _normalize_accessibility_rows_for_response(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize nullable and datetime fields to response-friendly types."""
+    out = df.copy()
+
+    if "lastupdated" in out.columns:
+        def _to_iso_or_none(v):
+            if v is None or pd.isna(v):
+                return None
+            if isinstance(v, pd.Timestamp):
+                return v.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S%z") if v.tzinfo else v.tz_localize("UTC").strftime("%Y-%m-%dT%H:%M:%S%z")
+            if isinstance(v, dt_datetime):
+                ts = pd.Timestamp(v)
+                return ts.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S%z") if ts.tzinfo else ts.tz_localize("UTC").strftime("%Y-%m-%dT%H:%M:%S%z")
+            return str(v)
+        out["lastupdated"] = out["lastupdated"].apply(_to_iso_or_none)
+
+    for nullable_str_col in ("typedesc", "plain_english", "starttime", "endtime"):
+        if nullable_str_col in out.columns:
+            out[nullable_str_col] = out[nullable_str_col].where(out[nullable_str_col].notna(), None)
+
+    if "status" in out.columns:
+        out["status"] = out["status"].where(out["status"].notna(), "Unknown").astype(str)
+
+    return out
+
+
+def get_all_disability_bays(top_n: int = 5000, available_only: bool = False) -> dict:
+    """Return all accessibility-matched bays (not destination-radius limited)."""
+    df = load_accessibility_gold().copy()
+
+    df = df[
+        df["is_disability_only"]
+        & df["lat"].notna()
+        & df["lon"].notna()
+    ].copy()
+
+    if available_only:
+        df = df[df["is_available_now"]].copy()
+
+    if df.empty:
+        return {
+            "total_candidates": 0,
+            "returned": 0,
+            "bays": [],
+        }
+
+    # Keep one representative row per bay with preference for active/available rows.
+    sort_cols: list[str] = []
+    if "is_active_now" in df.columns:
+        sort_cols.append("is_active_now")
+    if "is_available_now" in df.columns:
+        sort_cols.append("is_available_now")
+
+    if sort_cols:
+        df = df.sort_values(sort_cols, ascending=[False] * len(sort_cols))
+    df = df.drop_duplicates(subset=["bay_id"], keep="first")
+
+    total_candidates = len(df)
+    if top_n > 0:
+        df = df.head(top_n)
+
+    df = _normalize_accessibility_rows_for_response(df)
+
+    cols = [
+        "bay_id", "lat", "lon", "status", "is_available_now",
+        "typedesc", "plain_english", "duration_mins", "disabilityext_mins",
+        "starttime", "endtime", "fromday", "today",
+        "has_disability_extension", "disability_match_confidence", "lastupdated",
+    ]
+    cols = [c for c in cols if c in df.columns]
+    out_df = df[cols].copy().astype(object)
+    out_df = out_df.where(pd.notna(out_df), None)
+    bays = out_df.to_dict(orient="records")
+
+    return {
+        "total_candidates": total_candidates,
+        "returned": len(bays),
+        "bays": bays,
+    }
+
+
 def find_nearby_disability_bays(
     dest_lat: float,
     dest_lon: float,
@@ -140,29 +221,7 @@ def find_nearby_disability_bays(
     total_candidates = len(df)
     df = df.head(top_n)
 
-    # Ensure response-model-compatible string fields.
-    # FastAPI/Pydantic expects these as strings, but parquet often materializes
-    # them as pandas Timestamp objects.
-    if "lastupdated" in df.columns:
-        def _to_iso_or_none(v):
-            if v is None or pd.isna(v):
-                return None
-            if isinstance(v, pd.Timestamp):
-                return v.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S%z") if v.tzinfo else v.tz_localize("UTC").strftime("%Y-%m-%dT%H:%M:%S%z")
-            if isinstance(v, dt_datetime):
-                ts = pd.Timestamp(v)
-                return ts.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S%z") if ts.tzinfo else ts.tz_localize("UTC").strftime("%Y-%m-%dT%H:%M:%S%z")
-            return str(v)
-        df["lastupdated"] = df["lastupdated"].apply(_to_iso_or_none)
-
-    # Normalize nullable string columns for response validation.
-    for nullable_str_col in ("typedesc", "plain_english", "starttime", "endtime"):
-        if nullable_str_col in df.columns:
-            df[nullable_str_col] = df[nullable_str_col].where(df[nullable_str_col].notna(), None)
-
-    # status is required by schema; keep a safe fallback string.
-    if "status" in df.columns:
-        df["status"] = df["status"].where(df["status"].notna(), "Unknown").astype(str)
+    df = _normalize_accessibility_rows_for_response(df)
 
     cols = [
         "bay_id", "lat", "lon", "distance_m", "status", "is_available_now",
