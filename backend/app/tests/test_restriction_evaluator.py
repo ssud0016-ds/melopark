@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.services.restriction_evaluator import (
+    _build_translator_rules,
     _day_in_range,
     _effective_end_mins,
     _find_strict_starting_during_stay,
@@ -387,8 +388,8 @@ class TestEvaluateBayAt:
         result = evaluate_bay_at("1000", datetime(2026, 4, 14, 10, 0), 60, db)
         assert result["verdict"] == "no"
 
-    def test_free_restriction_active_yes(self):
-        """rule_category free (FREE signage) must be yes, not generic other/no."""
+    def test_free_restriction_category_falls_back_to_other(self):
+        """Retired branch: free category is treated as generic other/no."""
         bay = _make_bay()
         r = _make_restriction(
             typedesc="FREE",
@@ -405,11 +406,9 @@ class TestEvaluateBayAt:
         )
         db = _mock_db(bay=bay, restrictions=[r])
         result = evaluate_bay_at("1000", datetime(2026, 4, 14, 10, 0), 60, db)
-        assert result["verdict"] == "yes"
+        assert result["verdict"] == "no"
         assert result["active_restriction"]["rule_category"] == "free"
-        assert result["active_restriction"]["max_stay_mins"] is None
-        assert result["active_restriction"]["expires_at"] is None
-        assert "Special restriction" not in result["reason"]
+        assert "Special restriction" in result["reason"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -585,6 +584,7 @@ class TestWeekdayBoundary:
         arrival = datetime(2026, 4, 12, 23, 0)
         warning = _find_strict_starting_during_stay([clearway], arrival, 600)
         assert warning is not None
+        assert "rule_id" in warning
         assert warning["type"] == "clearway"
 
     def test_clearway_does_not_trigger_on_wrong_day(self):
@@ -600,6 +600,79 @@ class TestWeekdayBoundary:
         arrival = datetime(2026, 4, 18, 22, 0)
         warning = _find_strict_starting_during_stay([clearway], arrival, 720)
         assert warning is None
+
+
+class TestTranslatorRuleDedupe:
+    def test_dedupes_identical_rows(self):
+        r1 = _make_restriction(
+            id=1,
+            slot_num=1,
+            fromday=1,
+            today=5,
+            starttime=time(9, 0),
+            endtime=time(17, 0),
+            typedesc="2P",
+            rule_category="timed",
+            plain_english="Park up to 2 hours.",
+        )
+        r2 = _make_restriction(
+            id=2,
+            slot_num=1,
+            fromday=1,
+            today=5,
+            starttime=time(9, 0),
+            endtime=time(17, 0),
+            typedesc="2P",
+            rule_category="timed",
+            plain_english="Park up to 2 hours.",
+        )
+
+        cards = _build_translator_rules([r1, r2], datetime(2026, 4, 14, 10, 0), None, None)
+        # One deduped timed card + one outside card.
+        assert len(cards) == 2
+        assert cards[0]["body"] == "Park up to 2 hours."
+
+    def test_marks_upcoming_by_rule_id(self):
+        current = _make_restriction(
+            id=11,
+            slot_num=1,
+            fromday=1,
+            today=5,
+            starttime=time(9, 0),
+            endtime=time(12, 0),
+            typedesc="2P",
+            rule_category="timed",
+            plain_english="Current timed rule.",
+        )
+        upcoming = _make_restriction(
+            id=22,
+            slot_num=2,
+            fromday=1,
+            today=5,
+            starttime=time(12, 0),
+            endtime=time(18, 0),
+            typedesc="CLEARWAY",
+            rule_category="clearway",
+            is_strict=True,
+            plain_english="Upcoming clearway.",
+        )
+        warning = {
+            "rule_id": 22,
+            "type": "clearway",
+            "typedesc": "CLEARWAY",
+            "starts_at": "2026-04-14T12:00:00+10:00",
+            "minutes_into_stay": 90,
+            "description": "Upcoming clearway.",
+        }
+
+        cards = _build_translator_rules(
+            [current, upcoming],
+            datetime(2026, 4, 14, 10, 30),
+            current,
+            warning,
+        )
+        assert cards[0]["state"] == "current"
+        assert cards[1]["state"] == "upcoming"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
