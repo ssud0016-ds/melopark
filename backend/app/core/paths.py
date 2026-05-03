@@ -20,9 +20,25 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent.parent
 
 
+def _data_subdir(name: str) -> Path:
+    """Resolve data/gold or data/silver.
+
+    Some App Platform buildpack slugs omit the top-level ``data/`` tree even when
+    the Git repo has it. A duplicate under ``backend/data/`` is used as fallback.
+    """
+    root = repo_root()
+    primary = root / "data" / name
+    fallback = root / "backend" / "data" / name
+    if primary.is_dir():
+        return primary
+    if fallback.is_dir():
+        return fallback
+    return primary
+
+
 def data_gold_dir() -> Path:
-    return repo_root() / "data" / "gold"
+    return _data_subdir("gold")
 
 
 def data_silver_dir() -> Path:
-    return repo_root() / "data" / "silver"
+    return _data_subdir("silver")
