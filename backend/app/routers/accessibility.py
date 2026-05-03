@@ -5,7 +5,11 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.accessibility import AccessibilityNearbyResponse
-from app.services.accessibility_service import find_nearby_disability_bays, get_accessibility_points
+from app.services.accessibility_service import (
+    find_nearby_disability_bays,
+    get_accessibility_points,
+    get_all_disability_bays,
+)
 
 router = APIRouter(prefix="/api/accessibility", tags=["accessibility"])
 
@@ -48,6 +52,24 @@ def get_raw_accessibility_points(
     """Return raw accessibility point markers (not limited by live bay overlap)."""
     try:
         return get_accessibility_points(top_n=top_n)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Accessibility data unavailable",
+        ) from exc
+
+
+@router.get(
+    "/all",
+    summary="Get all accessibility bays",
+)
+def get_all_accessibility_bays(
+    top_n: int = Query(5000, ge=1, le=10000, description="Maximum bays to return"),
+    available_only: bool = Query(False, description="Return only bays currently available"),
+) -> dict:
+    """Return all disability-only bays (not destination-radius limited)."""
+    try:
+        return get_all_disability_bays(top_n=top_n, available_only=available_only)
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=503,
