@@ -23,16 +23,32 @@ def repo_root() -> Path:
 def _data_subdir(name: str) -> Path:
     """Resolve data/gold or data/silver.
 
-    Some App Platform buildpack slugs omit the top-level ``data/`` tree even when
-    the Git repo has it. A duplicate under ``backend/data/`` is used as fallback.
+    Some App Platform slugs ship an empty ``data/gold`` (directory exists, no files).
+    In that case we must use ``backend/data/...`` where the real parquets live.
     """
     root = repo_root()
     primary = root / "data" / name
     fallback = root / "backend" / "data" / name
-    if primary.is_dir():
+
+    def gold_usable(p: Path) -> bool:
+        if not p.is_dir():
+            return False
+        return (p / "epic5_zone_bay_counts.parquet").exists() or (
+            p / "gold_accessibility_bays.parquet"
+        ).exists()
+
+    def silver_usable(p: Path) -> bool:
+        return p.is_dir() and (p / "sensors_clean.parquet").exists()
+
+    usable = gold_usable if name == "gold" else silver_usable
+    if usable(primary):
         return primary
+    if usable(fallback):
+        return fallback
     if fallback.is_dir():
         return fallback
+    if primary.is_dir():
+        return primary
     return primary
 
 
