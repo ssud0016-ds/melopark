@@ -88,21 +88,88 @@ def get_accessibility_points(top_n: int = 5000) -> dict:
     }
 
 
+def _lastupdated_scalar_to_iso(v: object) -> str | None:
+    """Format a single lastupdated cell (fallback when vectorized parse fails)."""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    if isinstance(v, pd.Timestamp):
+        if v.tzinfo:
+            return v.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S%z")
+        return v.tz_localize("UTC").strftime("%Y-%m-%dT%H:%M:%S%z")
+    if isinstance(v, dt_datetime):
+        ts = pd.Timestamp(v)
+        if ts.tzinfo:
+            return ts.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S%z")
+        return ts.tz_localize("UTC").strftime("%Y-%m-%dT%H:%M:%S%z")
+    return str(v)
+
+
+def _vectorize_lastupdated_column(series: pd.Series) -> pd.Series:
+    """Vector parse to ISO strings; rare unparsed non-null values use scalar fallback."""
+    dt = pd.to_datetime(series, errors="coerce", utc=True)
+    result = pd.Series(index=series.index, dtype=object)
+    mask_ok = dt.notna()
+    if mask_ok.any():
+        formatted = dt.loc[mask_ok].dt.tz_convert("UTC").dt.strftime("%Y-%m-%dT%H:%M:%S%z")
+        result.loc[mask_ok] = formatted
+    mask_fb = (~mask_ok) & series.notna()
+    if mask_fb.any():
+        for idx in series.index[mask_fb]:
+            result.loc[idx] = _lastupdated_scalar_to_iso(series.loc[idx])
+    return result
+
+
+# Columns needed for /api/accessibility/all after row filter (avoid carrying wide parquet rows).
+_ALL_BAYS_PIPELINE_COLS: tuple[str, ...] = (
+    "bay_id",
+    "lat",
+    "lon",
+    "is_active_now",
+    "is_available_now",
+    "status",
+    "typedesc",
+    "plain_english",
+    "duration_mins",
+    "disabilityext_mins",
+    "starttime",
+    "endtime",
+    "fromday",
+    "today",
+    "has_disability_extension",
+    "disability_match_confidence",
+    "lastupdated",
+)
+
+
+def _dedupe_best_row_per_bay_id(df: pd.DataFrame) -> pd.DataFrame:
+    """Pick one row per bay_id, matching prior lex sort (active desc, then available desc)."""
+    if df.empty:
+        return df
+    has_active = "is_active_now" in df.columns
+    has_avail = "is_available_now" in df.columns
+    if has_active and has_avail:
+        a = df["is_active_now"].fillna(False).astype(bool).astype(int)
+        b = df["is_available_now"].fillna(False).astype(bool).astype(int)
+        score = a * 2 + b
+    elif has_active:
+        score = df["is_active_now"].fillna(False).astype(bool).astype(int)
+    elif has_avail:
+        score = df["is_available_now"].fillna(False).astype(bool).astype(int)
+    else:
+        score = pd.Series(0, index=df.index, dtype=int)
+
+    tmp = df.assign(_dedupe_score=score)
+    idx = tmp.groupby("bay_id", sort=False)["_dedupe_score"].idxmax()
+    out = tmp.loc[idx].drop(columns=["_dedupe_score"]).reset_index(drop=True)
+    return out
+
+
 def _normalize_accessibility_rows_for_response(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize nullable and datetime fields to response-friendly types."""
     out = df.copy()
 
     if "lastupdated" in out.columns:
-        def _to_iso_or_none(v):
-            if v is None or pd.isna(v):
-                return None
-            if isinstance(v, pd.Timestamp):
-                return v.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S%z") if v.tzinfo else v.tz_localize("UTC").strftime("%Y-%m-%dT%H:%M:%S%z")
-            if isinstance(v, dt_datetime):
-                ts = pd.Timestamp(v)
-                return ts.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%S%z") if ts.tzinfo else ts.tz_localize("UTC").strftime("%Y-%m-%dT%H:%M:%S%z")
-            return str(v)
-        out["lastupdated"] = out["lastupdated"].apply(_to_iso_or_none)
+        out["lastupdated"] = _vectorize_lastupdated_column(out["lastupdated"])
 
     for nullable_str_col in ("typedesc", "plain_english", "starttime", "endtime"):
         if nullable_str_col in out.columns:
@@ -123,7 +190,10 @@ def _get_all_disability_bays_cached(top_n: int, available_only: bool) -> dict:
     """
     base = load_accessibility_gold()
     mask = base["is_disability_only"] & base["lat"].notna() & base["lon"].notna()
-    df = base.loc[mask].copy()
+    use_cols = [c for c in _ALL_BAYS_PIPELINE_COLS if c in base.columns]
+    if "bay_id" not in use_cols and "bay_id" in base.columns:
+        use_cols = ["bay_id", *[c for c in use_cols if c != "bay_id"]]
+    df = base.loc[mask, use_cols].copy() if use_cols else base.loc[mask].copy()
 
     if available_only:
         df = df[df["is_available_now"]].copy()
@@ -135,16 +205,7 @@ def _get_all_disability_bays_cached(top_n: int, available_only: bool) -> dict:
             "bays": [],
         }
 
-    # Keep one representative row per bay with preference for active/available rows.
-    sort_cols: list[str] = []
-    if "is_active_now" in df.columns:
-        sort_cols.append("is_active_now")
-    if "is_available_now" in df.columns:
-        sort_cols.append("is_available_now")
-
-    if sort_cols:
-        df = df.sort_values(sort_cols, ascending=[False] * len(sort_cols))
-    df = df.drop_duplicates(subset=["bay_id"], keep="first")
+    df = _dedupe_best_row_per_bay_id(df)
 
     total_candidates = len(df)
     if top_n > 0:
