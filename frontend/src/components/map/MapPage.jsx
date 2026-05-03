@@ -188,8 +188,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setAccessibilityError(null)
 
     fetchAccessibilityAll({
-      // Cap payload for faster /api/accessibility/all responses (gateway limits).
-      topN: 800,
+      // Small batch so cold /api/accessibility/all fits DO gateway timeout.
+      topN: 200,
       availableOnly: false,
     })
       .then((data) => {
