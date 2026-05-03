@@ -30,20 +30,36 @@ def _data_subdir(name: str) -> Path:
     primary = root / "data" / name
     fallback = root / "backend" / "data" / name
 
-    def gold_usable(p: Path) -> bool:
-        if not p.is_dir():
-            return False
-        return (p / "epic5_zone_bay_counts.parquet").exists() or (
-            p / "gold_accessibility_bays.parquet"
-        ).exists()
-
     def silver_usable(p: Path) -> bool:
         return p.is_dir() and (p / "sensors_clean.parquet").exists()
 
-    usable = gold_usable if name == "gold" else silver_usable
-    if usable(primary):
+    if name == "gold":
+
+        def gold_complete(p: Path) -> bool:
+            """Pressure and accessibility both need their parquet in the same gold dir."""
+            if not p.is_dir():
+                return False
+            return (p / "epic5_zone_bay_counts.parquet").exists() and (
+                p / "gold_accessibility_bays.parquet"
+            ).exists()
+
+        if gold_complete(primary):
+            return primary
+        if gold_complete(fallback):
+            return fallback
+        # Partial tree: e.g. top-level gold only has accessibility (DO sync quirks).
+        # Prefer the tree that has Epic 5 counts (startup logs that path first).
+        if (fallback / "epic5_zone_bay_counts.parquet").exists():
+            return fallback
+        if (primary / "epic5_zone_bay_counts.parquet").exists():
+            return primary
+        if fallback.is_dir():
+            return fallback
         return primary
-    if usable(fallback):
+
+    if silver_usable(primary):
+        return primary
+    if silver_usable(fallback):
         return fallback
     if fallback.is_dir():
         return fallback
