@@ -7,9 +7,10 @@ import math
 import time
 from datetime import datetime as dt_datetime
 from functools import lru_cache
-from pathlib import Path
 
 import pandas as pd
+
+from app.core.paths import data_gold_dir, data_silver_dir
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +28,9 @@ def _all_step(phase: str, t0: float, t_prev: float, *, top_n: int, available_onl
     )
     return now
 
-ROOT = Path(__file__).resolve().parent.parent.parent.parent
-GOLD_ACCESSIBILITY_PATH = ROOT / "data" / "gold" / "gold_accessibility_bays.parquet"
-SILVER_ACCESSIBILITY_POINTS_PATH = ROOT / "data" / "silver" / "disability_parking_points_unified_clean.parquet"
-SILVER_ACCESSIBILITY_POINTS_CSV_PATH = ROOT / "data" / "silver" / "disability_parking_points_clean.parquet"
+GOLD_ACCESSIBILITY_PATH = data_gold_dir() / "gold_accessibility_bays.parquet"
+SILVER_ACCESSIBILITY_POINTS_PATH = data_silver_dir() / "disability_parking_points_unified_clean.parquet"
+SILVER_ACCESSIBILITY_POINTS_CSV_PATH = data_silver_dir() / "disability_parking_points_clean.parquet"
 
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
