@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+import time
+
 from fastapi import APIRouter, HTTPException, Query
+
+logger = logging.getLogger(__name__)
 
 from app.schemas.accessibility import AccessibilityNearbyResponse
 from app.services.accessibility_service import (
@@ -68,6 +73,12 @@ def get_all_accessibility_bays(
     available_only: bool = Query(False, description="Return only bays currently available"),
 ) -> dict:
     """Return all disability-only bays (not destination-radius limited)."""
+    t_route = time.perf_counter()
+    logger.info(
+        "accessibility_all route_enter top_n=%s available_only=%s",
+        top_n,
+        available_only,
+    )
     try:
         return get_all_disability_bays(top_n=top_n, available_only=available_only)
     except FileNotFoundError as exc:
@@ -75,3 +86,10 @@ def get_all_accessibility_bays(
             status_code=503,
             detail="Accessibility data unavailable",
         ) from exc
+    finally:
+        logger.info(
+            "accessibility_all route_total_ms=%.1f top_n=%s available_only=%s",
+            (time.perf_counter() - t_route) * 1000.0,
+            top_n,
+            available_only,
+        )
