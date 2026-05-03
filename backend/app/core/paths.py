@@ -8,8 +8,11 @@ directory that contains data/gold and data/silver (often the clone root, e.g. /w
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def repo_root() -> Path:
@@ -44,18 +47,27 @@ def _data_subdir(name: str) -> Path:
             ).exists()
 
         if gold_complete(primary):
-            return primary
-        if gold_complete(fallback):
-            return fallback
-        # Partial tree: e.g. top-level gold only has accessibility (DO sync quirks).
-        # Prefer the tree that has Epic 5 counts (startup logs that path first).
-        if (fallback / "epic5_zone_bay_counts.parquet").exists():
-            return fallback
-        if (primary / "epic5_zone_bay_counts.parquet").exists():
-            return primary
-        if fallback.is_dir():
-            return fallback
-        return primary
+            chosen = primary
+        elif gold_complete(fallback):
+            chosen = fallback
+        elif (fallback / "epic5_zone_bay_counts.parquet").exists():
+            chosen = fallback
+        elif (primary / "epic5_zone_bay_counts.parquet").exists():
+            chosen = primary
+        elif fallback.is_dir():
+            chosen = fallback
+        elif primary.is_dir():
+            chosen = primary
+        else:
+            chosen = fallback
+        logger.info(
+            "data_gold_dir=%s epic5_present=%s primary=%s fallback=%s",
+            chosen,
+            (chosen / "epic5_zone_bay_counts.parquet").exists(),
+            primary,
+            fallback,
+        )
+        return chosen
 
     if silver_usable(primary):
         return primary
