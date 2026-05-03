@@ -13,17 +13,17 @@ import logging
 import math
 from datetime import datetime, timedelta
 from functools import lru_cache
-from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from app.core.paths import data_gold_dir, data_silver_dir
+
 logger = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parent.parent.parent.parent
-GOLD = ROOT / "data" / "gold"
-SILVER = ROOT / "data" / "silver"
+GOLD = data_gold_dir()
+SILVER = data_silver_dir()
 
 MELB_TZ = ZoneInfo("Australia/Melbourne")
 

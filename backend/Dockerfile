@@ -1,12 +1,21 @@
+# Build from the repository root (not the backend/ folder only), e.g.:
+#   docker build -f backend/Dockerfile .
+# DigitalOcean: set the app "Source directory" to the repo root and Dockerfile path
+# to backend/Dockerfile so `data/gold` and `data/silver` are in the build context.
 FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
-COPY certs ./certs
+COPY backend/app ./app
+COPY backend/certs ./certs
+
+# With app code under /app/app, services resolve ROOT to "/" and read /data/gold, /data/silver.
+RUN mkdir -p /data/gold /data/silver
+COPY data/gold /data/gold
+COPY data/silver /data/silver
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8080
