@@ -29,10 +29,11 @@ describe('PressureLegend', () => {
       'span.inline-block.h-3.w-3.rounded-sm[style*="background-color"]',
     )
     expect(swatches.length).toBe(3)
+    // React/jsdom serializes hex colors to rgb() in the style attribute.
     const styles = [...swatches].map((el) => el.getAttribute('style') || '')
-    expect(styles.some((s) => s.includes('163, 236, 72'))).toBe(true)
-    expect(styles.some((s) => s.includes('255, 179, 130'))).toBe(true)
-    expect(styles.some((s) => s.includes('237, 104, 104'))).toBe(true)
+    expect(styles.some((s) => s.includes('60, 160, 40'))).toBe(true)
+    expect(styles.some((s) => s.includes('255, 165, 0'))).toBe(true)
+    expect(styles.some((s) => s.includes('255, 48, 48'))).toBe(true)
   })
 
   it('includes static dark-mode Tailwind classes on the card', () => {
