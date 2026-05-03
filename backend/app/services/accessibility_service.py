@@ -114,15 +114,16 @@ def _normalize_accessibility_rows_for_response(df: pd.DataFrame) -> pd.DataFrame
     return out
 
 
-def get_all_disability_bays(top_n: int = 5000, available_only: bool = False) -> dict:
-    """Return all accessibility-matched bays (not destination-radius limited)."""
-    df = load_accessibility_gold().copy()
+@lru_cache(maxsize=64)
+def _get_all_disability_bays_cached(top_n: int, available_only: bool) -> dict:
+    """Build /api/accessibility/all payload; cached per (top_n, available_only).
 
-    df = df[
-        df["is_disability_only"]
-        & df["lat"].notna()
-        & df["lon"].notna()
-    ].copy()
+    Gold parquet is static for the process lifetime; repeated requests must not
+    re-scan and normalize the full frame (avoids gateway timeouts).
+    """
+    base = load_accessibility_gold()
+    mask = base["is_disability_only"] & base["lat"].notna() & base["lon"].notna()
+    df = base.loc[mask].copy()
 
     if available_only:
         df = df[df["is_available_now"]].copy()
@@ -167,6 +168,11 @@ def get_all_disability_bays(top_n: int = 5000, available_only: bool = False) -> 
         "returned": len(bays),
         "bays": bays,
     }
+
+
+def get_all_disability_bays(top_n: int = 5000, available_only: bool = False) -> dict:
+    """Return all accessibility-matched bays (not destination-radius limited)."""
+    return _get_all_disability_bays_cached(top_n, available_only)
 
 
 def find_nearby_disability_bays(
