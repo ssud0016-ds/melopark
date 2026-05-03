@@ -80,9 +80,26 @@ def _data_subdir(name: str) -> Path:
     return primary
 
 
+def _bundled_data(name: str) -> Path:
+    """``backend/app/data/{gold|silver}`` — shipped next to the Python app (reliable on buildpacks)."""
+    return Path(__file__).resolve().parent.parent / "data" / name
+
+
 def data_gold_dir() -> Path:
+    b = _bundled_data("gold")
+    if (
+        b.is_dir()
+        and (b / "epic5_zone_bay_counts.parquet").exists()
+        and (b / "gold_accessibility_bays.parquet").exists()
+    ):
+        logger.info("data_gold_dir using bundled app package path %s", b)
+        return b
     return _data_subdir("gold")
 
 
 def data_silver_dir() -> Path:
+    b = _bundled_data("silver")
+    if b.is_dir() and (b / "sensors_clean.parquet").exists():
+        logger.info("data_silver_dir using bundled app package path %s", b)
+        return b
     return _data_subdir("silver")
