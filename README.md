@@ -252,11 +252,13 @@ pytest
 
 ### Backend (DigitalOcean App Platform)
 
-The backend is shipped as a Docker image built from `backend/Dockerfile`:
+The backend can run either from **Docker** (`backend/Dockerfile`) or from App Platform’s **Python buildpack** (no Dockerfile).
 
-- Base image: `python:3.12-slim`
-- **Build context: repository root** (the folder that contains both `backend/` and `data/`). Local build: `docker build -f backend/Dockerfile .` On DigitalOcean App Platform, set **Source directory** to the repo root (often `/` or empty), not `backend/`, and **Dockerfile path** to `backend/Dockerfile`. The image copies `data/gold` and `data/silver` into `/data/gold` and `/data/silver` so accessibility and pressure services can read gold/silver parquets at runtime (paths resolve to `/data/...` inside the container).
-- Run command: `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}`
+**Docker:** build from the repository root: `docker build -f backend/Dockerfile .`. On DigitalOcean set **Source directory** to the repo root (empty or `/`), **Dockerfile path** `backend/Dockerfile`. The image copies `data/gold` and `data/silver` to `/data/gold` and `/data/silver`.
+
+**Buildpack (your current setup):** there is no Dockerfile; the repo is cloned and dependencies install from `requirements.txt`. Data files must live under **`data/gold`** and **`data/silver`** inside that clone. If the app looks for `/data/gold/...` on disk, the inferred repo root is wrong—set env **`MELOPARK_DATA_ROOT`** to the clone root (try **`/workspace`** first on App Platform; it must be the folder that directly contains `data/gold`).
+
+- Run command: `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}` (or leave default if buildpack supplies it)
 - Health check path: `/health`
 - Region: Sydney (`syd1`) — co-located with the AWS RDS instance in
   `ap-southeast-2` to keep DB latency low
@@ -270,6 +272,7 @@ Required env vars on App Platform:
 | `ENVIRONMENT` | `production` (hides `/docs` and `/redoc`) |
 | `CORS_ORIGINS` | Comma-separated list of exact origins, e.g. the Vercel production URL |
 | `CORS_ORIGIN_REGEX` | Regex for dynamic origins, e.g. `https://(.*\.)?vercel\.app` |
+| `MELOPARK_DATA_ROOT` | *(Buildpack only if gold/silver paths break.)* Absolute path to repo root containing `data/gold` and `data/silver`. Example: `/workspace` |
 
 The AWS RDS public CA bundle (`backend/certs/global-bundle.pem`) is committed
 to the repo so the Docker build context can include it. The bundle contains
