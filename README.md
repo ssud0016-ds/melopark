@@ -256,7 +256,7 @@ The backend can run either from **Docker** (`backend/Dockerfile`) or from App Pl
 
 **Docker:** build from the repository root: `docker build -f backend/Dockerfile .`. On DigitalOcean set **Source directory** to the repo root (empty or `/`), **Dockerfile path** `backend/Dockerfile`. The image copies `data/gold` and `data/silver` to `/data/gold` and `/data/silver`.
 
-**Buildpack (your current setup):** there is no Dockerfile; the repo is cloned and dependencies install from `requirements.txt`. Data files must live under **`data/gold`** and **`data/silver`** inside that clone. If the app looks for `/data/gold/...` on disk, the inferred repo root is wrong—set env **`MELOPARK_DATA_ROOT`** to the clone root (try **`/workspace`** first on App Platform; it must be the folder that directly contains `data/gold`).
+**Buildpack (your current setup):** there is no Dockerfile; the repo is cloned and dependencies install from `requirements.txt`. Data files must live under **`data/gold`** and **`data/silver`** inside that clone. If the app looks for `/data/gold/...` on disk, the inferred repo root is wrong—set env **`MELOPARK_DATA_ROOT`** to the clone root (try **`/workspace`** first on App Platform; it must be the folder that directly contains `data/gold`). If the platform slug omits the top-level **`data/`** folder even though Git has it, the API falls back to **`backend/data/gold`** and **`backend/data/silver`** (small copies committed for production).
 
 - Run command: `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}` (or leave default if buildpack supplies it)
 - Health check path: `/health`
