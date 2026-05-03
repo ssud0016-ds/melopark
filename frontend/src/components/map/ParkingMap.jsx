@@ -10,7 +10,6 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
-import PressureLayer from '../pressure/PressureLayer'
 import {
   bayLatLng,
   destinationLatLng,
@@ -20,6 +19,8 @@ import {
   DESTINATION_MAP_ZOOM,
 } from '../../utils/mapGeo'
 import { bayHeading } from '../../utils/bayLabels'
+import BusyNowVectorLayer from '../busyNow/BusyNowVectorLayer'
+import BusyNowTrendMarkers from '../busyNow/BusyNowTrendMarkers'
 const CLUSTER_ZOOM_CUTOFF = 18
 
 /** Mobile cluster-mode hint (non-interactive). */
@@ -190,6 +191,36 @@ function MapBoundsNotifier({ onBoundsChange }) {
   return null
 }
 
+/**
+ * Inner helper that bridges react-leaflet context (useMap) into BusyNowTrendMarkers.
+ * Tracks viewport bounds internally so BusyNowTrendMarkers gets fresh bounds on
+ * every moveend/zoomend without adding state to ParkingMap.
+ */
+function TrendMarkersController({ busyNow }) {
+  const map = useMap()
+  const [bounds, setBounds] = useState(null)
+  useEffect(() => {
+    if (!map) return
+    const report = () => {
+      const b = map.getBounds()
+      setBounds({
+        west: b.getWest(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        north: b.getNorth(),
+      })
+    }
+    report()
+    map.on('moveend', report)
+    map.on('zoomend', report)
+    return () => {
+      map.off('moveend', report)
+      map.off('zoomend', report)
+    }
+  }, [map])
+  return <BusyNowTrendMarkers map={map} busyNow={busyNow} bounds={bounds} />
+}
+
 function destinationDivIcon(name) {
   const esc = String(name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\"/g, '&quot;')
   return L.divIcon({
@@ -197,6 +228,24 @@ function destinationDivIcon(name) {
     html: `<div style="display:flex;flex-direction:column;align-items:center;width:180px;margin-left:-90px;margin-top:-44px;text-align:center;pointer-events:none;">
       <span style="font-size:30px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2))">📍</span>
       <span style="margin-top:2px;background:#35338c;color:#fff;font:700 11px Inter,system-ui,sans-serif;padding:4px 10px;border-radius:8px;max-width:180px;overflow:hidden;text-overflow:ellipsis;">${esc}</span>
+    </div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  })
+}
+
+/** Distinct alt-zone marker (Phase 2 — A11). Diamond glyph + amber chip so it's
+ *  visually separable from the primary destination pin above. */
+function altPinDivIcon(name) {
+  const esc = String(name || 'Alternative zone')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/\"/g, '&quot;')
+  return L.divIcon({
+    className: 'mp-alt-marker',
+    html: `<div style="display:flex;flex-direction:column;align-items:center;width:180px;margin-left:-90px;margin-top:-44px;text-align:center;pointer-events:none;">
+      <span style="font-size:26px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2))">🔶</span>
+      <span style="margin-top:2px;background:#b45309;color:#fff;font:700 11px Inter,system-ui,sans-serif;padding:4px 10px;border-radius:8px;max-width:180px;overflow:hidden;text-overflow:ellipsis;">${esc}</span>
     </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
@@ -221,11 +270,12 @@ export default function ParkingMap({
   destZoom = DESTINATION_MAP_ZOOM,
   isMobile = false,
   hideHint = false,
-  pressureHulls = null,
-  pressureZones = null,
-  pressureEnabled = false,
-  onPressureZoneClick = null,
+  busyNow = false,
+  busyNowManifest = null,
+  onSegmentClick = null,
   colorBlindMode = false,
+  altPinPos = null,
+  dimRadiusM = 600,
 }) {
   const [isDark, setIsDark] = useState(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -242,6 +292,11 @@ export default function ParkingMap({
   const destIcon = useMemo(
     () => (destination ? destinationDivIcon(destination.name) : null),
     [destination],
+  )
+
+  const altIcon = useMemo(
+    () => (altPinPos ? altPinDivIcon(altPinPos.name) : null),
+    [altPinPos],
   )
 
   const destLatLng = destination ? destinationLatLng(destination) : null
@@ -286,6 +341,7 @@ export default function ParkingMap({
         if (bay.type === 'available') prev.available += 1
         if (bay.type === 'occupied') prev.occupied += 1
         if (bay.type === 'trap') prev.trap += 1
+        if (!prev.name && bay.name) prev.name = bay.name
       } else {
         groups.set(key, {
           key,
@@ -295,6 +351,7 @@ export default function ParkingMap({
           available: bay.type === 'available' ? 1 : 0,
           occupied: bay.type === 'occupied' ? 1 : 0,
           trap: bay.type === 'trap' ? 1 : 0,
+          name: bay.name || null,
         })
       }
     })
@@ -307,6 +364,7 @@ export default function ParkingMap({
       available: g.available,
       occupied: g.occupied,
       trap: g.trap,
+      name: g.name,
     }))
   }, [baysForClustering, zoomLevel, destination, proximityBays])
 
@@ -323,21 +381,22 @@ export default function ParkingMap({
       isDark,
       colorBlindMode,
     })
-    const ring = '#ffffff'
+
+    const size = 42
 
     const fontSize = labelLen >= 10 ? 7 : labelLen >= 8 ? 8 : labelLen >= 6 ? 9 : 11
     return L.divIcon({
       className: 'mp-cluster-icon',
       html: `<div style="
-        box-sizing:border-box;width:42px;height:42px;border-radius:999px;
-        background:${bg};border:2px solid ${ring};
+        box-sizing:border-box;width:${size}px;height:${size}px;border-radius:999px;
+        background:${bg};border:2px solid #ffffff;
         display:flex;align-items:center;justify-content:center;
         color:${text};font-family:Inter,system-ui,sans-serif;font-weight:700;font-size:${fontSize}px;line-height:1;
         letter-spacing:-0.1px;white-space:nowrap;overflow:hidden;text-align:center;
         box-shadow:0 2px 10px rgba(0,0,0,0.2);
       ">${label}</div>`,
-      iconSize: [42, 42],
-      iconAnchor: [21, 21],
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
     })
   }
 
@@ -373,15 +432,6 @@ export default function ParkingMap({
         <MapZoomTracker onZoomChange={setZoomLevel} />
         <MapEmptyClick onEmptyClick={() => onBayClick(null)} />
 
-        {pressureEnabled && pressureHulls && pressureZones?.length > 0 && (
-          <PressureLayer
-            hulls={pressureHulls}
-            zones={pressureZones}
-            isDark={isDark}
-            onZoneClick={onPressureZoneClick}
-          />
-        )}
-
         {destination && destLatLng && (
           <Circle
             center={[destLatLng.lat, destLatLng.lng]}
@@ -396,6 +446,18 @@ export default function ParkingMap({
             }}
           />
         )}
+
+        {busyNow && busyNowManifest && (
+          <BusyNowVectorLayer
+            manifest={busyNowManifest}
+            colorBlindMode={colorBlindMode}
+            destination={destination ? destinationLatLng(destination) : null}
+            dimRadiusM={dimRadiusM}
+            onSegmentClick={onSegmentClick}
+          />
+        )}
+
+        {busyNow && <TrendMarkersController busyNow={busyNow} />}
 
         {zoomLevel < CLUSTER_ZOOM_CUTOFF &&
           clustered.map((c) => (
@@ -511,6 +573,17 @@ export default function ParkingMap({
 
         {destination && destLatLng && destIcon && (
           <Marker position={[destLatLng.lat, destLatLng.lng]} icon={destIcon} interactive={false} />
+        )}
+
+        {altPinPos && altIcon && (
+          <Marker
+            position={[altPinPos.lat, altPinPos.lng]}
+            icon={altIcon}
+            interactive={false}
+            data-testid="alt-pin-marker"
+          >
+            <Popup>{altPinPos.name}</Popup>
+          </Marker>
         )}
 
         <div

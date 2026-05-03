@@ -1,15 +1,18 @@
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
+import { createRoot } from 'react-dom/client'
 import ParkingMap from './ParkingMap'
 import OnboardingOverlay from './OnboardingOverlay'
 import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import FilterChips from '../feedback/FilterChips'
-import DecisionCard from '../pressure/DecisionCard'
-import ZoneDetailPanel from '../pressure/ZoneDetailPanel'
-import PressureLegend from '../pressure/PressureLegend'
-import TimeHorizonSelector from '../pressure/TimeHorizonSelector'
+import BusyNowPanel from '../busyNow/BusyNowPanel'
+import SegmentPopup from '../busyNow/SegmentPopup'
+import { segmentDetailFromApi } from '../busyNow/segmentDetailFromApi'
+import { useBusyNow } from '../../hooks/useBusyNow'
+import { useQuietestSegments } from '../../hooks/useQuietestSegments'
+import { buildSegmentPopupDom } from '../busyNow/segmentPopupDom'
+import { fetchSegmentDetail } from '../../services/apiPressure'
 import { useMapState } from '../../hooks/useMapState'
-import { usePressure, useAlternatives } from '../../hooks/usePressure'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
 import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
@@ -19,6 +22,7 @@ import {
   melbourneWallClockToAwareIso,
   toMelbourneDateTimeInputValue,
 } from '../../utils/plannerTime'
+import L from 'leaflet'
 import { getStatusFillColor } from './ParkingMap'
 
 function splitMelbourneDateTimeParts(iso) {
@@ -30,6 +34,9 @@ function splitMelbourneDateTimeParts(iso) {
 
 export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry }) {
   const mapRef = useRef(null)
+  const segmentPopupRef = useRef(null)
+  const segmentReactRootRef = useRef(null)
+  const segmentFetchAbortRef = useRef(null)
 
   const {
     selectedBayId,
@@ -58,32 +65,97 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   /** Bump to force sheet form reset when banner or Clear resets live mode. */
   const [plannerResetNonce, setPlannerResetNonce] = useState(0)
 
-  // ── Epic 5: Pressure map state ──
-  const [pressureEnabled, setPressureEnabled] = useState(false)
-  const [selectedZone, setSelectedZone] = useState(null)
-  const { zones: pressureZones, hulls: pressureHulls, horizon, setHorizon, loading: pressureLoading } =
-    usePressure(pressureEnabled)
-  const { data: alternativesData } = useAlternatives(
-    destination?.lat, destination?.lng, null, !!(pressureEnabled && destination),
-  )
+  // ── Parking chance context (internal vector-tile street pressure layer) ──
+  const { manifest: busyNowManifest, status: busyNowStatus } = useBusyNow(true)
+  const [colorBlindMode, setColorBlindMode] = useState(false)
 
-  const togglePressure = useCallback(() => {
-    setPressureEnabled((v) => {
-      if (!v) setMapBaysAtPlannedTime(false) // mutual exclusion with planner
-      return !v
-    })
-  }, [])
+  const parkingChanceActive =
+    busyNowStatus === 'ready' &&
+    busyNowManifest != null &&
+    busyNowManifest.total_segments > 0
 
-  const handlePressureZoneClick = useCallback((zone) => {
-    setSelectedZone(zone)
-  }, [])
+  // Alternative-pin position (Phase 2 — A11). Set when the user clicks an
+  // alternative zone in the BusyNowPanel; cleared when destination changes.
+  const [altPinPos, setAltPinPos] = useState(null)
 
   const handleAlternativeClick = useCallback((alt) => {
-    setSelectedZone(null)
+    if (!alt) return
+    const lat = alt.centroid_lat
+    const lon = alt.centroid_lon
+    if (typeof lat !== 'number' || typeof lon !== 'number') return
     if (mapRef.current) {
-      mapRef.current.flyTo([alt.centroid_lat, alt.centroid_lon], 17, { duration: 0.8 })
+      mapRef.current.flyTo([lat, lon], 18, { duration: 0.8 })
     }
+    setAltPinPos({ lat, lng: lon, name: alt.name || alt.zone_name || 'Alternative zone' })
   }, [])
+
+  // Clear alt pin whenever the destination changes (incl. clear).
+  useEffect(() => {
+    setAltPinPos(null)
+  }, [destination])
+
+  const handleSegmentClick = useCallback(
+    (props, latlng) => {
+      if (!mapRef.current || !latlng) return
+      const map = mapRef.current
+
+      segmentFetchAbortRef.current?.abort()
+      const ac = new AbortController()
+      segmentFetchAbortRef.current = ac
+
+      if (segmentReactRootRef.current) {
+        try {
+          segmentReactRootRef.current.unmount()
+        } catch (_e) {
+          /* noop */
+        }
+        segmentReactRootRef.current = null
+      }
+
+      const skeleton = buildSegmentPopupDom(props)
+      const popup = L.popup().setLatLng(latlng).setContent(skeleton).openOn(map)
+      segmentPopupRef.current = popup
+
+      const cleanupReact = () => {
+        if (segmentReactRootRef.current) {
+          try {
+            segmentReactRootRef.current.unmount()
+          } catch (_e) {
+            /* noop */
+          }
+          segmentReactRootRef.current = null
+        }
+      }
+      popup.on('remove', cleanupReact)
+
+      const segmentId = props?.id != null ? String(props.id) : null
+      if (!segmentId) return
+
+      fetchSegmentDetail(segmentId, { signal: ac.signal })
+        .then((apiDetail) => {
+          if (segmentPopupRef.current !== popup) return
+          const detail = segmentDetailFromApi(apiDetail)
+          if (!detail) return
+          const wrap = document.createElement('div')
+          const root = createRoot(wrap)
+          segmentReactRootRef.current = root
+          root.render(
+            <SegmentPopup
+              detail={detail}
+              colorBlindMode={colorBlindMode}
+              onRequestClose={() => {
+                map.closePopup(popup)
+              }}
+            />,
+          )
+          popup.setContent(wrap)
+        })
+        .catch((err) => {
+          if (err?.name === 'AbortError') return
+        })
+    },
+    [colorBlindMode],
+  )
 
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -123,6 +195,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
+
+  // Phase 4: quietest segments in viewport (skip when destination is active)
+  const { segments: quietStreets } = useQuietestSegments({
+    bounds: debouncedBounds,
+    enabled: parkingChanceActive && !destination,
+  })
 
   const plannerParams = useMemo(() => {
     if (!plannerArrivalIso || plannerDurationMins == null) return null
@@ -283,7 +361,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   }, [])
 
   const [legendOpen, setLegendOpen] = useState(false)
-  const [colorBlindMode, setColorBlindMode] = useState(false)
   useEffect(() => {
     if (!isMobile) setLegendOpen(true)
     else setLegendOpen(false)
@@ -347,23 +424,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   const mapTopRightControls = (
     <div className="relative flex flex-nowrap items-start gap-2">
-      <button
-        type="button"
-        onClick={togglePressure}
-        aria-pressed={pressureEnabled}
-        aria-label={pressureEnabled ? 'Hide parking pressure' : 'Show parking pressure'}
-        className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
-          pressureEnabled
-            ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-            : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-        }`}
-        title={pressureEnabled ? 'Pressure map: ON' : 'Pressure map: OFF'}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path d="M3 17h4V9H3v8zm6 0h4V3H9v14zm6 0h4v-6h-4v6z" fill="currentColor" />
-        </svg>
-        <span className="text-[9px] font-semibold leading-none">Pressure</span>
-      </button>
       <button
         type="button"
         onClick={() => setColorBlindMode((v) => !v)}
@@ -452,11 +512,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           destZoom={destinationMapZoom}
           isMobile={isMobile}
           hideHint={isMobile && legendOpen}
-          pressureEnabled={pressureEnabled}
-          pressureHulls={pressureHulls}
-          pressureZones={pressureZones}
-          onPressureZoneClick={handlePressureZoneClick}
+          busyNow={parkingChanceActive}
+          busyNowManifest={busyNowManifest}
+          onSegmentClick={handleSegmentClick}
           colorBlindMode={colorBlindMode}
+          altPinPos={altPinPos}
+          dimRadiusM={600}
         />
 
         {accessibilityMode && (
@@ -612,7 +673,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             <span>
               {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across&nbsp;
               {proxFreeBays} {proxModeLabel}
-              {proxFreeBays !== 1 ? 's' : ''} within 400 m of {destination.name}
+              {proxFreeBays !== 1 ? 's' : ''} within 600 m of {destination.name}
             </span>
             {!showLimitedBays && proxLimitedCount > 0 && (
               <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
@@ -734,33 +795,16 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           )
         })()}
 
-        {/* ── Epic 5: Pressure overlays ── */}
-        {pressureEnabled && (
-          <div className="absolute left-3.5 top-[168px] z-[520] sm:top-[128px]">
-            <TimeHorizonSelector value={horizon} onChange={setHorizon} />
-          </div>
-        )}
-
-        {pressureEnabled && (
+        {busyNowStatus !== 'idle' && (
           <div className="absolute bottom-28 left-3.5 z-[510] sm:bottom-20">
-            <PressureLegend />
-          </div>
-        )}
-
-        {selectedZone && !destination && (
-          <div className="absolute bottom-28 right-3 z-[520] w-72 sm:bottom-6">
-            <ZoneDetailPanel zone={selectedZone} onClose={() => setSelectedZone(null)} />
-          </div>
-        )}
-
-        {pressureEnabled && destination && alternativesData && (
-          <div className="absolute bottom-28 right-3 z-[520] w-80 sm:bottom-6">
-            <DecisionCard
-              target={alternativesData.target}
-              alternatives={alternativesData.alternatives}
-              destinationName={destination?.name || destination?.label}
+            <BusyNowPanel
+              manifest={busyNowManifest}
+              status={busyNowStatus}
+              destination={destination}
               onAlternativeClick={handleAlternativeClick}
-              onClose={() => setPressureEnabled(false)}
+              colorBlindMode={colorBlindMode}
+              quietStreets={quietStreets}
+              onStreetClick={(pt) => mapRef.current?.flyTo([pt.lat, pt.lng], 17)}
             />
           </div>
         )}
