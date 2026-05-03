@@ -255,7 +255,7 @@ pytest
 The backend is shipped as a Docker image built from `backend/Dockerfile`:
 
 - Base image: `python:3.12-slim`
-- Build context: the `backend/` directory (set as the App Platform source dir)
+- **Build context: repository root** (the folder that contains both `backend/` and `data/`). Local build: `docker build -f backend/Dockerfile .` On DigitalOcean App Platform, set **Source directory** to the repo root (often `/` or empty), not `backend/`, and **Dockerfile path** to `backend/Dockerfile`. The image copies `data/gold` and `data/silver` into `/data/gold` and `/data/silver` so accessibility and pressure services can read gold/silver parquets at runtime (paths resolve to `/data/...` inside the container).
 - Run command: `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}`
 - Health check path: `/health`
 - Region: Sydney (`syd1`) — co-located with the AWS RDS instance in
