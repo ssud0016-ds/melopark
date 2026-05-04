@@ -1,12 +1,10 @@
-import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
+import { Suspense, lazy, useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
 import ParkingMap from './ParkingMap'
-import OnboardingOverlay from './OnboardingOverlay'
 import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import FilterChips from '../feedback/FilterChips'
 import BusyNowPanel from '../busyNow/BusyNowPanel'
-import SegmentPopup from '../busyNow/SegmentPopup'
 import BottomSheet, { SNAP_PEEK, SNAP_HALF } from '../layout/BottomSheet'
 import { segmentDetailFromApi } from '../busyNow/segmentDetailFromApi'
 import { useBusyNow } from '../../hooks/useBusyNow'
@@ -33,6 +31,8 @@ const CHANCE_TEXT = {
   high: 'Hard to park',
   unknown: 'No live estimate',
 }
+
+const OnboardingOverlay = lazy(() => import('./OnboardingOverlay'))
 
 function AltPinCard({ altPinPos, destination, onClear, compact = false }) {
   const parts = (altPinPos.subtitle || '').split(' · ')
@@ -125,10 +125,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setDurationFilter,
     customDuration,
     setCustomDuration,
-    filterTime,
-    setFilterTime,
-    filterDate,
-    setFilterDate,
+    filterTime = '',
+    setFilterTime = () => {},
+    filterDate = '',
+    setFilterDate = () => {},
     destination,
     pickDestination,
     clearDestination,
@@ -161,11 +161,46 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   // ── Parking chance context (internal vector-tile street pressure layer) ──
   const { manifest: busyNowManifest, status: busyNowStatus } = useBusyNow(true)
   const [colorBlindMode, setColorBlindMode] = useState(false)
+  const [overlayGateOpen, setOverlayGateOpen] = useState(false)
+  const [showMapVeil, setShowMapVeil] = useState(true)
 
-  const parkingChanceActive =
+  const parkingChanceDataReady =
     busyNowStatus === 'ready' &&
     busyNowManifest != null &&
     busyNowManifest.total_segments > 0
+  const parkingChanceActive = parkingChanceDataReady && overlayGateOpen
+
+  useEffect(() => {
+    if (overlayGateOpen || typeof window === 'undefined') return undefined
+    const openGate = () => setOverlayGateOpen(true)
+    const timerId = window.setTimeout(openGate, 800)
+    const opts = { passive: true, once: true }
+    window.addEventListener('pointerdown', openGate, opts)
+    window.addEventListener('wheel', openGate, opts)
+    window.addEventListener('keydown', openGate, { once: true })
+    return () => {
+      window.clearTimeout(timerId)
+      window.removeEventListener('pointerdown', openGate)
+      window.removeEventListener('wheel', openGate)
+      window.removeEventListener('keydown', openGate)
+    }
+  }, [overlayGateOpen])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !showMapVeil) return undefined
+    const closeVeil = () => setShowMapVeil(false)
+    const timerId = window.setTimeout(closeVeil, 900)
+    const opts = { passive: true, once: true }
+    window.addEventListener('pointerdown', closeVeil, opts)
+    window.addEventListener('wheel', closeVeil, opts)
+    window.addEventListener('keydown', closeVeil, { once: true })
+    return () => {
+      window.clearTimeout(timerId)
+      window.removeEventListener('pointerdown', closeVeil)
+      window.removeEventListener('wheel', closeVeil)
+      window.removeEventListener('keydown', closeVeil)
+    }
+  }, [showMapVeil])
 
   // Alternative-pin position (Phase 2 — A11). Set when the user clicks an
   // alternative zone in the BusyNowPanel; cleared when destination changes.
@@ -275,14 +310,16 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
       const segmentId = props?.id != null ? String(props.id) : null
       if (!segmentId) return
 
+      const segmentPopupModule = import('../busyNow/SegmentPopup')
       fetchSegmentDetail(segmentId, {
         signal: ac.signal,
         dataVersion: busyNowManifest?.data_version ?? busyNowManifest?.minute_bucket ?? null,
       })
-        .then((apiDetail) => {
+        .then(async (apiDetail) => {
           if (segmentPopupRef.current !== popup) return
           const detail = segmentDetailFromApi(apiDetail)
           if (!detail) return
+          const { default: SegmentPopup } = await segmentPopupModule
           const wrap = document.createElement('div')
           const root = createRoot(wrap)
           segmentReactRootRef.current = root
@@ -384,7 +421,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   // Quietest segments in viewport (single fetch, limit 150 — panel uses first 3, trend markers use full list).
   const { segments: quietSegmentsAll } = useQuietestSegments({
     bounds: debouncedBounds,
-    enabled: parkingChanceActive,
+    enabled: parkingChanceActive && parkingChanceDataReady,
   })
   const quietStreets = useMemo(() => {
     const levelScore = { low: 0, medium: 1, high: 2, unknown: 3 }
@@ -905,13 +942,40 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           accessibilityBayIds={accessibleBayIds}
         />
 
-        {busyNowStatus === 'loading' && !apiLoading && (
+        {showMapVeil && (
+          <div className="pointer-events-none absolute inset-0 z-[395]" aria-hidden>
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-50/95 via-white/88 to-indigo-50/80 dark:from-slate-950/92 dark:via-slate-900/86 dark:to-indigo-950/70" />
+            <div className="absolute inset-0 overflow-hidden">
+              <div className="absolute -left-[35%] top-0 h-full w-[55%] bg-gradient-to-r from-transparent via-white/45 to-transparent dark:via-white/15 animate-[pulse_1.3s_ease-in-out_infinite]" />
+            </div>
+            <div className="absolute left-1/2 top-[44%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/40 bg-white/55 px-5 py-3 shadow-[0_10px_40px_rgba(15,23,42,0.18)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/50">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300/80">
+                MeloPark Live
+              </div>
+              <div className="mt-1 text-xs font-medium text-slate-700 dark:text-slate-100">
+                Preparing premium map experience…
+              </div>
+            </div>
+          </div>
+        )}
+
+        {busyNowStatus !== 'idle' && !parkingChanceActive && !apiLoading && (
           <div
-            className="absolute bottom-20 left-1/2 z-[480] -translate-x-1/2 pointer-events-none rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium text-white shadow-md dark:bg-black/70"
+            className="absolute bottom-20 left-1/2 z-[480] -translate-x-1/2 pointer-events-none"
             role="status"
             aria-live="polite"
           >
-            Loading parking pressure…
+            <div className="rounded-2xl border border-white/20 bg-gradient-to-r from-slate-950/80 via-slate-900/80 to-slate-950/80 px-4 py-2 text-[11px] font-medium tracking-wide text-white shadow-[0_10px_35px_rgba(2,6,23,0.45)] backdrop-blur-md dark:border-white/15">
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                <span className="uppercase text-white/85">Live street intelligence</span>
+              </div>
+              <div className="mt-0.5 text-[10px] text-white/75">
+                {busyNowStatus === 'loading'
+                  ? 'Warming map pressure data…'
+                  : 'Optimizing first paint, overlay starts now…'}
+              </div>
+            </div>
           </div>
         )}
 
@@ -1278,7 +1342,13 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
         )}
 
         {showOnboarding && (
-          <OnboardingOverlay onPick={handleOnboardingPick} onSkip={dismissOnboarding} busyNowManifest={busyNowManifest} />
+          <Suspense fallback={null}>
+            <OnboardingOverlay
+              onPick={handleOnboardingPick}
+              onSkip={dismissOnboarding}
+              busyNowManifest={busyNowManifest}
+            />
+          </Suspense>
         )}
 
         {selectedBay && (
