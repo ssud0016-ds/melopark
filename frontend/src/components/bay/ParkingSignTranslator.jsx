@@ -84,15 +84,15 @@ function condenseHeading(heading) {
   const range = heading.match(/^(\w+) to (\w+) from (.+?) to (.+)$/)
   if (range) {
     return {
-      days: `${DAY_SHORT[range[1]] || range[1]}–${DAY_SHORT[range[2]] || range[2]}`,
-      window: `${condenseTime(range[3])}–${condenseTime(range[4])}`,
+      days: `${DAY_SHORT[range[1]] || range[1]}-${DAY_SHORT[range[2]] || range[2]}`,
+      window: `${condenseTime(range[3])}-${condenseTime(range[4])}`,
     }
   }
   const single = heading.match(/^(\w+) from (.+?) to (.+)$/)
   if (single) {
     return {
       days: DAY_SHORT[single[1]] || single[1],
-      window: `${condenseTime(single[2])}–${condenseTime(single[3])}`,
+      window: `${condenseTime(single[2])}-${condenseTime(single[3])}`,
     }
   }
   return { days: heading, window: '' }
@@ -146,7 +146,7 @@ function RuleChip({ rule, tone, isOpen, onToggle }) {
       type="button"
       onClick={onToggle}
       aria-expanded={isOpen}
-      title={`${rule.heading} — ${cleanBody}`}
+      title={`${rule.heading}: ${cleanBody}`}
       className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${toneClass}`}
     >
       <div className="flex items-center gap-2">

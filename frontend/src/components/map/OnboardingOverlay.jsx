@@ -20,13 +20,13 @@ const DURATION_CHIPS = [
 ]
 
 const chipBase =
-  'rounded-full border px-3 py-2 text-xs font-bold transition cursor-pointer'
+  'rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide transition cursor-pointer'
 const chipActive =
   'border-brand bg-brand text-white'
 const chipIdle =
   'border-gray-200/80 bg-white text-gray-500 hover:border-brand-300 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-300'
 
-export default function OnboardingOverlay({ onPick, onSkip }) {
+export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest }) {
   const [step, setStep] = useState('hero')
   const [localDestination, setLocalDestination] = useState(null)
   const [arriveByLocal, setArriveByLocal] = useState(() => toMelbourneDateTimeInputValue(null))
@@ -34,6 +34,8 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
   const [durationReq, setDurationReq] = useState(null)
   const [customDurationReq, setCustomDurationReq] = useState(60)
   const isHero = step === 'hero'
+
+  const hasPressureData = busyNowManifest != null && (busyNowManifest.total_segments ?? 0) > 0
 
   const handlePick = (item) => {
     setLocalDestination(item)
@@ -45,6 +47,20 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
 
   const handleContinue = () => {
     if (!localDestination) return
+    if (hasPressureData && step === 'destination') {
+      setStep('pressure')
+      return
+    }
+    const arrivalIso = arriveByLocal ? melbourneAwareIsoFromDateTimeLocal(arriveByLocal) : null
+    onPick(localDestination, arrivalIso, {
+      statusFilter: statusReq,
+      durationFilter: durationReq,
+      customDuration: customDurationReq,
+      accessible: statusReq === 'accessible',
+    })
+  }
+
+  const handlePressureDone = () => {
     const arrivalIso = arriveByLocal ? melbourneAwareIsoFromDateTimeLocal(arriveByLocal) : null
     onPick(localDestination, arrivalIso, {
       statusFilter: statusReq,
@@ -75,6 +91,7 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
         {step === 'hero' ? (
           <>
             <div className="text-white text-lg font-semibold">Welcome to</div>
+
             <div className="mt-1 flex items-center gap-3">
               <div className="text-[44px] leading-none font-extrabold tracking-tight text-white">
                 MelO<span className="text-accent">Park</span>
@@ -96,7 +113,7 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
               Let&apos;s get started now
             </button>
           </>
-        ) : (
+        ) : step === 'destination' ? (
           <>
             <div className="mb-3 text-[34px] font-bold tracking-tight text-brand">
               Where are you heading?
@@ -192,7 +209,55 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
                 disabled={!localDestination}
                 className="min-w-[146px] rounded-full border border-brand bg-brand px-6 py-3 text-sm font-bold text-white shadow-card cursor-pointer hover:bg-brand-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Continue
+                {hasPressureData ? 'Next' : 'Continue'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mb-2 text-[26px] font-bold tracking-tight text-brand">
+              What you'll see on the map
+            </div>
+            <div className="mb-5 text-sm font-medium text-gray-500 dark:text-gray-400">
+              Street colour = parking chance right now
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {[
+                { color: '#22c55e', label: 'Good chance of finding a spot' },
+                { color: '#f97316', label: 'Getting busy' },
+                { color: '#ef4444', label: 'Hard to park right now' },
+                { color: '#cbd5e1', label: 'No live data for this street' },
+              ].map(({ color, label }) => (
+                <div key={label} className="flex items-center gap-3">
+                  <span
+                    className="h-1.5 w-8 shrink-0 rounded-full"
+                    style={{ backgroundColor: color }}
+                    aria-hidden
+                  />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-700/50 dark:bg-emerald-950/50 dark:text-emerald-100">
+              The panel below the map shows quieter zones near your destination. Tap any coloured street for details.
+            </div>
+
+            <div className="mt-8 flex items-center justify-between gap-4">
+              <button
+                type="button"
+                onClick={onSkip}
+                className="rounded-full border border-gray-300 bg-white px-5 py-3 text-sm font-bold text-gray-500 shadow-sm transition hover:border-gray-400 cursor-pointer"
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                onClick={handlePressureDone}
+                className="rounded-full border border-brand bg-brand px-6 py-3 text-sm font-bold text-white shadow-card cursor-pointer hover:bg-brand-light transition-colors"
+              >
+                Got it
               </button>
             </div>
           </>
@@ -201,3 +266,4 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
     </div>
   )
 }
+

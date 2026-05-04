@@ -223,7 +223,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
           <div className="mb-3 text-gray-300 dark:text-gray-500"><SearchIcon size={40} /></div>
           <div className="text-base font-bold text-gray-900 dark:text-white mb-2">No results found</div>
           <div className="text-sm text-gray-500 leading-relaxed mb-4">
-            We couldn't find "{query}". MeloPark covers <span className="font-semibold text-gray-700 dark:text-gray-300">Melbourne CBD only</span> – try a landmark like "Flinders Street" or "Melbourne Central".
+            We couldn't find "{query}". MeloPark covers <span className="font-semibold text-gray-700 dark:text-gray-300">Melbourne CBD only</span> - try a landmark like "Flinders Street" or "Melbourne Central".
           </div>
           <button
             onClick={() => { setNoResults(false); clear() }}
