@@ -429,8 +429,9 @@ export default function ParkingMap({
         scrollWheelZoom
         zoomControl={false}
       >
+        {/* No key by theme: remounting TileLayer breaks Leaflet canvas tile renderer
+            used by BusyNowVectorGrid — segments go blank until full map remount. */}
         <TileLayer
-          key={isDark ? 'dark' : 'light'}
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url={
             isDark
@@ -478,6 +479,7 @@ export default function ParkingMap({
             colorBlindMode={colorBlindMode}
             destination={destination ? destinationLatLng(destination) : null}
             dimRadiusM={dimRadiusM}
+            mapThemeDark={isDark}
             onSegmentClick={onSegmentClick}
           />
         )}
