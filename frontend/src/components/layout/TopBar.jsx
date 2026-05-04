@@ -2,6 +2,8 @@ import { useClock } from '../../hooks/useClock'
 import { cn } from '../../utils/cn'
 import logoLight from '../../assets/MelOParkLogoLight.png'
 import logoDarkMode from '../../assets/MelOParkLogoDarkMode.png'
+import logoLightWebp from '../../assets/MelOParkLogoLight.webp'
+import logoDarkModeWebp from '../../assets/MelOParkLogoDarkMode.webp'
 import { LOGO_HEADER_IMG_CLASS } from '../../constants/logoMark'
 
 function SunGlyph({ className }) {
@@ -34,6 +36,7 @@ function MoonGlyph({ className }) {
 export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark, onHelpOpen }) {
   const time = useClock()
   const logoSrc = darkMode ? logoDarkMode : logoLight
+  const logoSrcWebp = darkMode ? logoDarkModeWebp : logoLightWebp
 
   return (
     <nav
@@ -47,7 +50,18 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark,
         onClick={(e) => { e.preventDefault(); onNavigate('map') }}
         className="relative z-[1] flex shrink-0 items-center bg-transparent"
       >
-        <img src={logoSrc} alt="MelOPark" className={LOGO_HEADER_IMG_CLASS} />
+        <picture>
+          <source srcSet={logoSrcWebp} type="image/webp" />
+          <img
+            src={logoSrc}
+            alt="MelOPark"
+            width="1860"
+            height="664"
+            fetchPriority="high"
+            decoding="async"
+            className={LOGO_HEADER_IMG_CLASS}
+          />
+        </picture>
       </a>
 
       {/* Centre – Live Map + About Us */}
