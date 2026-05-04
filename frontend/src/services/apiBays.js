@@ -60,6 +60,7 @@ export function mapApiRecordToBay(record) {
     spots: 1,                           // CoM model: 1 sensor = 1 kerbside bay
     free: isFree ? 1 : 0,
     bayType,                            // raw CoM type string (real external API)
+    durationMins: record.duration_mins ?? null,
     hasRules,
     allowDetail: true,
     sensorLastUpdated: record.last_updated ?? null,

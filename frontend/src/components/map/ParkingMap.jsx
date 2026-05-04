@@ -112,6 +112,27 @@ function sensorOccupancyFillColor(bay, colorBlindMode = false) {
   return getStatusFillColor(status, colorBlindMode)
 }
 
+function isAccessibilityBay(bay) {
+  const raw = String(bay?.bayType || '').trim().toUpperCase()
+  return raw === 'DIS ONLY' || raw === 'DIS' || raw === 'DISABLED' || raw === 'DISABLED PARKING'
+}
+
+function makeWheelchairDivIcon(fillColor, diameter, opacity = 1) {
+  const r = diameter / 2
+  // Material Design "accessible" icon — person with raised arms (universal accessibility symbol)
+  const html = `<svg width="${diameter}" height="${diameter}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="display:block">
+    <circle cx="12" cy="12" r="12" fill="${fillColor}" opacity="${opacity}"/>
+    <path fill="white" d="M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2m9 7h-6v13h-2v-6h-2v6H9V9H3V7h18v2z"/>
+  </svg>`
+  return L.divIcon({
+    html,
+    className: '',
+    iconSize: [diameter, diameter],
+    iconAnchor: [r, r],
+    popupAnchor: [0, -r],
+  })
+}
+
 function bayPopupCopy(bay, verdictByBayId) {
   const sensor = bay.free === 1 ? 'Free' : bay.free === 0 ? 'Taken' : 'Unknown'
   const pv = verdictByBayId?.[bay.id]
@@ -274,6 +295,7 @@ export default function ParkingMap({
   altPinPos = null,
   onMapEmptyClick = null,
   dimRadiusM = 600,
+  accessibilityBayIds = null,
 }) {
   const [isDark, setIsDark] = useState(
     () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -514,29 +536,44 @@ export default function ParkingMap({
             const markerRadius = isMobile ? 11 : 9
             const selected = bay.id === selectedBayId
             const selectedRadius = isMobile ? 15 : 13
+            const radius = selected ? selectedRadius : markerRadius
+            const isDisability = isAccessibilityBay(bay) || (accessibilityBayIds?.has(String(bay.id)) ?? false)
+            const eventHandlers = {
+              click: (e) => { L.DomEvent.stopPropagation(e); onBayClick(bay) },
+            }
+            const popup = (
+              <Popup>
+                <div className="min-w-[120px] text-xs leading-snug">
+                  <div className="font-semibold text-gray-900 dark:text-gray-100">
+                    Bay #{bay.id} {bay.name ? `\u00b7 ${bay.name}` : ''}
+                  </div>
+                  <div className="mt-1 text-gray-600 dark:text-gray-400">
+                    {bayPopupCopy(bay, verdictByBayId)}
+                  </div>
+                </div>
+              </Popup>
+            )
+            if (isDisability) {
+              return (
+                <Marker
+                  key={`ltd-${bay.id}`}
+                  position={[ll.lat, ll.lng]}
+                  icon={makeWheelchairDivIcon(fillColor, radius * 2, opacity)}
+                  eventHandlers={eventHandlers}
+                >
+                  {popup}
+                </Marker>
+              )
+            }
             return (
               <CircleMarker
                 key={`ltd-${bay.id}`}
                 center={[ll.lat, ll.lng]}
-                radius={selected ? selectedRadius : markerRadius}
+                radius={radius}
                 pathOptions={getBayMarkerPathOptions(markerStatus, fillColor, opacity, colorBlindMode)}
-                eventHandlers={{
-                  click: (e) => {
-                    L.DomEvent.stopPropagation(e)
-                    onBayClick(bay)
-                  },
-                }}
+                eventHandlers={eventHandlers}
               >
-                <Popup>
-                  <div className="min-w-[120px] text-xs leading-snug">
-                    <div className="font-semibold text-gray-900 dark:text-gray-100">
-                      Bay #{bay.id} {bay.name ? `\u00b7 ${bay.name}` : ''}
-                    </div>
-                    <div className="mt-1 text-gray-600 dark:text-gray-400">
-                      {bayPopupCopy(bay, verdictByBayId)}
-                    </div>
-                  </div>
-                </Popup>
+                {popup}
               </CircleMarker>
             )
           })}
@@ -553,29 +590,44 @@ export default function ParkingMap({
           const fillColor = verifiedBayFillColor(bay, plannerMapActive, verdictByBayId, colorBlindMode)
           const markerRadius = isMobile ? 11 : 9
           const selectedRadius = isMobile ? 15 : 13
+          const radius = selected ? selectedRadius : markerRadius
+          const isDisability = isAccessibilityBay(bay)
+          const eventHandlers = {
+            click: (e) => { L.DomEvent.stopPropagation(e); onBayClick(bay) },
+          }
+          const popup = (
+            <Popup>
+              <div className="min-w-[120px] text-xs leading-snug">
+                <div className="font-semibold text-gray-900 dark:text-gray-100">
+                  Bay #{bay.id} {bay.name ? `\u00b7 ${bay.name}` : ''}
+                </div>
+                <div className="mt-1 text-gray-600 dark:text-gray-400">
+                  {bayPopupCopy(bay, verdictByBayId)}
+                </div>
+              </div>
+            </Popup>
+          )
+          if (isDisability) {
+            return (
+              <Marker
+                key={bay.id}
+                position={[ll.lat, ll.lng]}
+                icon={makeWheelchairDivIcon(fillColor, radius * 2, opacity)}
+                eventHandlers={eventHandlers}
+              >
+                {popup}
+              </Marker>
+            )
+          }
           return (
             <CircleMarker
               key={bay.id}
               center={[ll.lat, ll.lng]}
-              radius={selected ? selectedRadius : markerRadius}
+              radius={radius}
               pathOptions={getBayMarkerPathOptions(markerStatus, fillColor, opacity, colorBlindMode)}
-              eventHandlers={{
-                click: (e) => {
-                  L.DomEvent.stopPropagation(e)
-                  onBayClick(bay)
-                },
-              }}
+              eventHandlers={eventHandlers}
             >
-              <Popup>
-                <div className="min-w-[120px] text-xs leading-snug">
-                  <div className="font-semibold text-gray-900 dark:text-gray-100">
-                    Bay #{bay.id} {bay.name ? `\u00b7 ${bay.name}` : ''}
-                  </div>
-                  <div className="mt-1 text-gray-600 dark:text-gray-400">
-                    {bayPopupCopy(bay, verdictByBayId)}
-                  </div>
-                </div>
-              </Popup>
+              {popup}
             </CircleMarker>
           )
         })}
@@ -637,6 +689,15 @@ export default function ParkingMap({
                   whiteSpace: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'nowrap' : 'normal') : 'normal',
                   overflow: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'hidden' : 'visible') : 'visible',
                   textOverflow: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'ellipsis' : 'clip') : 'clip',
+                }
+              : selectedBayId
+              ? {
+                  // Bay panel open: horizontally centred in the map area left of the panel
+                  left: 'calc(50% - 190px)',
+                  transform: 'translateX(-50%)',
+                  bottom: destination ? '118px' : '18px',
+                  width: 'max-content',
+                  maxWidth: 'calc(100% - 440px)',
                 }
               : {
                   left: '50%',

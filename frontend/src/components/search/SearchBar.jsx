@@ -26,6 +26,15 @@ function Highlight({ text, query }) {
   )
 }
 
+const DEFAULT_SUGGESTIONS = LANDMARKS.slice(0, 8).map((l) => ({
+  name: l.name,
+  sub: l.sub,
+  category: 'landmark',
+  lat: l.lat,
+  lng: l.lng,
+  icon: l.icon,
+}))
+
 export default function SearchBar({ destination, onPick, onClear }) {
   const [query, setQuery] = useState('')
   const [matches, setMatches] = useState([])
@@ -82,6 +91,9 @@ export default function SearchBar({ destination, onPick, onClear }) {
     return () => clearTimeout(debounceRef.current)
   }, [query, destination])
 
+  // Show default landmark suggestions when focused with no/short query
+  const displayMatches = (!destination && query.trim().length < 2) ? DEFAULT_SUGGESTIONS : matches
+
   const pick = (item) => {
     setQuery(item.name)
     setShowDrop(false)
@@ -99,8 +111,8 @@ export default function SearchBar({ destination, onPick, onClear }) {
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
-      if (matches.length > 0) {
-        pick(matches[0])
+      if (displayMatches.length > 0) {
+        pick(displayMatches[0])
         return
       }
       if (query.trim()) {
@@ -159,12 +171,17 @@ export default function SearchBar({ destination, onPick, onClear }) {
       </div>
 
       {/* Autocomplete dropdown */}
-      {showDrop && matches.length > 0 && (
+      {showDrop && !destination && displayMatches.length > 0 && (
         <div
           className="absolute top-[calc(100%+6px)] inset-x-0 bg-white dark:bg-surface-dark-secondary rounded-xl overflow-hidden z-50 shadow-card-lg border border-gray-200/60 dark:border-gray-700/60"
           role="listbox"
         >
-          {matches.map((item, i) => (
+          {query.trim().length < 2 && (
+            <div className="px-4 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+              Popular places
+            </div>
+          )}
+          {displayMatches.map((item, i) => (
             <div
               key={i}
               role="option"
@@ -188,7 +205,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
       )}
 
       {/* No results in dropdown */}
-      {showDrop && query && !destination && matches.length === 0 && !loading && (
+      {showDrop && query.trim().length >= 2 && !destination && matches.length === 0 && !loading && (
         <div className="absolute top-[calc(100%+6px)] inset-x-0 bg-white dark:bg-surface-dark-secondary rounded-xl z-50 shadow-card-lg border border-gray-200/60 dark:border-gray-700/60 px-4 py-3.5">
           <div className="flex items-center gap-2.5 text-gray-400 text-sm">
             <SearchIcon size={18} className="shrink-0 text-gray-400" />

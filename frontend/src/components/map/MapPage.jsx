@@ -16,11 +16,10 @@ import { fetchSegmentDetail } from '../../services/apiPressure'
 import { useMapState } from '../../hooks/useMapState'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
-import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
+import { fetchAccessibilityNearby, fetchAccessibilityAll, fetchEvaluateBulk } from '../../services/apiBays'
 import { destinationLatLng } from '../../utils/mapGeo'
 import {
   DEFAULT_PLANNER_DURATION_MINS,
-  formatAtDateTime,
   melbourneWallClockToAwareIso,
   toMelbourneDateTimeInputValue,
 } from '../../utils/plannerTime'
@@ -50,8 +49,16 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const {
     selectedBayId,
     setSelectedBayId,
-    activeFilter,
-    setActiveFilter,
+    statusFilter,
+    setStatusFilter,
+    durationFilter,
+    setDurationFilter,
+    customDuration,
+    setCustomDuration,
+    filterTime,
+    setFilterTime,
+    filterDate,
+    setFilterDate,
     destination,
     pickDestination,
     clearDestination,
@@ -70,6 +77,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     () => destination,
     [destination?.lat, destination?.lng, destination?.name],
   )
+  const activeFilter = durationFilter ?? statusFilter
 
   /** Persisted across bay opens: last debounced plan from the detail sheet. */
   const [plannerArrivalIso, setPlannerArrivalIso] = useState(null)
@@ -275,29 +283,31 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   const handleOnboardingPick = useCallback((lm, arrivalIso = null, opts = null) => {
     pickDestination(lm)
-    if (opts?.activeFilter) setActiveFilter(opts.activeFilter)
-    if (opts?.parkingType === 'accessible') {
-      setAccessibilityMode(false)
-      setAccessibilityAvailableOnly(true)
-    } else {
-      setAccessibilityMode(false)
-      setAccessibilityAvailableOnly(false)
-    }
+    const accessible = opts?.accessible || false
+    const sf = accessible ? 'all' : (opts?.statusFilter || 'all')
+    const df = opts?.durationFilter || null
+    const cd = opts?.customDuration || 60
+    setStatusFilter(sf)
+    setDurationFilter(df)
+    if (df === 'custom') setCustomDuration(cd)
+    setAccessibilityMode(accessible)
+    setAccessibilityAvailableOnly(accessible)
+    // Sync arrival time → filterDate/filterTime (via plannerArrivalIso useEffect)
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
       setPlannerDurationMins(DEFAULT_PLANNER_DURATION_MINS)
       setMapBaysAtPlannedTime(true)
     }
     dismissOnboarding()
-  }, [pickDestination, dismissOnboarding, setActiveFilter, setAccessibilityMode])
+  }, [pickDestination, dismissOnboarding, setStatusFilter, setDurationFilter, setCustomDuration, setAccessibilityMode])
 
   const [mapBounds, setMapBounds] = useState(null)
   const [bulkVerdictById, setBulkVerdictById] = useState({})
-  const [showArrivePicker, setShowArrivePicker] = useState(false)
   const [accessibilityNearby, setAccessibilityNearby] = useState([])
   const [accessibilityLoading, setAccessibilityLoading] = useState(false)
   const [accessibilityError, setAccessibilityError] = useState(null)
   const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
 
@@ -436,6 +446,18 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setBaysRef(bays)
   }, [bays, setBaysRef])
 
+  useEffect(() => {
+    if (!plannerArrivalIso) {
+      const now = new Date()
+      setFilterTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
+      setFilterDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`)
+      return
+    }
+    const { date, time } = splitMelbourneDateTimeParts(plannerArrivalIso)
+    if (time) setFilterTime(time.slice(0, 5))
+    if (date) setFilterDate(date)
+  }, [plannerArrivalIso, setFilterTime, setFilterDate])
+
   const visibleBays = getVisibleBays(bays)
   const proximityBays = getProximityBays(bays)
   const accessibleBayIds = useMemo(
@@ -554,24 +576,32 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const FILTER_RIGHT_RESERVE_PX = isMobile ? 0 : (selectedBay ? 76 : 24)
   const ZOOM_GROUP_WIDTH_PX = 72
 
-  const activeFilterLabel = useMemo(() => {
-    if (activeFilter === 'all') return 'All bays'
-    if (activeFilter === 'available') return 'Available'
-    if (activeFilter === 'trap') return 'Caution'
-    if (activeFilter === 'lt1h') return 'Less than 1h parking'
-    if (activeFilter === '1h') return '1h parking'
-    if (activeFilter === '2h') return '2h parking'
-    if (activeFilter === '3h') return '3h parking'
-    if (activeFilter === '4h') return '4h parking'
-    return 'All bays'
-  }, [activeFilter])
+const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plannerArrivalIso)
 
-  const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plannerArrivalIso)
+  const _scopeDateStr = arriveDate || filterDate
+  const _scopeTimeStr = arriveTime || filterTime
+  const _DAY_ABBRS2 = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const _scopeDateLabel = _scopeDateStr
+    ? (() => { const dt = new Date(_scopeDateStr + 'T00:00:00'); const mm = String(dt.getMonth() + 1).padStart(2, '0'); const dd = String(dt.getDate()).padStart(2, '0'); const yyyy = dt.getFullYear(); return `${_DAY_ABBRS2[dt.getDay()]}, ${mm}/${dd}/${yyyy}` })()
+    : 'Today'
+  const _scopeTimeLabel = _scopeTimeStr
+    ? (() => { const [hh, mm] = _scopeTimeStr.split(':').map(Number); const ampm = hh >= 12 ? 'PM' : 'AM'; const h12 = hh % 12 || 12; return `${h12}:${String(mm).padStart(2, '0')} ${ampm}` })()
+    : ''
+
+  const _statusLabel = statusFilter === 'available' ? 'Available' : statusFilter === 'trap' ? 'Caution' : 'All bay status'
+  const _durLabels = { '15min': '15 min', '30min': '30 min', '1h': '1H', '2h': '2H', '3h': '3H', '4h': '4H' }
+  const _durationLabel = durationFilter
+    ? (durationFilter === 'custom' && customDuration ? `${customDuration} min` : (_durLabels[durationFilter] || durationFilter))
+    : 'Any duration'
 
   const scopeStrip = (
     <div className="px-1 text-[10px] font-medium text-gray-600 dark:text-gray-300 truncate">
-      Showing: <span className="text-brand-900 dark:text-brand-900 font-semibold">{activeFilterLabel}</span>
-      {plannerArrivalIso ? ` · ${arriveDate || '-'} ${arriveTime || ''}` : ''}
+      <span>Showing: </span>
+      <span className="font-semibold text-slate-700 dark:text-gray-200">{_statusLabel}</span>
+      <span className="mx-1 text-slate-400">·</span>
+      <span className="font-semibold text-slate-700 dark:text-gray-200">{_durationLabel}</span>
+      <span className="mx-1 text-slate-400">·</span>
+      <span className="font-semibold text-slate-700 dark:text-gray-200">{_scopeDateLabel} {_scopeTimeLabel}</span>
     </div>
   )
 
@@ -584,6 +614,133 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setPlannerDurationMins((prev) => (prev == null ? DEFAULT_PLANNER_DURATION_MINS : prev))
     setMapBaysAtPlannedTime(true)
   }, [])
+
+  const chipBase = 'shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide transition-colors cursor-pointer backdrop-blur-sm'
+  const chipActive = 'border-brand bg-brand text-white shadow-sm dark:border-brand dark:bg-brand'
+  const chipIdle = 'border-slate-300/70 bg-white/70 text-slate-700 hover:bg-white hover:border-slate-400 dark:border-slate-500/60 dark:bg-surface-dark-secondary/60 dark:text-gray-100'
+
+  const dateInputRef = useRef(null)
+  const timeInputRef = useRef(null)
+
+  const _DAY_ABBRS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const dateLabel = arriveDate
+    ? (() => { const d = new Date(arriveDate + 'T00:00:00'); const mm = String(d.getMonth() + 1).padStart(2, '0'); const dd = String(d.getDate()).padStart(2, '0'); const yyyy = d.getFullYear(); return `${_DAY_ABBRS[d.getDay()]}, ${mm}/${dd}/${yyyy}` })()
+    : 'Date'
+
+  const arriveChip = (
+    <div className="flex w-full flex-col gap-1">
+      <span className="px-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">Arrival time</span>
+      {/* Hidden inputs — off-screen but rendered so showPicker() works */}
+      <input
+        ref={dateInputRef}
+        type="date"
+        value={arriveDate}
+        onChange={(e) => updateArriveBy(e.target.value, arriveTime || '09:00')}
+        style={{ position: 'fixed', opacity: 0, pointerEvents: 'none', width: 1, height: 1, top: 0, left: 0 }}
+        tabIndex={-1}
+      />
+      <input
+        ref={timeInputRef}
+        type="time"
+        value={arriveTime}
+        onChange={(e) => {
+          const today = new Date()
+          const d = arriveDate || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+          updateArriveBy(d, e.target.value)
+        }}
+        style={{ position: 'fixed', opacity: 0, pointerEvents: 'none', width: 1, height: 1, top: 0, left: 0 }}
+        tabIndex={-1}
+      />
+      <div className="flex w-full items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <button
+        type="button"
+        onClick={() => dateInputRef.current?.showPicker()}
+        className={`${chipBase} ${plannerArrivalIso ? chipActive : chipIdle} inline-flex items-center gap-1`}
+        aria-label="Set arrival date"
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
+          <rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" strokeWidth="2" />
+          <path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+        {dateLabel}
+      </button>
+      <button
+        type="button"
+        onClick={() => timeInputRef.current?.showPicker()}
+        className={`${chipBase} ${plannerArrivalIso ? chipActive : chipIdle} inline-flex items-center gap-1`}
+        aria-label="Set arrival time"
+      >
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
+          <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="2" />
+          <path d="M12 7.5v5l3.5 2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+        {arriveTime || 'Time'}
+      </button>
+      {plannerArrivalIso && (
+        <button
+          type="button"
+          onClick={resetPlannerToLive}
+          aria-label="Clear arrival time"
+          className={`${chipBase} ${chipIdle}`}
+        >
+          Clear
+        </button>
+      )}
+      </div>
+    </div>
+  )
+
+  const filterInnerContent = (
+    <>
+      <div className="w-full rounded-xl overflow-hidden bg-white/85 backdrop-blur-md border border-slate-200/70 shadow-sm dark:bg-surface-dark-secondary/85 dark:border-slate-600/50">
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
+        >
+          <span className="text-[11px] font-semibold text-slate-600 dark:text-gray-300">
+            Pick parking status, duration, date and time
+          </span>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden
+            className={`shrink-0 transition-transform ${filtersOpen ? 'rotate-180' : ''}`}
+          >
+            <path d="M6 15l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        {filtersOpen && (
+          <div className="px-3 pb-3 pt-1 flex flex-col gap-1 border-t border-slate-200/60 dark:border-slate-600/40">
+            <FilterChips
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+              durationFilter={durationFilter}
+              onDurationFilterChange={setDurationFilter}
+              accessibleOn={accessibilityAvailableOnly}
+              onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)}
+              customDuration={customDuration}
+              onCustomDurationChange={setCustomDuration}
+            />
+            {arriveChip}
+          </div>
+        )}
+      </div>
+      <div className="rounded-lg bg-white/85 backdrop-blur-md px-2.5 py-1 border border-slate-200/50 shadow-sm dark:bg-surface-dark-secondary/85 dark:border-slate-600/40">
+        {scopeStrip}
+      </div>
+      {accessibilityAvailableOnly && (
+        <div
+          className="rounded-xl border border-brand bg-white/95 px-3 py-2 text-xs font-semibold text-brand text-center shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
+          aria-label="Accessibility mode enabled: showing accessibility overlay bays"
+        >
+          Accessibility mode: accessible bays only
+        </div>
+      )}
+    </>
+  )
 
   const mapTopRightControls = (
     <div className="relative flex flex-nowrap items-start gap-2">
@@ -604,53 +761,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         </svg>
         <span className="text-[9px] font-semibold leading-none">{colorBlindMode ? 'CB ON' : 'CB OFF'}</span>
       </button>
-      <div className="relative flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setShowArrivePicker((v) => !v)}
-          aria-expanded={showArrivePicker}
-          aria-label={showArrivePicker ? 'Hide arrive by picker' : 'Show arrive by picker'}
-          className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
-            showArrivePicker
-              ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-              : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-          }`}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.75" />
-            <path d="M12 7.5v5l3.5 2.2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-          </svg>
-          <span className="text-[10px] font-semibold leading-none">Time</span>
-        </button>
-      </div>
-      {showArrivePicker && (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-[700] w-[min(280px,calc(100vw-24px))] rounded-xl border border-gray-200/90 bg-white/98 p-2 shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/98">
-          <div className="flex flex-col gap-2">
-            <label className="rounded-lg border border-gray-200/80 bg-white px-2 py-1.5 dark:border-gray-700 dark:bg-surface-dark-secondary">
-              <span className="mb-1 block text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Date
-              </span>
-              <input
-                type="date"
-                value={arriveDate}
-                onChange={(e) => updateArriveBy(e.target.value, arriveTime)}
-                className="h-8 w-full rounded-md border border-gray-200/80 bg-white px-2 py-0.5 text-xs font-semibold text-gray-800 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100"
-              />
-            </label>
-            <label className="rounded-lg border border-gray-200/80 bg-white px-2 py-1.5 dark:border-gray-700 dark:bg-surface-dark-secondary">
-              <span className="mb-1 block text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Time
-              </span>
-              <input
-                type="time"
-                value={arriveTime}
-                onChange={(e) => updateArriveBy(arriveDate, e.target.value)}
-                className="h-8 w-full rounded-md border border-gray-200/80 bg-white px-2 py-0.5 text-xs font-semibold text-gray-800 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100"
-              />
-            </label>
-          </div>
-        </div>
-      )}
     </div>
   )
 
@@ -683,18 +793,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           altPinPos={altPinPos}
           onMapEmptyClick={clearSelectedSuggestion}
           dimRadiusM={600}
+          accessibilityBayIds={accessibleBayIds}
         />
-
-        {accessibilityAvailableOnly && (
-          <div
-            className={`absolute left-3.5 z-[510] rounded-xl border border-brand bg-white/95 px-3 py-2 text-xs font-semibold text-brand shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100 ${
-              isMobile ? 'top-[204px]' : 'top-[84px]'
-            }`}
-            aria-label="Accessibility mode enabled: showing accessibility overlay bays"
-          >
-            Accessibility mode: accessible bays only
-          </div>
-        )}
 
         {apiLoading && (
           <div className="absolute inset-0 z-[400] bg-white/35 dark:bg-black/25 pointer-events-none flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -753,9 +853,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 </div>
               </div>
 
-              <div className="mt-1 flex w-full flex-col gap-0.5">
-                <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} accessibleOn={accessibilityAvailableOnly} onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)} />
-                {scopeStrip}
+              <div className="mt-1 flex w-full flex-col gap-1.5">
+                {filterInnerContent}
               </div>
 
               <div className="w-full min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin]">
@@ -812,11 +911,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                 style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
               >
                 <div
-                  className="mt-1 flex flex-col gap-0.5"
+                  className="mt-1 flex flex-col gap-1.5"
                   style={{ width: `calc(100% - ${ZOOM_GROUP_WIDTH_PX}px)`, maxWidth: 'calc(580px - 72px)' }}
                 >
-                  <FilterChips activeFilter={activeFilter} onFilterChange={setActiveFilter} accessibleOn={accessibilityAvailableOnly} onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)} />
-                  {scopeStrip}
+                  {filterInnerContent}
                 </div>
               </div>
             </div>
@@ -981,7 +1079,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                   {rows.map(({ dotClass, label, symbolClass, color }) => (
                     <div key={label} className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
                       <div
-                        className={`${dotClass} ${symbolClass} h-2.5 w-2.5 shrink-0 rounded-full`}
+                        className={`${dotClass} ${symbolClass} h-3.5 w-3.5 shrink-0 rounded-full`}
                         style={{ backgroundColor: color }}
                       />
                       <span className="truncate">{label}</span>
@@ -999,6 +1097,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
+                  <div className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
+                    <div className="relative h-3.5 w-3.5 shrink-0">
+                      <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full">
+                        <circle cx="12" cy="12" r="12" fill="#60a5fa"/>
+                        <path fill="white" d="M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2m9 7h-6v13h-2v-6h-2v6H9V9H3V7h18v2z"/>
+                      </svg>
+                    </div>
+                    <span className="truncate">Accessible bays</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -1139,6 +1246,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             }}
             onResetPlannerToLive={resetPlannerToLive}
             plannerResetNonce={plannerResetNonce}
+            durationFilter={durationFilter}
+            customDuration={customDuration}
           />
         )}
       </div>

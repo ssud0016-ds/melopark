@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   haversineMeters,
   SEARCH_RADIUS_M,
@@ -17,6 +17,8 @@ const ACCESSIBILITY_MODE_STORAGE_KEY = 'melopark.accessibility_mode'
  * @property {string | number} id
  * @property {string} [type]
  * @property {string | null | undefined} [bayType]
+ * @property {number | null} [durationMins]
+ * @property {string} [limitType]
  * @property {number} [lat]
  * @property {number} [lng]
  * @property {number} [x]
@@ -33,7 +35,7 @@ const ACCESSIBILITY_MODE_STORAGE_KEY = 'melopark.accessibility_mode'
  */
 
 /**
- * @typedef {'all' | 'available' | 'trap' | 'lt1h' | '1h' | '2h' | '3h' | '4h'} ActiveFilter
+ * @typedef {'all' | 'available' | 'trap' | 'lt1h' | '15min' | '30min' | '1h' | '2h' | '3h' | '4h' | 'custom'} ActiveFilter
  */
 
 /**
@@ -46,8 +48,10 @@ const ACCESSIBILITY_MODE_STORAGE_KEY = 'melopark.accessibility_mode'
  * @typedef {Object} UseMapStateResult
  * @property {string | number | null} selectedBayId
  * @property {(id: string | number | null) => void} setSelectedBayId
- * @property {ActiveFilter} activeFilter
- * @property {(next: ActiveFilter) => void} setActiveFilter
+ * @property {'all' | 'available' | 'trap'} statusFilter
+ * @property {(next: 'all' | 'available' | 'trap') => void} setStatusFilter
+ * @property {string | null} durationFilter
+ * @property {(next: string | null) => void} setDurationFilter
  * @property {Destination | null} destination
  * @property {(lm: Destination) => void} pickDestination
  * @property {() => void} clearDestination
@@ -79,47 +83,21 @@ function isAccessibilityBay(bay) {
 }
 
 
-/**
- * @param {MapBay} bay
- * @returns {number | null}
- */
-function extractParkingMinutes(bay) {
-  const raw = String(bay?.bayType || '').toUpperCase()
-  if (!raw || raw === 'OTHER') return null
-
-  // Match minute formats: "30M", "30 MIN", "30 MINS", "45 MINUTE(S)"
-  const minMatch = raw.match(/(\d+)\s*(?:M|MIN|MINS|MINUTE|MINUTES)\b/)
-  if (minMatch) {
-    const mins = Number(minMatch[1])
-    return Number.isFinite(mins) ? mins : null
-  }
-
-  // Match hour formats: "1P", "2 H", "3 HR", "4 HOUR(S)"
-  const hourMatch = raw.match(/(\d+)\s*(?:P|H|HR|HRS|HOUR|HOURS)\b/)
-  if (hourMatch) {
-    const hrs = Number(hourMatch[1])
-    return Number.isFinite(hrs) ? hrs * 60 : null
-  }
-
-  // Match fractional P formats: "1/2P", "1 / 2 P", "1/4P"
-  const fracPMatch = raw.match(/(\d+)\s*\/\s*(\d+)\s*P\b/)
-  if (fracPMatch) {
-    const num = Number(fracPMatch[1])
-    const den = Number(fracPMatch[2])
-    if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) {
-      return Math.round((num / den) * 60)
-    }
-  }
-
-  // Match common textual halves if they appear in some feeds.
-  if (raw.includes('HALF HOUR')) return 30
-
-  return null
-}
 
 export function useMapState() {
   const [selectedBayId, _setSelectedBayId] = useState(null)
-  const [activeFilter, setActiveFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all') // 'all' | 'available' | 'trap'
+  const [durationFilter, setDurationFilter] = useState(null) // null | '15min' | '30min' | '1h' | '2h' | '3h' | '4h' | 'custom'
+  const [customDuration, setCustomDuration] = useState(60)
+  const [filterTime, setFilterTime] = useState(() => {
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  })
+  const [filterDate, setFilterDate] = useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  })
+  const [durationBayIds, setDurationBayIds] = useState(null) // Set<string> | null
   const [destination, setDestination] = useState(null)
   const [sheetSnap, setSheetSnap] = useState(SNAP_PEEK)
   const [showLimitedBays, setShowLimitedBays] = useState(false)
@@ -187,6 +165,26 @@ export function useMapState() {
     _setSelectedBayId(null)
   }, [])
 
+  const _FILTER_TO_MINS = { '15min': 15, '30min': 30, '1h': 60, '2h': 120, '3h': 180, '4h': 240 }
+
+  useEffect(() => {
+    if (!durationFilter) {
+      setDurationBayIds(null)
+      return
+    }
+    const neededMins = durationFilter === 'custom' ? customDuration : _FILTER_TO_MINS[durationFilter]
+    if (!neededMins) return
+    const controller = new AbortController()
+    const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+    const day = new Date(filterDate + 'T00:00:00').getDay() // derive 0=Sun…6=Sat from the date
+    const params = new URLSearchParams({ needed_mins: neededMins, arrival_time: filterTime, day })
+    fetch(`${base}/api/parking/filter?${params}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((data) => setDurationBayIds(new Set(data.bay_ids || [])))
+      .catch(() => {})
+    return () => controller.abort()
+  }, [durationFilter, customDuration, filterTime, filterDate])
+
   const getVisibleBays = useCallback(
     /**
      * @param {MapBay[]} bays
@@ -204,20 +202,18 @@ export function useMapState() {
       const accessibilityPool = accessibilityMode ? pool.filter(isAccessibilityBay) : pool
 
       return accessibilityPool.filter((b) => {
-        if (activeFilter === 'all') return true
-        if (activeFilter === 'available') return b.type === 'available'
-        if (activeFilter === 'trap') return b.type === 'trap'
-        const mins = extractParkingMinutes(b)
-        if (mins == null) return false
-        if (activeFilter === 'lt1h') return mins < 60
-        if (activeFilter === '1h') return mins === 60
-        if (activeFilter === '2h') return mins === 120
-        if (activeFilter === '3h') return mins === 180
-        if (activeFilter === '4h') return mins === 240
+        // Status filter
+        if (statusFilter === 'available' && b.type !== 'available') return false
+        if (statusFilter === 'trap' && b.type !== 'trap') return false
+        // Duration filter
+        if (durationFilter) {
+          if (durationBayIds === null) return true // still loading
+          if (!durationBayIds.has(String(b.id))) return false
+        }
         return true
       })
     },
-    [destination, activeFilter, accessibilityMode],
+    [destination, statusFilter, durationFilter, accessibilityMode, durationBayIds],
   )
 
   const getProximityBays = useCallback(
@@ -241,8 +237,16 @@ export function useMapState() {
   return {
     selectedBayId,
     setSelectedBayId,
-    activeFilter,
-    setActiveFilter,
+    statusFilter,
+    setStatusFilter,
+    durationFilter,
+    setDurationFilter,
+    customDuration,
+    setCustomDuration,
+    filterTime,
+    setFilterTime,
+    filterDate,
+    setFilterDate,
     destination,
     pickDestination,
     clearDestination,
