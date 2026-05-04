@@ -1,53 +1,45 @@
 import { useState } from 'react'
 import SearchBar from '../search/SearchBar'
-import { LANDMARKS } from '../../data/mapData'
 import { melbourneAwareIsoFromDateTimeLocal, toMelbourneDateTimeInputValue } from '../../utils/plannerTime'
 
-const QUICK_PICK_NAMES = ['Flinders Street Station', 'Melbourne Central', 'Queen Victoria Market']
-const PARKING_TYPES = [
-  {
-    id: 'general',
-    title: 'General parking',
-    description: 'Standard timed and metered bays',
-  },
-  {
-    id: 'accessible',
-    title: 'Accessible parking',
-    description: 'Standard timed and metered bays',
-  },
-]
-const REQUIREMENT_CHIPS = [
-  { id: 'all', label: 'All bays' },
+const STATUS_CHIPS = [
+  { id: 'all', label: 'All' },
   { id: 'available', label: 'Available' },
+  { id: 'accessible', label: 'Accessible' },
   { id: 'trap', label: 'Caution' },
-  { id: 'lt1h', label: '<1 Hour' },
-  { id: '1h', label: '1 Hour' },
-  { id: '2h', label: '2 Hour' },
-  { id: '3h', label: '3 Hour' },
-  { id: '4h', label: '4 Hour' },
 ]
+
+const DURATION_CHIPS = [
+  { id: '15min', label: '15 min' },
+  { id: '30min', label: '30 min' },
+  { id: '1h', label: '1H' },
+  { id: '2h', label: '2H' },
+  { id: '3h', label: '3H' },
+  { id: '4h', label: '4H' },
+  { id: 'custom', label: 'Custom' },
+]
+
+const chipBase =
+  'rounded-full border px-3 py-2 text-xs font-bold transition cursor-pointer'
+const chipActive =
+  'border-brand bg-brand text-white'
+const chipIdle =
+  'border-gray-200/80 bg-white text-gray-500 hover:border-brand-300 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-300'
 
 export default function OnboardingOverlay({ onPick, onSkip }) {
   const [step, setStep] = useState('hero')
   const [localDestination, setLocalDestination] = useState(null)
   const [arriveByLocal, setArriveByLocal] = useState(() => toMelbourneDateTimeInputValue(null))
-  const [parkingType, setParkingType] = useState('general')
-  const [parkingRequirement, setParkingRequirement] = useState('all')
+  const [statusReq, setStatusReq] = useState('all')
+  const [durationReq, setDurationReq] = useState(null)
+  const [customDurationReq, setCustomDurationReq] = useState(60)
   const isHero = step === 'hero'
-
-  const quickPicks = QUICK_PICK_NAMES
-    .map((name) => LANDMARKS.find((l) => l.name === name))
-    .filter(Boolean)
 
   const handlePick = (item) => {
     setLocalDestination(item)
   }
 
   const handleStart = () => {
-    setStep('parking-type')
-  }
-
-  const handleParkingTypeContinue = () => {
     setStep('destination')
   }
 
@@ -55,8 +47,10 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
     if (!localDestination) return
     const arrivalIso = arriveByLocal ? melbourneAwareIsoFromDateTimeLocal(arriveByLocal) : null
     onPick(localDestination, arrivalIso, {
-      activeFilter: parkingRequirement,
-      parkingType,
+      statusFilter: statusReq,
+      durationFilter: durationReq,
+      customDuration: customDurationReq,
+      accessible: statusReq === 'accessible',
     })
   }
 
@@ -65,17 +59,17 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
       className={
         isHero
           ? "absolute inset-0 z-[800] flex items-center justify-center bg-black/30 backdrop-blur-[2px] px-6"
-          : "absolute inset-0 z-[800] flex items-center justify-center bg-black/35 dark:bg-black/55 backdrop-blur-[2px] px-4"
+          : "absolute inset-0 z-[800] flex items-center justify-center bg-black/35 dark:bg-black/55 backdrop-blur-[2px] px-4 overflow-y-auto"
       }
       role="dialog"
       aria-modal="true"
-      aria-label={step === 'parking-type' ? 'Choose parking type' : 'Choose your destination'}
+      aria-label="Choose your destination"
     >
       <div
         className={
           isHero
             ? "w-full max-w-md rounded-3xl bg-brand-900 shadow-card-lg p-7 sm:p-8"
-            : "w-full max-w-md rounded-2xl bg-white dark:bg-surface-dark-secondary shadow-card-lg border border-gray-200/60 dark:border-gray-700/60 p-5 sm:p-6"
+            : "w-full max-w-md rounded-2xl bg-white dark:bg-surface-dark-secondary shadow-card-lg border border-gray-200/60 dark:border-gray-700/60 p-5 sm:p-6 my-6"
         }
       >
         {step === 'hero' ? (
@@ -101,52 +95,6 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
             >
               Let&apos;s get started now
             </button>
-          </>
-        ) : step === 'parking-type' ? (
-          <>
-            <div className="mb-8 text-[34px] font-bold tracking-tight text-brand">
-              What are you looking for?
-            </div>
-
-            <div className="space-y-5">
-              {PARKING_TYPES.map((option) => {
-                const selected = parkingType === option.id
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setParkingType(option.id)}
-                    className={`w-full rounded-3xl border bg-white px-6 py-6 text-center shadow-card transition cursor-pointer ${
-                      selected
-                        ? 'border-brand ring-2 ring-brand/15'
-                        : 'border-gray-300/80 hover:border-brand-300'
-                    }`}
-                  >
-                    <div className="text-2xl font-bold text-brand">{option.title}</div>
-                    <div className="mt-1.5 text-sm font-semibold text-gray-500">
-                      {option.description}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="mt-12 flex items-center justify-between gap-4">
-              <button
-                type="button"
-                onClick={onSkip}
-                className="min-w-[200px] rounded-full border border-gray-300 bg-white px-6 py-3 text-sm font-bold text-gray-500 shadow-sm transition hover:border-gray-400 cursor-pointer"
-              >
-                Skip, just show map
-              </button>
-              <button
-                type="button"
-                onClick={handleParkingTypeContinue}
-                className="min-w-[146px] rounded-full border border-brand bg-brand px-6 py-3 text-sm font-bold text-white shadow-card transition hover:bg-brand-light cursor-pointer"
-              >
-                Continue
-              </button>
-            </div>
           </>
         ) : (
           <>
@@ -178,24 +126,50 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
             </div>
 
             <div className="mt-6">
-              <div className="mb-3 text-sm font-bold text-gray-500">
+              <div className="mb-2 text-sm font-bold text-gray-500">
                 Parking Requirements
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {REQUIREMENT_CHIPS.map((chip) => (
+
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Status</div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {STATUS_CHIPS.map((chip) => (
                   <button
                     key={chip.id}
                     type="button"
-                    onClick={() => setParkingRequirement(chip.id)}
-                    className={`rounded-full border bg-white px-4 py-3 text-sm font-bold shadow-card transition cursor-pointer ${
-                      parkingRequirement === chip.id
-                        ? 'border-brand text-brand ring-2 ring-brand/15'
-                        : 'border-gray-200/80 text-gray-500 hover:border-brand-300'
-                    }`}
+                    onClick={() => setStatusReq(chip.id)}
+                    className={`${chipBase} ${statusReq === chip.id ? chipActive : chipIdle}`}
                   >
                     {chip.label}
                   </button>
                 ))}
+              </div>
+
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Duration</div>
+              <div className="flex flex-wrap gap-2 items-center">
+                {DURATION_CHIPS.map((chip) => (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    onClick={() => setDurationReq(durationReq === chip.id ? null : chip.id)}
+                    className={`${chipBase} ${durationReq === chip.id ? chipActive : chipIdle}`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+                {durationReq === 'custom' && (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max="480"
+                      value={customDurationReq}
+                      onChange={(e) => setCustomDurationReq(Number(e.target.value))}
+                      placeholder="min"
+                      className="w-16 rounded-full border border-brand bg-white px-2 py-1.5 text-center text-xs font-semibold text-gray-700 outline-none dark:border-brand dark:bg-surface-dark dark:text-gray-100"
+                    />
+                    <span className="text-xs font-semibold text-gray-500">min</span>
+                  </div>
+                )}
               </div>
             </div>
 

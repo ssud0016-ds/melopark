@@ -37,6 +37,8 @@ export default function BayDetailSheet({
   onShowAllBaysAtThisTime,
   onResetPlannerToLive,
   plannerResetNonce = 0,
+  durationFilter = null,
+  customDuration = 60,
 }) {
   const [evaluation, setEvaluation] = useState(null)
   const [evalLoading, setEvalLoading] = useState(false)
@@ -207,36 +209,33 @@ export default function BayDetailSheet({
     return 'no'
   })()
 
-  const currentlyShowingStr = (() => {
+  const _showingDate = (() => {
     const iso = savedPlannerArrivalIso || new Date().toISOString()
-    // Build "YYYY-MM-DD | h:mm AM/PM" in Melbourne time, matching screenshots.
     const d = new Date(iso)
     if (Number.isNaN(d.getTime())) return ''
-    const parts = new Intl.DateTimeFormat('en-AU', {
-      timeZone: 'Australia/Melbourne',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(d)
-    const y = parts.find((p) => p.type === 'year')?.value
-    const m = parts.find((p) => p.type === 'month')?.value
-    const da = parts.find((p) => p.type === 'day')?.value
-    const dateStr = y && m && da ? `${y}-${m}-${da}` : ''
-    const timeStr = new Intl.DateTimeFormat('en-AU', {
+    const day = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Melbourne', weekday: 'short' }).format(d)
+    const mm = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Melbourne', month: '2-digit' }).format(d)
+    const dd = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Melbourne', day: '2-digit' }).format(d)
+    const yyyy = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Melbourne', year: 'numeric' }).format(d)
+    return `${day}, ${mm}/${dd}/${yyyy}`
+  })()
+
+  const _showingTime = (() => {
+    const iso = savedPlannerArrivalIso || new Date().toISOString()
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
+    return new Intl.DateTimeFormat('en-AU', {
       timeZone: 'Australia/Melbourne',
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-    }).format(d)
-    return `${dateStr} | ${timeStr}`
+    }).format(d).toUpperCase()
   })()
 
-  const durationLabel = (() => {
-    if (mapBaysAtPlannedTime) return 'All Bays'
-    if (typeof durationMins !== 'number' || !Number.isFinite(durationMins)) return null
-    if (durationMins % 60 === 0 && durationMins <= 6 * 60) return `${durationMins / 60}P`
-    return `${durationMins}m`
-  })()
+  const _durFilterLabels = { '15min': '15 min', '30min': '30 min', '1h': '1H', '2h': '2H', '3h': '3H', '4h': '4H' }
+  const _durationLabel = durationFilter
+    ? (durationFilter === 'custom' && customDuration ? `${customDuration} min` : (_durFilterLabels[durationFilter] || durationFilter))
+    : 'Any duration'
 
   return (
     <div
@@ -290,13 +289,11 @@ export default function BayDetailSheet({
 
       {/* 2. Currently showing strip */}
       <div className="px-5 pt-3">
-        <div className="text-xs text-gray-500 dark:text-gray-400">
-          <span className="font-semibold">Currently Showing:</span>{' '}
-          <span className="font-semibold text-[#2E2A8A]">{currentlyShowingStr}</span>
-          {durationLabel ? <span className="font-semibold text-gray-500">{` | ${durationLabel}`}</span> : null}
-        </div>
-        <div className="mt-2 rounded-lg bg-gray-100/70 dark:bg-gray-800/60 px-3 py-1.5 text-[11px] font-semibold text-red-500">
-          Please update the time filter to plan ahead
+        <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+          <span className="font-semibold">Showing: </span>
+          <span className="font-semibold text-[#2E2A8A] dark:text-brand-300">{_durationLabel}</span>
+          <span className="mx-1">·</span>
+          <span className="font-semibold text-[#2E2A8A] dark:text-brand-300">{_showingDate} {_showingTime}</span>
         </div>
       </div>
 

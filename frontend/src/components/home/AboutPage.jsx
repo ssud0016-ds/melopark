@@ -64,8 +64,17 @@ export default function AboutPage({ onNavigate }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto bg-white dark:bg-surface-dark">
       <div className="pt-16">
-        <section className="bg-brand px-5 pb-14 pt-12 text-center sm:px-8">
-          <div className="mx-auto max-w-[760px]">
+        <section className="relative overflow-hidden -mt-16 px-5 pb-14 pt-28 text-center sm:px-8">
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="absolute inset-0 h-full w-full object-cover"
+            src="/hero-bg.mp4"
+          />
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative z-10 mx-auto max-w-[760px]">
             <div className="inline-flex items-center rounded-full border border-white/30 bg-white/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-white/90">
               Smarter parking - Cleaner city - Reducing emissions
             </div>
@@ -85,7 +94,7 @@ export default function AboutPage({ onNavigate }) {
               </button>
               <button
                 type="button"
-                onClick={() => onNavigate?.('map')}
+                onClick={() => document.getElementById('about-problem')?.scrollIntoView({ behavior: 'smooth' })}
                 className="rounded-xl border border-white/40 bg-transparent px-7 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/10"
               >
                 Learn more
@@ -94,7 +103,7 @@ export default function AboutPage({ onNavigate }) {
           </div>
         </section>
 
-        <section className="bg-white px-5 py-12 sm:px-8">
+        <section id="about-problem" className="bg-white px-5 py-12 sm:px-8">
           <div className="mx-auto max-w-5xl">
             <h2 className="text-center text-[30px] font-extrabold tracking-tight text-brand-dark dark:text-white sm:text-[38px]">
               Parking in Melbourne is painful

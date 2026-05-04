@@ -22,6 +22,12 @@ _street_name_cache: dict[str, str] = {}
 _street_name_cache_ts: float = 0.0
 _STREET_CACHE_TTL_SEC = 600  # 10 minutes
 
+_duration_map_cache: dict[str, int] = {}
+_duration_map_ts: float = 0.0
+
+# Gold parquet loaded once at startup for duration queries
+_gold_df = None
+
 _ODS_BASE = (
     "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets"
     "/on-street-parking-bay-sensors"
@@ -365,8 +371,9 @@ async def fetch_parking_bays() -> list[dict]:
         fetch_restrictions_lookup(),
     )
 
-    # Load street_name fallback map from DB (cached, refreshed every 10 min).
+    # Load street_name and duration fallback maps from DB (cached, 10-min TTL).
     sn_map = _get_street_name_map()
+    dur_map = _get_duration_map()
 
     result = []
     for r in raw_records:
@@ -383,6 +390,9 @@ async def fetch_parking_bays() -> list[dict]:
         # Street name fallback: prefer sensor feed, then DB lookup.
         if not bay.get("street_name") and bay_id:
             bay["street_name"] = sn_map.get(str(bay_id))
+
+        # Duration: from DB restriction data (most common non-strict rule per bay).
+        bay["duration_mins"] = dur_map.get(str(bay_id))
 
         result.append(bay)
     return result
@@ -419,3 +429,126 @@ def _get_street_name_map() -> dict[str, str]:
         logger.warning("Failed to load street name cache from DB — using stale/empty cache")
 
     return _street_name_cache
+
+
+_DURATION_CACHE_TTL_SEC = 1800  # 30 minutes — restrictions change throughout the day
+
+
+def _get_duration_map() -> dict[str, int]:
+    """Return a bay_id -> duration_mins dict reflecting restrictions active right now.
+
+    Reads the gold parquet, filters to rows whose day/time window covers the
+    current Melbourne time, then takes the minimum (most restrictive) duration
+    per bay.  Cached for 30 minutes so it stays reasonably fresh.
+    """
+    global _duration_map_cache, _duration_map_ts
+
+    now = time.monotonic()
+    if _duration_map_cache and (now - _duration_map_ts) < _DURATION_CACHE_TTL_SEC:
+        return _duration_map_cache
+
+    try:
+        from datetime import datetime as _dt
+        from zoneinfo import ZoneInfo
+
+        import pandas as pd
+
+        from app.core.paths import data_gold_dir
+
+        mel_now = _dt.now(ZoneInfo("Australia/Melbourne"))
+        # Parquet day encoding: 0=Sun, 1=Mon, …, 6=Sat
+        # Python weekday():    0=Mon, …, 5=Sat, 6=Sun  →  (weekday+1) % 7
+        data_dow = (mel_now.weekday() + 1) % 7
+        current_time = mel_now.strftime("%H:%M")
+
+        path = data_gold_dir() / "gold_accessibility_bays.parquet"
+        cols = ["bay_id", "duration_mins", "fromday", "today", "starttime", "endtime"]
+        df = pd.read_parquet(path, columns=cols)
+        df = df.dropna(subset=["duration_mins", "fromday", "today", "starttime", "endtime"])
+        df["fromday"] = df["fromday"].astype(int)
+        df["today"] = df["today"].astype(int)
+        df["duration_mins"] = df["duration_mins"].astype(int)
+
+        # Vectorised day-range check (handles wrap-around, e.g. Sat=6 → Sun=0)
+        no_wrap = df["fromday"] <= df["today"]
+        mask_day = (
+            (no_wrap & (df["fromday"] <= data_dow) & (data_dow <= df["today"]))
+            | (~no_wrap & ((data_dow >= df["fromday"]) | (data_dow <= df["today"])))
+        )
+        mask_time = (df["starttime"] <= current_time) & (current_time < df["endtime"])
+
+        active = df[mask_day & mask_time]
+        duration_by_bay = active.groupby("bay_id")["duration_mins"].min()
+        _duration_map_cache = duration_by_bay.to_dict()
+        _duration_map_ts = time.monotonic()
+        logger.info(
+            "Duration map: %d bays active at %s (dow=%d)",
+            len(_duration_map_cache), current_time, data_dow,
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to load duration map from parquet — using stale/empty cache")
+
+    return _duration_map_cache
+
+
+def _load_gold_df():
+    """Load gold parquet once and cache for the process lifetime."""
+    global _gold_df
+    if _gold_df is not None:
+        return _gold_df
+    try:
+        import pandas as pd
+        from app.core.paths import data_gold_dir
+        cols = ["bay_id", "duration_mins", "fromday", "today", "starttime", "endtime"]
+        df = pd.read_parquet(data_gold_dir() / "gold_accessibility_bays.parquet", columns=cols)
+        df = df.dropna(subset=["fromday", "today", "starttime", "endtime"])
+        df["fromday"] = df["fromday"].astype(int)
+        df["today"] = df["today"].astype(int)
+        df["duration_mins"] = pd.to_numeric(df["duration_mins"], errors="coerce")
+        _gold_df = df
+        logger.info("Gold parquet loaded: %d rows, %d bays", len(df), df["bay_id"].nunique())
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to load gold parquet for duration filter")
+        _gold_df = None
+    return _gold_df
+
+
+def get_duration_filtered_bays(needed_mins: int, arrival_time: str, day: int) -> list[str]:
+    """Return bay_ids where parking for needed_mins is possible at arrival_time on day.
+
+    day: 0=Sun, 1=Mon, …, 6=Sat  (matches JS Date.getDay() and parquet encoding)
+    arrival_time: "HH:MM"
+
+    A bay is included if:
+    - It has an active restriction at that time/day with duration_mins >= needed_mins
+    - OR it has NO restriction at that time/day (unrestricted → can park as long as needed)
+    """
+    df = _load_gold_df()
+    if df is None:
+        return []
+
+    no_wrap = df["fromday"] <= df["today"]
+    mask_day = (
+        (no_wrap & (df["fromday"] <= day) & (day <= df["today"]))
+        | (~no_wrap & ((day >= df["fromday"]) | (day <= df["today"])))
+    )
+    mask_time = (df["starttime"] <= arrival_time) & (arrival_time < df["endtime"])
+    active = df[mask_day & mask_time]
+
+    all_bay_ids = set(df["bay_id"].astype(str).unique())
+
+    if active.empty:
+        return list(all_bay_ids)
+
+    restricted_ids = set(active["bay_id"].astype(str).unique())
+    unrestricted_ids = all_bay_ids - restricted_ids
+
+    timed = active.dropna(subset=["duration_mins"]).copy()
+    timed["bay_id"] = timed["bay_id"].astype(str)
+    if not timed.empty:
+        max_dur = timed.groupby("bay_id")["duration_mins"].max()
+        can_park_ids = set(max_dur[max_dur >= needed_mins].index.tolist())
+    else:
+        can_park_ids = set()
+
+    return list(can_park_ids | unrestricted_ids)
