@@ -1,25 +1,38 @@
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
+import { createRoot } from 'react-dom/client'
 import ParkingMap from './ParkingMap'
 import OnboardingOverlay from './OnboardingOverlay'
 import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import FilterChips from '../feedback/FilterChips'
-import DecisionCard from '../pressure/DecisionCard'
-import ZoneDetailPanel from '../pressure/ZoneDetailPanel'
-import PressureLegend from '../pressure/PressureLegend'
-import TimeHorizonSelector from '../pressure/TimeHorizonSelector'
+import BusyNowPanel from '../busyNow/BusyNowPanel'
+import SegmentPopup from '../busyNow/SegmentPopup'
+import BottomSheet, { SNAP_PEEK, SNAP_HALF } from '../layout/BottomSheet'
+import { segmentDetailFromApi } from '../busyNow/segmentDetailFromApi'
+import { useBusyNow } from '../../hooks/useBusyNow'
+import { useQuietestSegments } from '../../hooks/useQuietestSegments'
+import { buildSegmentPopupDom } from '../busyNow/segmentPopupDom'
+import { fetchSegmentDetail } from '../../services/apiPressure'
 import { useMapState } from '../../hooks/useMapState'
-import { usePressure, useAlternatives } from '../../hooks/usePressure'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
-import { fetchAccessibilityAll, fetchEvaluateBulk } from '../../services/apiBays'
+import { fetchAccessibilityNearby, fetchEvaluateBulk } from '../../services/apiBays'
+import { destinationLatLng } from '../../utils/mapGeo'
 import {
   DEFAULT_PLANNER_DURATION_MINS,
   formatAtDateTime,
   melbourneWallClockToAwareIso,
   toMelbourneDateTimeInputValue,
 } from '../../utils/plannerTime'
+import L from 'leaflet'
 import { getStatusFillColor } from './ParkingMap'
+
+const CHANCE_TEXT = {
+  low: 'Good chance',
+  medium: 'Getting busy',
+  high: 'Hard to park',
+  unknown: 'No live estimate',
+}
 
 function splitMelbourneDateTimeParts(iso) {
   const dt = toMelbourneDateTimeInputValue(iso)
@@ -30,6 +43,9 @@ function splitMelbourneDateTimeParts(iso) {
 
 export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry }) {
   const mapRef = useRef(null)
+  const segmentPopupRef = useRef(null)
+  const segmentReactRootRef = useRef(null)
+  const segmentFetchAbortRef = useRef(null)
 
   const {
     selectedBayId,
@@ -49,6 +65,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     destinationMapZoom,
   } = useMapState()
 
+  /** Stable reference for map layers so vector redraw does not run on unrelated parent re-renders. */
+  const destinationStable = useMemo(
+    () => destination,
+    [destination?.lat, destination?.lng, destination?.name],
+  )
+
   /** Persisted across bay opens: last debounced plan from the detail sheet. */
   const [plannerArrivalIso, setPlannerArrivalIso] = useState(null)
   const [plannerDurationMins, setPlannerDurationMins] = useState(null)
@@ -56,37 +78,185 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [mapBaysAtPlannedTime, setMapBaysAtPlannedTime] = useState(false)
   /** Bump to force sheet form reset when banner or Clear resets live mode. */
   const [plannerResetNonce, setPlannerResetNonce] = useState(0)
+  const [parkingChanceSnap, setParkingChanceSnap] = useState(SNAP_PEEK)
 
-  // ── Epic 5: Pressure map state ──
-  const [pressureEnabled, setPressureEnabled] = useState(false)
-  const [selectedZone, setSelectedZone] = useState(null)
-  const { zones: pressureZones, hulls: pressureHulls, horizon, setHorizon, loading: pressureLoading } =
-    usePressure(pressureEnabled)
-  const { data: alternativesData } = useAlternatives(
-    destination?.lat, destination?.lng, null, !!(pressureEnabled && destination),
-  )
+  // ── Parking chance context (internal vector-tile street pressure layer) ──
+  const { manifest: busyNowManifest, status: busyNowStatus } = useBusyNow(true)
+  const [colorBlindMode, setColorBlindMode] = useState(false)
 
-  const togglePressure = useCallback(() => {
-    setPressureEnabled((v) => {
-      if (!v) setMapBaysAtPlannedTime(false) // mutual exclusion with planner
-      return !v
-    })
-  }, [])
+  const parkingChanceActive =
+    busyNowStatus === 'ready' &&
+    busyNowManifest != null &&
+    busyNowManifest.total_segments > 0
 
-  const handlePressureZoneClick = useCallback((zone) => {
-    setSelectedZone(zone)
+  // Alternative-pin position (Phase 2 — A11). Set when the user clicks an
+  // alternative zone in the BusyNowPanel; cleared when destination changes.
+  const [altPinPos, setAltPinPos] = useState(null)
+
+  const buildPinSubtitle = useCallback((item) => {
+    if (!item) return ''
+    const parts = []
+    const level = item.level || item.pressure_level
+    if (level) parts.push(CHANCE_TEXT[level] || 'No live estimate')
+    const free = item.free_bays ?? item.free
+    const total = item.total_bays ?? item.total
+    if (free != null) {
+      parts.push(total != null ? `${free}/${total} bays free` : `${free} bays free`)
+    }
+    const distance = item.walk_distance_m ?? item.distance_m
+    if (distance != null) parts.push(`${distance} m away`)
+    return parts.join(' · ')
   }, [])
 
   const handleAlternativeClick = useCallback((alt) => {
-    setSelectedZone(null)
+    if (!alt) return
+    const lat = alt.centroid_lat
+    const lon = alt.centroid_lon
+    if (typeof lat !== 'number' || typeof lon !== 'number') return
     if (mapRef.current) {
-      mapRef.current.flyTo([alt.centroid_lat, alt.centroid_lon], 17, { duration: 0.8 })
+      const dest = destination ? destinationLatLng(destination) : null
+      if (dest?.lat != null && dest?.lng != null) {
+        mapRef.current.fitBounds(
+          [[dest.lat, dest.lng], [lat, lon]],
+          { padding: [80, 80], maxZoom: 18 },
+        )
+      } else {
+        mapRef.current.flyTo([lat, lon], 18, { duration: 0.8 })
+      }
     }
+    const name = alt.label || alt.name || alt.zone_name || `Zone ${alt.zone_id}`
+    setAltPinPos({
+      lat,
+      lng: lon,
+      name,
+      subtitle: buildPinSubtitle(alt),
+      source: 'alternative',
+      zoneId: alt.zone_id,
+    })
+  }, [buildPinSubtitle, destination])
+
+  const handleQuietStreetClick = useCallback((seg) => {
+    if (!seg) return
+    const lat = seg.lat ?? seg.mid_lat
+    const lng = seg.lng ?? seg.mid_lon
+    if (typeof lat !== 'number' || typeof lng !== 'number') return
+    mapRef.current?.flyTo([lat, lng], 18, { duration: 0.8 })
+    setAltPinPos({
+      lat,
+      lng,
+      name: seg.street_name || seg.name || 'Less busy street',
+      subtitle: buildPinSubtitle(seg),
+      source: 'quiet-street',
+      segmentId: seg.segment_id,
+    })
+  }, [buildPinSubtitle])
+
+  const clearSelectedSuggestion = useCallback(() => {
+    setAltPinPos(null)
   }, [])
+
+  // Clear alt pin whenever the destination changes (incl. clear).
+  useEffect(() => {
+    setAltPinPos(null)
+  }, [destination])
+
+  const handleSegmentClick = useCallback(
+    (props, latlng) => {
+      if (!mapRef.current || !latlng) return
+      const map = mapRef.current
+
+      segmentFetchAbortRef.current?.abort()
+      const ac = new AbortController()
+      segmentFetchAbortRef.current = ac
+
+      if (segmentReactRootRef.current) {
+        try {
+          segmentReactRootRef.current.unmount()
+        } catch (_e) {
+          /* noop */
+        }
+        segmentReactRootRef.current = null
+      }
+
+      const skeleton = buildSegmentPopupDom(props)
+      const popup = L.popup().setLatLng(latlng).setContent(skeleton).openOn(map)
+      segmentPopupRef.current = popup
+
+      const cleanupReact = () => {
+        if (segmentReactRootRef.current) {
+          try {
+            segmentReactRootRef.current.unmount()
+          } catch (_e) {
+            /* noop */
+          }
+          segmentReactRootRef.current = null
+        }
+      }
+      popup.on('remove', cleanupReact)
+
+      const segmentId = props?.id != null ? String(props.id) : null
+      if (!segmentId) return
+
+      fetchSegmentDetail(segmentId, {
+        signal: ac.signal,
+        dataVersion: busyNowManifest?.data_version ?? busyNowManifest?.minute_bucket ?? null,
+      })
+        .then((apiDetail) => {
+          if (segmentPopupRef.current !== popup) return
+          const detail = segmentDetailFromApi(apiDetail)
+          if (!detail) return
+          const wrap = document.createElement('div')
+          const root = createRoot(wrap)
+          segmentReactRootRef.current = root
+          root.render(
+            <SegmentPopup
+              detail={detail}
+              colorBlindMode={colorBlindMode}
+              isMobile={isMobile}
+              onRequestClose={() => {
+                map.closePopup(popup)
+              }}
+              onMarkAsTarget={() => {
+                handleQuietStreetClick({
+                  ...detail,
+                  lat: latlng.lat,
+                  lng: latlng.lng,
+                  mid_lat: latlng.lat,
+                  mid_lon: latlng.lng,
+                  street_name: detail.street_name || props?.name || props?.street_name,
+                  segment_id: props?.id ?? detail.segment_id,
+                })
+                map.closePopup(popup)
+              }}
+            />,
+          )
+          popup.setContent(wrap)
+        })
+        .catch((err) => {
+          if (err?.name === 'AbortError') return
+          if (segmentPopupRef.current !== popup) return
+          const errWrap = document.createElement('div')
+          errWrap.className =
+            'p-3 text-xs text-rose-700 dark:text-rose-300 max-w-[240px]'
+          errWrap.textContent = 'Could not load street details. Try again in a moment.'
+          popup.setContent(errWrap)
+          window.setTimeout(() => {
+            if (segmentPopupRef.current === popup && map?.closePopup) {
+              map.closePopup(popup)
+            }
+          }, 2000)
+        })
+    },
+    [colorBlindMode, handleQuietStreetClick, busyNowManifest?.data_version, busyNowManifest?.minute_bucket],
+  )
 
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false
     return !window.sessionStorage.getItem('melopark.onboarded')
+  })
+  const [showPressureCoach, setShowPressureCoach] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return !window.sessionStorage.getItem('melopark.pressureCoachSeen')
   })
 
   const dismissOnboarding = useCallback(() => {
@@ -94,6 +264,13 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
       window.sessionStorage.setItem('melopark.onboarded', '1')
     } catch (_e) {}
     setShowOnboarding(false)
+  }, [])
+
+  const dismissPressureCoach = useCallback(() => {
+    try {
+      window.sessionStorage.setItem('melopark.pressureCoachSeen', '1')
+    } catch (_e) {}
+    setShowPressureCoach(false)
   }, [])
 
   const handleOnboardingPick = useCallback((lm, arrivalIso = null, opts = null) => {
@@ -124,10 +301,49 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
 
+  // Quietest segments in viewport (single fetch, limit 150 — panel uses first 3, trend markers use full list).
+  const { segments: quietSegmentsAll } = useQuietestSegments({
+    bounds: debouncedBounds,
+    enabled: parkingChanceActive,
+  })
+  const quietStreets = useMemo(() => {
+    const levelScore = { low: 0, medium: 1, high: 2, unknown: 3 }
+    return [...quietSegmentsAll]
+      .sort((a, b) => {
+        const liveA = a.has_live_bays === false ? 1 : 0
+        const liveB = b.has_live_bays === false ? 1 : 0
+        if (liveA !== liveB) return liveA - liveB
+        const levelA = levelScore[a.level] ?? 3
+        const levelB = levelScore[b.level] ?? 3
+        if (levelA !== levelB) return levelA - levelB
+        const freeA = Number(a.free ?? 0)
+        const freeB = Number(b.free ?? 0)
+        return freeB - freeA
+      })
+      .slice(0, 3)
+  }, [quietSegmentsAll])
+
   const plannerParams = useMemo(() => {
     if (!plannerArrivalIso || plannerDurationMins == null) return null
     return { arrivalIso: plannerArrivalIso, durationMins: plannerDurationMins }
   }, [plannerArrivalIso, plannerDurationMins])
+
+  const pressureModeNote = useMemo(() => {
+    if (!plannerArrivalIso) return 'Parking chance: live now'
+    return `Parking chance: live now · Rules: ${formatAtDateTime(plannerArrivalIso)}`
+  }, [plannerArrivalIso])
+
+  const parkingChanceSheetTitle = useMemo(() => {
+    if (altPinPos) return 'Less busy pick'
+    if (destination) return 'Near destination'
+    return 'Best nearby parking'
+  }, [altPinPos, destination])
+
+  const parkingChanceSheetSubtitle = useMemo(() => {
+    if (altPinPos) return altPinPos.name
+    if (destination) return 'Compare parking chance before you drive'
+    return 'Quiet streets around current map view'
+  }, [altPinPos, destination])
 
   const debouncedPlannerForBulk = useDebouncedPlannerParams(
     mapBaysAtPlannedTime ? plannerParams : null,
@@ -294,11 +510,24 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   }, [])
 
   const [legendOpen, setLegendOpen] = useState(false)
-  const [colorBlindMode, setColorBlindMode] = useState(false)
   useEffect(() => {
     if (!isMobile) setLegendOpen(true)
     else setLegendOpen(false)
   }, [isMobile])
+
+  useEffect(() => {
+    if (!isMobile) return
+    setParkingChanceSnap(altPinPos ? SNAP_HALF : SNAP_PEEK)
+  }, [isMobile, altPinPos])
+
+  useEffect(() => {
+    if (isMobile || !altPinPos) return undefined
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') clearSelectedSuggestion()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [altPinPos, clearSelectedSuggestion, isMobile])
 
   const handlePickLandmark = useCallback((lm) => pickDestination(lm), [pickDestination])
 
@@ -358,23 +587,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   const mapTopRightControls = (
     <div className="relative flex flex-nowrap items-start gap-2">
-      <button
-        type="button"
-        onClick={togglePressure}
-        aria-pressed={pressureEnabled}
-        aria-label={pressureEnabled ? 'Hide parking pressure' : 'Show parking pressure'}
-        className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
-          pressureEnabled
-            ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-            : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-        }`}
-        title={pressureEnabled ? 'Pressure map: ON' : 'Pressure map: OFF'}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path d="M3 17h4V9H3v8zm6 0h4V3H9v14zm6 0h4v-6h-4v6z" fill="currentColor" />
-        </svg>
-        <span className="text-[9px] font-semibold leading-none">Pressure</span>
-      </button>
       <button
         type="button"
         onClick={() => setColorBlindMode((v) => !v)}
@@ -451,7 +663,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           proximityBays={mapProximityBays}
           activeFilter={activeFilter}
           selectedBayId={selectedBayId}
-          destination={destination}
+          destination={destinationStable}
           onBayClick={handleBayClick}
           onMapReady={handleMapReady}
           onBoundsChange={handleMapBounds}
@@ -463,11 +675,14 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           destZoom={destinationMapZoom}
           isMobile={isMobile}
           hideHint={isMobile && legendOpen}
-          pressureEnabled={pressureEnabled}
-          pressureHulls={pressureHulls}
-          pressureZones={pressureZones}
-          onPressureZoneClick={handlePressureZoneClick}
+          busyNow={parkingChanceActive}
+          busyNowManifest={busyNowManifest}
+          busyNowQuietSegments={parkingChanceActive ? quietSegmentsAll : undefined}
+          onSegmentClick={handleSegmentClick}
           colorBlindMode={colorBlindMode}
+          altPinPos={altPinPos}
+          onMapEmptyClick={clearSelectedSuggestion}
+          dimRadiusM={600}
         />
 
         {accessibilityAvailableOnly && (
@@ -615,7 +830,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </>
         )}
 
-        {destination && (
+        {destination && !isMobile && (
           <div
             className="absolute bottom-3.5 z-[500] bg-surface-secondary text-gray-900 rounded-2xl px-5 py-2.5 text-sm font-semibold shadow-overlay flex flex-col items-center gap-0.5 max-w-[calc(100%-120px)] border-2 border-brand"
             style={{ left: '50%', transform: 'translateX(-50%)' }}
@@ -623,7 +838,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             <span>
               {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across&nbsp;
               {proxFreeBays} {proxModeLabel}
-              {proxFreeBays !== 1 ? 's' : ''} within 400 m of {destination.name}
+              {proxFreeBays !== 1 ? 's' : ''} within 600 m of {destination.name}
             </span>
             {!showLimitedBays && proxLimitedCount > 0 && (
               <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
@@ -648,6 +863,27 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           </div>
         )}
 
+        {parkingChanceActive && showPressureCoach && !showOnboarding && (
+          <div className={`absolute left-3.5 z-[510] max-w-[260px] rounded-xl border border-emerald-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-card dark:border-emerald-800 dark:bg-surface-dark-secondary/95 dark:text-gray-100 ${
+            isMobile ? 'top-[230px]' : 'top-[126px]'
+          }`}>
+            <div className="font-semibold text-emerald-700 dark:text-emerald-200">
+              Parking chance is live now
+            </div>
+            <div className="mt-0.5 leading-snug">
+              Green streets are easier. Tap any colored street to see why.
+            </div>
+            <button
+              type="button"
+              onClick={dismissPressureCoach}
+              className="mt-1 text-[11px] font-semibold text-brand hover:underline dark:text-brand-light"
+            >
+              Got it
+            </button>
+          </div>
+        )}
+
+        {!isMobile && (
         <div
           className="group absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-2.5 py-1 sm:px-3.5 sm:py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col cursor-help max-w-[45vw] sm:max-w-none"
           aria-label="Total parking bays on the live feed"
@@ -670,6 +906,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
             </span>
           )}
         </div>
+        )}
 
         {(() => {
           const availableColor = getStatusFillColor('available', colorBlindMode)
@@ -694,6 +931,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
               label: 'Parking spots occupied',
               symbolClass: 'legend-symbol-occupied',
             },
+          ]
+          const streetRows = [
+            { color: availableColor, label: 'Good chance street', symbolClass: 'legend-street-good' },
+            { color: cautionColor, label: 'Getting busy street', symbolClass: 'legend-street-busy' },
+            { color: occupiedColor, label: 'Hard to park street', symbolClass: 'legend-street-hard' },
+            { color: colorBlindMode ? '#9ca3af' : '#cbd5e1', label: 'No live estimate', symbolClass: 'legend-street-unknown' },
           ]
           return (
             <div
@@ -744,41 +987,130 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
+                  <div className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
+                    Street parking chance
+                  </div>
+                  {streetRows.map(({ label, symbolClass, color }) => (
+                    <div key={label} className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
+                      <div
+                        className={`${symbolClass} h-1.5 w-5 shrink-0 rounded-full`}
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="truncate">{label}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )
         })()}
 
-        {/* ── Epic 5: Pressure overlays ── */}
-        {pressureEnabled && (
-          <div className="absolute left-3.5 top-[168px] z-[520] sm:top-[128px]">
-            <TimeHorizonSelector value={horizon} onChange={setHorizon} />
-          </div>
-        )}
-
-        {pressureEnabled && (
-          <div className="absolute bottom-28 left-3.5 z-[510] sm:bottom-20">
-            <PressureLegend />
-          </div>
-        )}
-
-        {selectedZone && !destination && (
-          <div className="absolute bottom-28 right-3 z-[520] w-72 sm:bottom-6">
-            <ZoneDetailPanel zone={selectedZone} onClose={() => setSelectedZone(null)} />
-          </div>
-        )}
-
-        {pressureEnabled && destination && alternativesData && (
-          <div className="absolute bottom-28 right-3 z-[520] w-80 sm:bottom-6">
-            <DecisionCard
-              target={alternativesData.target}
-              alternatives={alternativesData.alternatives}
-              destinationName={destination?.name || destination?.label}
-              onAlternativeClick={handleAlternativeClick}
-              onClose={() => setPressureEnabled(false)}
-            />
-          </div>
+        {busyNowStatus !== 'idle' && (
+          isMobile ? (
+            <BottomSheet
+              snap={parkingChanceSnap}
+              onSnapChange={setParkingChanceSnap}
+              title={parkingChanceSheetTitle}
+              subtitle={parkingChanceSheetSubtitle}
+            >
+              <div className="px-3 pb-4">
+                {altPinPos && (
+                  <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50/95 p-3 dark:border-emerald-800/60 dark:bg-emerald-950/80">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
+                      Less busy pick
+                    </div>
+                    <div className="truncate text-sm font-semibold text-emerald-950 dark:text-emerald-50">
+                      {altPinPos.name}
+                    </div>
+                    {altPinPos.subtitle && (
+                      <div className="mt-0.5 text-[11px] text-emerald-800 dark:text-emerald-100">
+                        {altPinPos.subtitle}
+                      </div>
+                    )}
+                    {destination && altPinPos.source === 'alternative' && (
+                      <div className="mt-2 rounded-lg bg-white/65 px-2 py-1.5 text-[11px] text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100">
+                        <div>
+                          <span className="font-semibold">Destination:</span> {destination.name}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Selected:</span> {altPinPos.subtitle || 'Less busy option'}
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={clearSelectedSuggestion}
+                      className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-bold text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-surface-dark dark:text-emerald-100"
+                    >
+                      Clear pick
+                    </button>
+                  </div>
+                )}
+                <BusyNowPanel
+                  manifest={busyNowManifest}
+                  status={busyNowStatus}
+                  destination={destination}
+                  onAlternativeClick={handleAlternativeClick}
+                  colorBlindMode={colorBlindMode}
+                  quietStreets={quietStreets}
+                  onStreetClick={handleQuietStreetClick}
+                  selectedSuggestion={altPinPos}
+                  pressureModeNote={pressureModeNote}
+                  mobileSheet
+                />
+              </div>
+            </BottomSheet>
+          ) : (
+            <div className="absolute bottom-28 left-3.5 z-[510] flex max-w-[min(320px,calc(100vw-28px))] flex-col gap-2 sm:bottom-20">
+              {altPinPos && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/95 p-2.5 shadow-card backdrop-blur-sm dark:border-emerald-800/60 dark:bg-emerald-950/80">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
+                        Less busy pick
+                      </div>
+                      <div className="truncate text-[12px] font-semibold text-emerald-950 dark:text-emerald-50">
+                        {altPinPos.name}
+                      </div>
+                      {altPinPos.subtitle && (
+                        <div className="mt-0.5 text-[10px] text-emerald-800 dark:text-emerald-100">
+                          {altPinPos.subtitle}
+                        </div>
+                      )}
+                      {destination && altPinPos.source === 'alternative' && (
+                        <div className="mt-1 rounded-lg bg-white/65 px-2 py-1 text-[10px] text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100">
+                          <div>
+                            <span className="font-semibold">Destination:</span> {destination.name}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Selected:</span> {altPinPos.subtitle || 'Less busy option'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearSelectedSuggestion}
+                      className="shrink-0 rounded-lg border border-emerald-300 bg-white px-2 py-1 text-[10px] font-bold text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-surface-dark dark:text-emerald-100"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
+              <BusyNowPanel
+                manifest={busyNowManifest}
+                status={busyNowStatus}
+                destination={destination}
+                onAlternativeClick={handleAlternativeClick}
+                colorBlindMode={colorBlindMode}
+                quietStreets={quietStreets}
+                onStreetClick={handleQuietStreetClick}
+                selectedSuggestion={altPinPos}
+                pressureModeNote={pressureModeNote}
+              />
+            </div>
+          )
         )}
 
         {showOnboarding && (

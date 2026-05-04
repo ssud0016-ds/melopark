@@ -74,7 +74,20 @@ export function mapApiRecordToBay(record) {
 export async function fetchParkingBays() {
   const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
   const url = `${base}/api/parking`
-  const res = await fetch(url)
+  // Avoid infinite loading overlays when the API socket hangs.
+  const ctrl = new AbortController()
+  const timeoutId = setTimeout(() => ctrl.abort(), 10000)
+  let res
+  try {
+    res = await fetch(url, { signal: ctrl.signal })
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Parking API timeout after 10s. Check backend/proxy and retry.')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeoutId)
+  }
   if (!res.ok) {
     let detail = ''
     try {

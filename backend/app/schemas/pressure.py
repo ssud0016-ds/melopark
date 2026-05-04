@@ -64,3 +64,4 @@ class AlternativeZone(BaseModel):
 class AlternativesResponse(BaseModel):
     target_zone: Optional[ZonePressure] = None
     alternatives: list[AlternativeZone]
+    fallback_mode: Optional[str] = None

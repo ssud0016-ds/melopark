@@ -1,6 +1,10 @@
 """FastAPI application entrypoint."""
 
+import asyncio
 import logging
+import math
+import os
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -24,6 +28,51 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
+def _deg2tile(lon: float, lat: float, zoom: int) -> tuple[int, int]:
+    """Convert WGS84 lon/lat to slippy tile x/y at the given zoom level."""
+    n = 2 ** zoom
+    x = int((lon + 180.0) / 360.0 * n)
+    lat_rad = math.radians(lat)
+    y = int((1.0 - math.log(math.tan(lat_rad) + 1.0 / math.cos(lat_rad)) / math.pi) / 2.0 * n)
+    return x, y
+
+
+async def _prewarm_cbd_tiles() -> None:
+    """Pre-compute practical Melbourne CBD tiles.
+
+    This runs as a non-blocking background task so FastAPI startup is not
+    delayed.  Controlled by MELOPARK_TILE_PREWARM env var (default "1").
+    """
+    from app.services.segment_tiles_service import build_tile
+
+    zooms = [14, 15, 16]
+    max_tiles = int(os.getenv("MELOPARK_TILE_PREWARM_MAX", "160"))
+    # Melbourne CBD approximate bounding box
+    lon_min, lat_min, lon_max, lat_max = 144.94, -37.83, 144.98, -37.81
+
+    tiles = []
+    for zoom in zooms:
+        x_min, y_max = _deg2tile(lon_min, lat_min, zoom)
+        x_max, y_min = _deg2tile(lon_max, lat_max, zoom)
+        tiles.extend(
+            (zoom, x, y)
+            for x in range(x_min, x_max + 1)
+            for y in range(y_min, y_max + 1)
+        )
+    tiles = tiles[:max_tiles]
+
+    t0 = time.monotonic()
+    logger.info("tile-prewarm: starting %d CBD tiles across z=%s", len(tiles), zooms)
+
+    for z, x, y in tiles:
+        # Yield control after each tile so the event loop stays responsive.
+        await asyncio.sleep(0)
+        build_tile(z, x, y)
+
+    elapsed = time.monotonic() - t0
+    logger.info("tile-prewarm: completed %d tiles in %.2fs", len(tiles), elapsed)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: start background refresh tasks on startup."""
@@ -31,9 +80,16 @@ async def lifespan(app: FastAPI):
     from app.services.restriction_lookup_service import start_background_restrictions_refresh
 
     from app.services.pressure_service import load_gold_data
+    from app.services.segment_pressure_service import load_segment_data
     await start_background_refresh()
     await start_background_restrictions_refresh()
     load_gold_data()
+    load_segment_data()
+
+    # B8 — pre-warm CBD tiles in the background (skip when MELOPARK_TILE_PREWARM=0).
+    if os.getenv("MELOPARK_TILE_PREWARM", "1") == "1":
+        asyncio.create_task(_prewarm_cbd_tiles())
+
     yield
     # No teardown needed — background tasks are cancelled automatically by the runtime.
 

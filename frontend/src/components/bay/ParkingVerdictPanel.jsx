@@ -102,6 +102,8 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
         'This bay is reserved for drivers displaying a valid disability parking permit.'
       )
     }
+    const hasTranslatorCards = Array.isArray(evaluation?.translator_rules) && evaluation.translator_rules.length > 0
+    if (hasTranslatorCards) return null
     if (variant === 'no' && evaluation?.verdict === 'no' && restriction?.max_stay_mins != null && typeof durationMins === 'number') {
       if (durationMins > restriction.max_stay_mins) {
         const hrs = restriction.max_stay_mins % 60 === 0 ? `${restriction.max_stay_mins / 60} hours` : `${restriction.max_stay_mins} minutes`
@@ -113,6 +115,13 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
     return null
   })()
 
+  const trustNote = (() => {
+    const source = evaluation?.data_source
+    if (source === 'api_fallback') return 'Rule estimate from external category data. Check street sign.'
+    if (source === 'unknown') return 'No reliable restriction data for this bay. Check street sign.'
+    return null
+  })()
+
   return (
     <div className={cn('mx-5 mt-3 rounded-2xl p-5', panelTone)}>
       <div className="flex items-baseline gap-3">
@@ -121,6 +130,11 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
         </div>
         <div className="text-sm font-semibold text-[#263089]">{sentence}</div>
       </div>
+      {trustNote && (
+        <div className="mt-2 rounded-lg bg-white/35 px-3 py-2 text-[11px] font-semibold text-[#263089]">
+          {trustNote}
+        </div>
+      )}
 
       <div className="mt-4 space-y-2.5 text-sm text-[#263089]">
         {showRestrictionRow && (
