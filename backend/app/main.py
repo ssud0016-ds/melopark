@@ -90,6 +90,17 @@ async def lifespan(app: FastAPI):
         asyncio.to_thread(load_segment_data),
     )
 
+    # Pre-warm pressure compute cache before serving so the first manifest request
+    # is a cache hit (avoids DO gateway 504 on cold start).
+    if os.getenv("MELOPARK_PRESSURE_PREWARM", "1") == "1":
+        from app.services.segment_pressure_service import get_pressure_by_data_version, is_loaded
+        if is_loaded():
+            try:
+                await asyncio.to_thread(get_pressure_by_data_version)
+                logger.info("pressure-prewarm: done")
+            except Exception as _pw_exc:  # non-fatal — 503 is better than startup crash
+                logger.warning("pressure-prewarm failed: %s", _pw_exc)
+
     # B8 — pre-warm CBD tiles in the background (skip when MELOPARK_TILE_PREWARM=0).
     if os.getenv("MELOPARK_TILE_PREWARM", "1") == "1":
         asyncio.create_task(_prewarm_cbd_tiles())
