@@ -46,7 +46,7 @@ export default function BusyNowTrendMarkers({
       sparse.forEach((seg) => {
         if (typeof seg.mid_lat !== 'number' || typeof seg.mid_lon !== 'number') return
 
-        let arrow = '→'
+        let arrow = '-'
         let ariaLabel = 'steady'
         if (seg.trend === 'up') {
           arrow = '↑'

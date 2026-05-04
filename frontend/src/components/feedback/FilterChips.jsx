@@ -65,7 +65,7 @@ export default function FilterChips({
     )
   }
 
-  const subheading = 'px-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400'
+  const subheading = 'px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400'
 
   return (
     <div id="map-filter-chips" className="flex w-full flex-col gap-1 bg-transparent">
@@ -99,6 +99,7 @@ export default function FilterChips({
       </div>
 
       <span className={subheading}>Duration</span>
+      <div className="relative">
       <div
         className="flex w-full items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="radiogroup"
@@ -119,6 +120,9 @@ export default function FilterChips({
             <span className="shrink-0 text-[11px] font-semibold text-slate-600 dark:text-gray-300">min</span>
           </div>
         )}
+      </div>
+      {/* Right-edge fade — signals horizontal scrollability */}
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white/90 to-transparent dark:from-surface-dark-secondary/90" aria-hidden />
       </div>
     </div>
   )
