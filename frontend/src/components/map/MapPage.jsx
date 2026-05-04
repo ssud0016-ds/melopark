@@ -16,6 +16,8 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
 import { fetchAccessibilityAll, fetchEvaluateBulk } from '../../services/apiBays'
 import { destinationLatLng } from '../../utils/mapGeo'
+import ParkingForecastPanel from './ParkingForecastPanel'
+import { useParkingForecast } from '../../hooks/useParkingForecast'
 import {
   DEFAULT_PLANNER_DURATION_MINS,
   melbourneWallClockToAwareIso,
@@ -157,6 +159,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   /** Bump to force sheet form reset when banner or Clear resets live mode. */
   const [plannerResetNonce, setPlannerResetNonce] = useState(0)
   const [parkingChanceSnap, setParkingChanceSnap] = useState(SNAP_PEEK)
+  const forecast = useParkingForecast({
+    destination: destinationStable,
+    plannerArrivalIso,
+    enabled: true,
+    hoursAhead: 6,
+  })
 
   // ── Parking chance context (internal vector-tile street pressure layer) ──
   const { manifest: busyNowManifest, status: busyNowStatus } = useBusyNow(true)
@@ -399,7 +407,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     if (df === 'custom') setCustomDuration(cd)
     setAccessibilityMode(accessible)
     setAccessibilityAvailableOnly(accessible)
-    // Sync arrival time → filterDate/filterTime (via plannerArrivalIso useEffect)
+    // Sync arrival time -> filterDate/filterTime (via plannerArrivalIso useEffect)
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
       setPlannerDurationMins(DEFAULT_PLANNER_DURATION_MINS)
@@ -1084,6 +1092,21 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                     </button>
                   ))}
                 </div>
+              </div>
+              <div className="w-full pointer-events-auto mt-1">
+                <ParkingForecastPanel
+                  zoneWarnings={forecast.zoneWarnings}
+                  warnings={forecast.warnings}
+                  worstLevel={forecast.worstLevel}
+                  alternatives={forecast.alternatives}
+                  loading={forecast.loading}
+                  onZoneClick={(zone) => {
+                    const lat = zone?.zone_lat ?? zone?.centroid_lat
+                    const lon = zone?.zone_lon ?? zone?.centroid_lon
+                    if (mapRef.current && lat && lon) mapRef.current.flyTo([lat, lon], 15)
+                  }}
+                  isMobile={false}
+                />
               </div>
 
               <div

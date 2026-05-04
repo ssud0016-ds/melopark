@@ -19,6 +19,7 @@ from app.routers.health import router as health_router
 from app.routers.parking import router as parking_router
 from app.routers.pressure import router as pressure_router
 from app.routers.search import router as search_router
+from app.routers.forecasts import router as forecasts_router
 
 #Rate limittinh
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -86,9 +87,11 @@ async def lifespan(app: FastAPI):
     await start_background_restrictions_refresh()
     # Heavy parquet + geometry init: run in threads so event loop stays responsive
     # during startup (health checks, logging). Wall-clock similar unless I/O overlaps.
+    from app.services.forecast_service import load_forecast_data
     await asyncio.gather(
         asyncio.to_thread(load_gold_data),
         asyncio.to_thread(load_segment_data),
+        asyncio.to_thread(load_forecast_data),
     )
 
     # Pre-warm pressure compute cache before serving so the first manifest request
@@ -165,4 +168,4 @@ app.include_router(bays_router)
 app.include_router(search_router)
 app.include_router(accessibility_router)
 app.include_router(pressure_router)
-
+app.include_router(forecasts_router)
