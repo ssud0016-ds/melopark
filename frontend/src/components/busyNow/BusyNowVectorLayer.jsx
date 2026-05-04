@@ -13,7 +13,7 @@ import { haversineMeters } from '../../utils/mapGeo'
  * Lifecycle (Phase 3 — A13):
  *   - Mount once when manifest first becomes available; unmount only on toggle off.
  *   - `manifest.minute_bucket` change → `setUrl(...)` only (no remount → no flicker).
- *   - `destination` / `dimRadiusM` / `colorBlindMode` change → `redraw()` only.
+ *   - `destination` / `dimRadiusM` / `colorBlindMode` / `mapThemeDark` change → `redraw()` only.
  *
  * Dimming (Phase 2 — A9, B1):
  *   When `destination` is set, segments whose midpoint (`mid_lat`/`mid_lon`,
@@ -61,6 +61,8 @@ export default function BusyNowVectorLayer({
   colorBlindMode = false,
   destination = null,
   dimRadiusM = 600,
+  /** Leaflet dark/light map basemap — triggers canvas redraw when theme flips. */
+  mapThemeDark = false,
   onSegmentClick,
 }) {
   const map = useMap()
@@ -191,7 +193,7 @@ export default function BusyNowVectorLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileVersion])
 
-  // Re-style on destination / dimRadius / colorBlind change. No fetch.
+  // Re-style on destination / dimRadius / colorBlind / basemap theme change. No fetch.
   useEffect(() => {
     const layer = layerRef.current
     if (!layer || typeof layer.redraw !== 'function') return
@@ -200,7 +202,7 @@ export default function BusyNowVectorLayer({
       return
     }
     layer.redraw()
-  }, [destination, dimRadiusM, colorBlindMode])
+  }, [destination, dimRadiusM, colorBlindMode, mapThemeDark])
 
   return null
 }
