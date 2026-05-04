@@ -320,6 +320,14 @@ export default function ParkingMap({
   )
 
   const destLatLng = destination ? destinationLatLng(destination) : null
+  const proximityBayIdSet = useMemo(
+    () => new Set(proximityBays.map((p) => p.id)),
+    [proximityBays],
+  )
+  const visibleBayIdSet = useMemo(
+    () => new Set(visibleBays.map((v) => v.id)),
+    [visibleBays],
+  )
 
   const { verifiedBays, limitedBays } = useMemo(() => {
     // hasRules === parking has_restriction_data. limited = no CoM row in cache.
@@ -327,13 +335,13 @@ export default function ParkingMap({
     // (e.g. accessibility mode) cannot be bypassed by "All bays".
     const byType = visibleBays
     const inRange = destination
-      ? byType.filter((b) => proximityBays.some((p) => p.id === b.id))
+      ? byType.filter((b) => proximityBayIdSet.has(b.id))
       : byType
     return {
       verifiedBays: inRange.filter((b) => b.hasRules),
       limitedBays: inRange.filter((b) => !b.hasRules),
     }
-  }, [visibleBays, destination, proximityBays])
+  }, [visibleBays, destination, proximityBayIdSet])
 
   const baysForClustering = useMemo(() => {
     const live = verifiedBays.filter((b) => b.source === 'live')
@@ -349,7 +357,7 @@ export default function ParkingMap({
 
     baysForClustering.forEach((bay) => {
       const ll = bayLatLng(bay)
-      const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)
+      const inRadius = !destination || proximityBayIdSet.has(bay.id)
       if (!inRadius) return
 
       const gx = Math.floor(ll.lat / cellSize)
@@ -386,7 +394,7 @@ export default function ParkingMap({
       trap: g.trap,
       name: g.name,
     }))
-  }, [baysForClustering, zoomLevel, destination, proximityBays])
+  }, [baysForClustering, zoomLevel, destination, proximityBayIdSet])
 
   const clusterIcon = (available, occupied, trap, total) => {
     const a = Number(available) || 0
@@ -527,8 +535,8 @@ export default function ParkingMap({
           zoomLevel >= CLUSTER_ZOOM_CUTOFF &&
           limitedBays.map((bay) => {
             const ll = bayLatLng(bay)
-            const inFilter = visibleBays.some((v) => v.id === bay.id)
-            const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)
+            const inFilter = visibleBayIdSet.has(bay.id)
+            const inRadius = !destination || proximityBayIdSet.has(bay.id)
             let opacity = 1
             if (!inRadius) opacity = 0.12
             else if (!inFilter) opacity = 0.22
@@ -582,8 +590,8 @@ export default function ParkingMap({
 
         {zoomLevel >= CLUSTER_ZOOM_CUTOFF && verifiedBays.map((bay) => {
           const ll = bayLatLng(bay)
-          const inFilter = visibleBays.some((v) => v.id === bay.id)
-          const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)
+          const inFilter = visibleBayIdSet.has(bay.id)
+          const inRadius = !destination || proximityBayIdSet.has(bay.id)
           let opacity = 1
           if (!inRadius) opacity = 0.12
           else if (!inFilter) opacity = 0.22
