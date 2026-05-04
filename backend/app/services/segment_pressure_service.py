@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import math
 import hashlib
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -429,12 +430,21 @@ def get_pressure_by_data_version(at: Optional[datetime] = None) -> tuple[str, li
     """Return (data_version, pressure_rows, active_event_segment_count). Cached until version changes."""
     at_eff = (at or datetime.now(MELB_TZ)).replace(second=0, microsecond=0)
     key = get_pressure_data_version(at_eff)
+    cache_hit = key in _pressure_cache
+    t0 = time.perf_counter()
     if key not in _pressure_cache:
         if len(_pressure_cache) >= _pressure_cache_max:
             _pressure_cache.pop(next(iter(_pressure_cache)))
         rows, active_count = compute_segment_pressure(at_eff)
         _pressure_cache[key] = (rows, active_count)
     cached = _pressure_cache[key]
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    logger.info(
+        "get_pressure_by_data_version cache_hit=%s elapsed_ms=%.1f row_count=%d",
+        cache_hit,
+        elapsed_ms,
+        len(cached[0]),
+    )
     return key, cached[0], cached[1]
 
 
