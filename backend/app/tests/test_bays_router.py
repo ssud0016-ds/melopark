@@ -213,3 +213,18 @@ def test_evaluate_bulk_parses_zulu_same_as_single_evaluate() -> None:
     assert captured["arrival"].tzinfo is not None
     assert captured["arrival"].hour == 2
     assert captured["arrival"].minute == 0
+
+
+def test_evaluate_bulk_rejects_non_float_bbox_with_422() -> None:
+    app.dependency_overrides[get_db] = lambda: object()
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/api/bays/evaluate-bulk",
+            params={"bbox": "bad,values,here,now"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "bbox values must be finite floats"

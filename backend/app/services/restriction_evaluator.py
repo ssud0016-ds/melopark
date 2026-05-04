@@ -213,13 +213,30 @@ def _build_translator_rules(
 
     warning_id = None
     if warning:
-        # Find the BayRestriction row that produced the warning (best-effort match).
-        for r in sorted_rows:
-            if r.is_strict and r.rule_category == warning.get("type") and r.typedesc == warning.get("typedesc"):
-                warning_id = getattr(r, "id", None)
-                break
+        warning_id = warning.get("rule_id")
+        if warning_id is None:
+            # Backward-compatible fallback for warnings produced without rule_id.
+            for r in sorted_rows:
+                if r.is_strict and r.rule_category == warning.get("type") and r.typedesc == warning.get("typedesc"):
+                    warning_id = getattr(r, "id", None)
+                    break
 
+    seen_rule_keys: set[tuple] = set()
     for r in sorted_rows:
+        dedupe_key = (
+            getattr(r, "slot_num", 0),
+            r.fromday,
+            r.today,
+            r.starttime,
+            r.endtime,
+            r.rule_category,
+            r.typedesc,
+            r.plain_english,
+        )
+        if dedupe_key in seen_rule_keys:
+            continue
+        seen_rule_keys.add(dedupe_key)
+
         heading = f"{_format_day_range(r.fromday, r.today)} from {_format_clock(r.starttime)} to {_format_clock(r.endtime)}"
         state: str = "normal"
         banner: Optional[str] = None
@@ -332,6 +349,7 @@ def _find_strict_starting_during_stay(
 
     starts_at, r = earliest
     return {
+        "rule_id": getattr(r, "id", None),
         "type": r.rule_category,
         "typedesc": r.typedesc,
         "starts_at": _to_melbourne_iso(starts_at),
@@ -424,23 +442,6 @@ def _verdict_for_restriction(
                 max_stay,
                 expires_at,
             )
-        return (
-            "no",
-            f"You plan to stay {duration_mins} min but the limit is {max_stay} min. "
-            + r.plain_english,
-            max_stay,
-            expires_at,
-        )
-
-    # Free / unmetered parking windows (build_gold classify_rule → rule_category "free").
-    # Must not fall through to "other", which incorrectly returns verdict "no".
-    if cat == "free":
-        max_stay = r.duration_mins
-        if max_stay is None:
-            return ("yes", r.plain_english, None, None)
-        expires_at = _to_melbourne_iso(arrival + timedelta(minutes=max_stay))
-        if duration_mins <= max_stay:
-            return ("yes", r.plain_english, max_stay, expires_at)
         return (
             "no",
             f"You plan to stay {duration_mins} min but the limit is {max_stay} min. "

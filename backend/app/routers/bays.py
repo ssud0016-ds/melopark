@@ -111,15 +111,23 @@ def evaluate_bulk(
 
     The frontend uses this to recolour dots in a single round-trip (AC 2.2.3).
     """
-    parts = [float(p.strip()) for p in bbox.split(",")]
-    if len(parts) != 4:
+    raw_parts = [p.strip() for p in bbox.split(",")]
+    if len(raw_parts) != 4:
         from fastapi import HTTPException
 
         raise HTTPException(
             status_code=422,
             detail="bbox must be 4 comma-separated floats: south,west,north,east",
         )
-    south, west, north, east = parts
+    try:
+        south, west, north, east = (float(p) for p in raw_parts)
+    except ValueError as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=422,
+            detail="bbox values must be finite floats",
+        ) from exc
 
     arrival = datetime.now(_MELBOURNE_TZ)
     if arrival_iso is not None:

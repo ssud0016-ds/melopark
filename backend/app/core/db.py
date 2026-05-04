@@ -43,11 +43,22 @@ def _resolve_database_url(url: str) -> str:
 settings = get_settings()
 database_url = _resolve_database_url(settings.DATABASE_URL)
 
+def _engine_connect_args(url: str) -> dict:
+    """Return driver-specific connect args.
+
+    Local dev often runs without Postgres; fail fast instead of hanging requests.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme.startswith("postgresql"):
+        return {"connect_timeout": 2}
+    return {}
+
 engine = create_engine(
     database_url,
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
+    connect_args=_engine_connect_args(database_url),
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

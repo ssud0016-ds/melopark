@@ -17,6 +17,7 @@ class ActiveRestriction(BaseModel):
 
 
 class StrictWarning(BaseModel):
+    rule_id: Optional[int] = None
     type: str
     typedesc: Optional[str]
     # ISO-8601 datetime string with Australia/Melbourne offset (+10:00/+11:00)

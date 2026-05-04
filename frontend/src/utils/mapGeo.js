@@ -5,7 +5,7 @@ const WEST_LNG = 144.9475
 const EAST_LNG = 144.9745
 
 /** Walking / search radius used for filters and Leaflet Circle (metres). */
-export const SEARCH_RADIUS_M = 400
+export const SEARCH_RADIUS_M = 600
 
 export function normToLatLng(x, y) {
   const lat = NORTH_LAT + y * (SOUTH_LAT - NORTH_LAT)

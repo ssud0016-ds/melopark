@@ -72,9 +72,17 @@ describe('BayDetailSheet parking tab UI', () => {
     expect(screen.getByText('Bay Status and Limits')).toBeInTheDocument()
     expect(screen.getByText('Parking Sign Translator')).toBeInTheDocument()
 
-    expect(screen.getByText('THIS RULE IS CURRENTLY IN EFFECT')).toBeInTheDocument()
+    expect(screen.getByText('In effect')).toBeInTheDocument()
     expect(screen.getByText('Monday to Friday from 9:30 AM to 7:30 PM')).toBeInTheDocument()
-    expect(screen.getByText("Outside all these times (nights, public holidays)")).toBeInTheDocument()
+
+    const showAll = screen.getByRole('button', { name: /Show full schedule/i })
+    fireEvent.click(showAll)
+
+    const outsideChip = screen.getByRole('button', { name: /No restrictions/i })
+    fireEvent.click(outsideChip)
+    expect(
+      screen.getByText('Outside all these times (nights, public holidays)'),
+    ).toBeInTheDocument()
   })
 
   it('sends planner params with timezone-aware arrival_iso (Melbourne offset)', async () => {
@@ -226,6 +234,39 @@ describe('BayDetailSheet parking tab UI', () => {
     expect(await screen.findByText('NO')).toBeInTheDocument()
     expect(screen.getByText('You cannot park here')).toBeInTheDocument()
     expect(screen.getByText('OCCUPIED NOW')).toBeInTheDocument()
+  })
+
+  it('shows trust warning when evaluation uses api_fallback source', async () => {
+    fetchBayEvaluation.mockResolvedValue({
+      bay_id: '1000',
+      verdict: 'yes',
+      reason: 'Rules allow parking now.',
+      active_restriction: null,
+      warning: null,
+      data_source: 'api_fallback',
+      data_coverage: 'rules_only',
+      translator_rules: [],
+    })
+    render(
+      <BayDetailSheet
+        bay={{
+          id: '1000',
+          type: 'available',
+          bayType: 'Other',
+          hasRules: false,
+          free: 1,
+          name: 'Test St',
+          sensorLastUpdated: null,
+        }}
+        destination={null}
+        onClose={() => {}}
+        isMobile={false}
+        lastUpdated={null}
+      />,
+    )
+
+    await waitFor(() => expect(fetchBayEvaluation).toHaveBeenCalled())
+    expect(screen.getByText(/Rule estimate from external category data/i)).toBeInTheDocument()
   })
 })
 
