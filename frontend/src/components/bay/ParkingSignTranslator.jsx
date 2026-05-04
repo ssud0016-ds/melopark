@@ -132,8 +132,6 @@ const BADGE_LABEL = {
 
 function RuleChip({ rule, tone, isOpen, onToggle }) {
   const cleanBody = sanitizeRuleBody(rule.body)
-  const sig = detectSignal(cleanBody)
-  const stayLimit = detectStayLimit(cleanBody)
   const cond = condenseHeading(rule.heading)
   const isOutside = cond?.isOutside
 
@@ -157,9 +155,6 @@ function RuleChip({ rule, tone, isOpen, onToggle }) {
             {badgeLabel}
           </span>
         )}
-        <span className="shrink-0 text-base leading-none" aria-hidden>
-          {sig.emoji}
-        </span>
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-gray-900 dark:text-gray-100">
           {isOutside ? (
             <>No restrictions <span className="opacity-70">· free, no payment</span></>
@@ -167,8 +162,6 @@ function RuleChip({ rule, tone, isOpen, onToggle }) {
             <>
               {cond?.days}
               {cond?.window && <span className="opacity-70"> · {cond.window}</span>}
-              {stayLimit && <span className="opacity-90"> · {stayLimit}</span>}
-              {sig.label !== 'Parking' && <span className="opacity-70"> · {sig.label}</span>}
             </>
           )}
         </span>

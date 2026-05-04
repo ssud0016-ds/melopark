@@ -688,7 +688,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const rightInsetPx = 14 + desktopSheetReservePx
   /** Keep search + filters the same max width as the default map view (do not stretch when bay sheet opens). */
   const TOOLBAR_MAX_PX = 560
-  const FILTER_RIGHT_RESERVE_PX = isMobile ? 0 : (selectedBay ? 76 : 24)
+  const FILTER_RIGHT_RESERVE_PX = isMobile ? 0 : 24
   const ZOOM_GROUP_WIDTH_PX = 72
 
 const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plannerArrivalIso)
@@ -1058,10 +1058,9 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               style={
                 desktopSheetReservePx
                   ? {
-                      /* Centre within strip [14px, 100% − rightInset] so it matches "main" feel with sheet open */
-                      left: `calc(14px + (100% - 14px - ${rightInsetPx}px) / 2)`,
+                      left: 'calc(50% - 80px)',
                       transform: 'translateX(-50%)',
-                      width: `min(${TOOLBAR_MAX_PX}px, calc(100% - ${14 + rightInsetPx}px))`,
+                      width: `min(${TOOLBAR_MAX_PX}px, calc(100% - 408px))`,
                       maxWidth: TOOLBAR_MAX_PX,
                     }
                   : {
@@ -1093,22 +1092,6 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                   ))}
                 </div>
               </div>
-              <div className="w-full pointer-events-auto mt-1">
-                <ParkingForecastPanel
-                  zoneWarnings={forecast.zoneWarnings}
-                  warnings={forecast.warnings}
-                  worstLevel={forecast.worstLevel}
-                  alternatives={forecast.alternatives}
-                  loading={forecast.loading}
-                  onZoneClick={(zone) => {
-                    const lat = zone?.zone_lat ?? zone?.centroid_lat
-                    const lon = zone?.zone_lon ?? zone?.centroid_lon
-                    if (mapRef.current && lat && lon) mapRef.current.flyTo([lat, lon], 15)
-                  }}
-                  isMobile={false}
-                />
-              </div>
-
               <div
                 className="w-full pointer-events-auto"
                 style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
@@ -1128,7 +1111,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
         {destination && !isMobile && (
           <div
             className="absolute bottom-3.5 z-[500] bg-white/95 text-gray-900 rounded-2xl px-5 py-2.5 text-sm font-semibold shadow-overlay flex flex-col items-center gap-0.5 max-w-[calc(100%-120px)] border border-brand dark:bg-surface-dark-secondary/95 dark:text-gray-100"
-            style={{ left: '50%', transform: 'translateX(-50%)' }}
+            style={selectedBay ? { left: 'calc(50% - 190px)', transform: 'translateX(-50%)' } : { left: '50%', transform: 'translateX(-50%)' }}
           >
             <span>
               {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across 
@@ -1158,25 +1141,6 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           </div>
         )}
 
-        {parkingChanceActive && showPressureCoach && !showOnboarding && (
-          <div className={`absolute left-3.5 z-[510] max-w-[260px] rounded-xl border border-emerald-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-card dark:border-emerald-800 dark:bg-surface-dark-secondary/95 dark:text-gray-100 ${
-            isMobile ? 'top-[230px]' : 'top-[126px]'
-          }`}>
-            <div className="font-semibold text-emerald-700 dark:text-emerald-200">
-              Parking chance is live now
-            </div>
-            <div className="mt-0.5 leading-snug">
-              Green streets are easier. Tap any colored street to see why.
-            </div>
-            <button
-              type="button"
-              onClick={dismissPressureCoach}
-              className="mt-1 text-[11px] font-semibold text-brand hover:underline dark:text-brand-light"
-            >
-              Got it
-            </button>
-          </div>
-        )}
 
         {!isMobile && (
         <div
@@ -1235,8 +1199,43 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           ]
           return (
             <div
-              className="absolute bottom-3.5 z-[500] rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
+              className="absolute bottom-3.5 z-[510] flex flex-col gap-2"
               style={{ right: rightInsetPx }}
+            >
+              {parkingChanceActive && showPressureCoach && !showOnboarding && !selectedBay && (
+                <div className="self-end max-w-[260px] rounded-xl border border-emerald-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-card dark:border-emerald-800 dark:bg-surface-dark-secondary/95 dark:text-gray-100">
+                  <div className="font-semibold text-emerald-700 dark:text-emerald-200">
+                    Parking chance is live now
+                  </div>
+                  <div className="mt-0.5 leading-snug">
+                    Green streets are easier. Tap any colored street to see why.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={dismissPressureCoach}
+                    className="mt-1 text-[11px] font-semibold text-brand hover:underline dark:text-brand-light"
+                  >
+                    Got it
+                  </button>
+                </div>
+              )}
+              {!isMobile && (
+                <ParkingForecastPanel
+                  zoneWarnings={forecast.zoneWarnings}
+                  warnings={forecast.warnings}
+                  worstLevel={forecast.worstLevel}
+                  alternatives={forecast.alternatives}
+                  loading={forecast.loading}
+                  onZoneClick={(zone) => {
+                    const lat = zone?.zone_lat ?? zone?.centroid_lat
+                    const lon = zone?.zone_lon ?? zone?.centroid_lon
+                    if (mapRef.current && lat && lon) mapRef.current.flyTo([lat, lon], 15)
+                  }}
+                  isMobile={false}
+                />
+              )}
+            <div
+              className="rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
             >
               {isMobile && !legendOpen ? (
                 <button
@@ -1282,6 +1281,15 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
+                  <div className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
+                    <div className="relative h-3.5 w-3.5 shrink-0">
+                      <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full">
+                        <circle cx="12" cy="12" r="12" fill="#60a5fa"/>
+                        <path fill="white" d="M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2m9 7h-6v13h-2v-6h-2v6H9V9H3V7h18v2z"/>
+                      </svg>
+                    </div>
+                    <span className="truncate">Accessible bays</span>
+                  </div>
                   <div className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
                     Street parking chance
                   </div>
@@ -1294,17 +1302,9 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
-                  <div className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
-                    <div className="relative h-3.5 w-3.5 shrink-0">
-                      <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full">
-                        <circle cx="12" cy="12" r="12" fill="#60a5fa"/>
-                        <path fill="white" d="M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2m9 7h-6v13h-2v-6h-2v6H9V9H3V7h18v2z"/>
-                      </svg>
-                    </div>
-                    <span className="truncate">Accessible bays</span>
-                  </div>
                 </div>
               )}
+            </div>
             </div>
           )
         })()}
