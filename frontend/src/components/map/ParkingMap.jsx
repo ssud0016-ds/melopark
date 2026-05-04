@@ -434,7 +434,7 @@ export default function ParkingMap({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url={
             isDark
-              ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_dark_matter/{z}/{x}/{y}{r}.png'
+              ? 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png'
               : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
           }
           subdomains="abcd"
