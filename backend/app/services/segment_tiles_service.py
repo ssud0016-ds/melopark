@@ -77,7 +77,7 @@ def _build_tile_uncached(z: int, x: int, y: int, at=None, pressure_rows: Optiona
     geom = sps.get_segment_geom()
     rows = pressure_rows
     if rows is None:
-        _, rows = sps.get_pressure_by_data_version(at)
+        _, rows, _ = sps.get_pressure_by_data_version(at)
     by_id = {r["segment_id"]: r for r in rows}
 
     features: list[dict] = []
@@ -150,7 +150,7 @@ def build_tile_with_metadata(z: int, x: int, y: int, at=None) -> tuple[bytes, di
     Passing ``at`` bypasses cache (used for historical / testing look-ups).
     """
     t0 = time.perf_counter()
-    data_version, rows = sps.get_pressure_by_data_version(at)
+    data_version, rows, _ = sps.get_pressure_by_data_version(at)
     if at is not None:
         result = _build_tile_uncached(z, x, y, at=at, pressure_rows=rows)
         elapsed_ms = (time.perf_counter() - t0) * 1000

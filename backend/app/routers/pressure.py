@@ -117,7 +117,7 @@ def _stable_zone_id(raw_id: str) -> int:
 
 
 def _fallback_alternatives_from_segments(lat: float, lon: float, radius: int, limit: int) -> dict:
-    _, rows = sps.get_pressure_by_data_version()
+    _, rows, _ = sps.get_pressure_by_data_version()
     scope_df = sps.get_pressure_scope_df()
     if scope_df.empty or not rows:
         return {"target_zone": None, "alternatives": [], "fallback_mode": "segment_pressure"}
@@ -220,15 +220,8 @@ def get_tile_manifest():
     if not sps.is_loaded():
         raise HTTPException(status_code=503, detail="Segment pressure data not loaded yet")
 
-    bucket, rows = sps.get_pressure_by_data_version()
+    bucket, rows, active_event_count = sps.get_pressure_by_data_version()
     now_melb = datetime.now(MELB_TZ)
-    active_event_count = sum(
-        1 for r in rows
-        if r.get("events_nearby") and any(
-            e.get("start_iso") and datetime.fromisoformat(e["start_iso"]) <= now_melb
-            for e in (r["events_nearby"] if isinstance(r["events_nearby"], list) else [])
-        )
-    )
     return {
         "generated_at": now_melb.isoformat(),
         "minute_bucket": bucket,
@@ -298,7 +291,7 @@ def get_segments_bbox(
     if any(_math.isnan(v) or _math.isinf(v) for v in (min_lon, min_lat, max_lon, max_lat)):
         raise HTTPException(status_code=422, detail="bbox values must be finite floats")
 
-    _, rows = sps.get_pressure_by_data_version()
+    _, rows, _ = sps.get_pressure_by_data_version()
     df = sps.get_pressure_scope_df()
 
     seg_mid: dict[str, tuple[float, float]] = {
