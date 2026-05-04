@@ -71,7 +71,9 @@ export function buildTileUrlTemplate(manifest) {
   const base = apiBase()
   const v = encodeURIComponent(manifest.data_version || manifest.minute_bucket || 'now')
   // Leaflet.VectorGrid uses {x}/{y}/{z} placeholders.
-  return `${base}${manifest.tile_url_template}?v=${v}`
+  const template = manifest.tile_url_template
+  const url = template.startsWith('http') ? template : `${base}${template}`
+  return `${url}?v=${v}`
 }
 
 export async function fetchSegmentDetail(segmentId, { signal, force = false, dataVersion = null } = {}) {

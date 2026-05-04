@@ -216,13 +216,12 @@ def get_zones_geojson():
     "/tiles/manifest.json",
     summary="Tile manifest with current minute_bucket and data sources",
 )
-def get_tile_manifest(request: Request):
+def get_tile_manifest():
     if not sps.is_loaded():
         raise HTTPException(status_code=503, detail="Segment pressure data not loaded yet")
 
     bucket, rows, active_event_count = sps.get_pressure_by_data_version()
     now_melb = datetime.now(MELB_TZ)
-    base = str(request.base_url).rstrip("/")
     return {
         "generated_at": now_melb.isoformat(),
         "minute_bucket": bucket,
@@ -235,7 +234,7 @@ def get_tile_manifest(request: Request):
         },
         "events": {"active_count": active_event_count},
         "attribution": DATA_ATTRIBUTION,
-        "tile_url_template": f"{base}/api/pressure/tiles/{{z}}/{{x}}/{{y}}.mvt",
+        "tile_url_template": "/api/pressure/tiles/{z}/{x}/{y}.mvt",
         "min_zoom": 13,
         "max_zoom": 19,
     }
