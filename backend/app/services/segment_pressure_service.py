@@ -47,6 +47,11 @@ _segment_geom: dict[str, object] = {}
 _sensor_to_segment: dict[str, str] = {}
 _loaded: bool = False
 
+# Cached gold reads (avoid re-read parquet on every pressure compute / manifest poll).
+_traffic_profile_raw_df: Optional[pd.DataFrame] = None
+_traffic_z_out_cache: dict[tuple[bool, int], dict[str, float]] = {}
+_events_sessions_df_cache: Optional[pd.DataFrame] = None
+
 
 def is_segment_in_pressure_scope(row) -> bool:
     """True when a segment belongs to parking-zone data and has live bays."""
@@ -149,10 +154,20 @@ def _segment_occupancy() -> dict[str, dict]:
 
 def _segment_traffic_z(at: datetime) -> dict[str, float]:
     """Traffic z per segment via zone_numbers (zone-level profile is available)."""
+    global _traffic_profile_raw_df
+    cache_key = (at.weekday() < 5, at.hour)
+    if cache_key in _traffic_z_out_cache:
+        return _traffic_z_out_cache[cache_key]
+
     profile_path = GOLD / "epic5_traffic_profile_zone.parquet"
     if not profile_path.exists():
+        _traffic_z_out_cache[cache_key] = {}
         return {}
-    tp = pd.read_parquet(profile_path)
+
+    if _traffic_profile_raw_df is None:
+        _traffic_profile_raw_df = pd.read_parquet(profile_path)
+
+    tp = _traffic_profile_raw_df
     dow_type = "weekday" if at.weekday() < 5 else "weekend"
     slice_ = tp[(tp["dow_type"] == dow_type) & (tp["hour"] == at.hour)]
     zone_z = dict(zip(slice_["zone_number"].astype(int), slice_["traffic_z"]))
@@ -164,18 +179,37 @@ def _segment_traffic_z(at: datetime) -> dict[str, float]:
             continue
         vals = [zone_z.get(int(z), 0.0) for z in zones]
         out[row["segment_id"]] = float(sum(vals) / len(vals)) if vals else 0.0
+    _traffic_z_out_cache[cache_key] = out
     return out
 
 
-def _active_events(at: datetime) -> pd.DataFrame:
+def _events_sessions_df() -> pd.DataFrame:
+    """Load event sessions gold once; filter per query in _active_events."""
+    global _events_sessions_df_cache
+    if _events_sessions_df_cache is not None:
+        return _events_sessions_df_cache
+
     es_path = GOLD / "epic5_event_sessions_gold.parquet"
     if not es_path.exists():
-        return pd.DataFrame()
+        _events_sessions_df_cache = pd.DataFrame()
+        return _events_sessions_df_cache
+
     df = pd.read_parquet(es_path)
     if df.empty:
-        return df
+        _events_sessions_df_cache = df
+        return _events_sessions_df_cache
+
+    df = df.copy()
     df["session_start"] = pd.to_datetime(df["session_start"]).dt.tz_localize(None)
     df["session_end"] = pd.to_datetime(df["session_end"]).dt.tz_localize(None)
+    _events_sessions_df_cache = df
+    return _events_sessions_df_cache
+
+
+def _active_events(at: datetime) -> pd.DataFrame:
+    df = _events_sessions_df()
+    if df.empty:
+        return df
     at_naive = at.replace(tzinfo=None) if at.tzinfo else at
     return df[
         (df["session_start"] <= at_naive)
@@ -203,6 +237,7 @@ def _segment_event_load(active: pd.DataFrame) -> dict[str, tuple[float, list[dic
                     "event_name": ev.get("event_name", ""),
                     "category": ev.get("category_name"),
                     "distance_m": int(d),
+                    "start_iso": _session_start_iso(ev.get("session_start")),
                 })
         if load > 0 or nearby:
             out[row["segment_id"]] = (load, nearby[:3])
@@ -220,9 +255,32 @@ def _pct_rank(values: list[float]) -> list[float]:
     return ranks
 
 
-def compute_segment_pressure(at: Optional[datetime] = None) -> list[dict]:
+def _count_active_event_segments(rows: list[dict], now_melb: datetime) -> int:
+    """Segments with ≥1 nearby event whose session has started (same rule as tile manifest)."""
+    n = 0
+    for r in rows:
+        nearby = r.get("events_nearby")
+        if not nearby or not isinstance(nearby, list):
+            continue
+        for e in nearby:
+            iso = e.get("start_iso")
+            if not iso:
+                continue
+            try:
+                ev_dt = datetime.fromisoformat(iso)
+            except (ValueError, TypeError):
+                continue
+            if ev_dt.tzinfo is None:
+                ev_dt = ev_dt.replace(tzinfo=MELB_TZ)
+            if ev_dt <= now_melb:
+                n += 1
+                break
+    return n
+
+
+def compute_segment_pressure(at: Optional[datetime] = None) -> tuple[list[dict], int]:
     if not _loaded or _segments_df.empty:
-        return []
+        return [], 0
 
     now_melb = datetime.now(MELB_TZ)
     at = at or now_melb
@@ -298,11 +356,12 @@ def compute_segment_pressure(at: Optional[datetime] = None) -> list[dict]:
                 "event_load": round(event_vals[i], 3),
             },
         })
-    return out
+    active_event_segment_count = _count_active_event_segments(out, now_melb)
+    return out, active_event_segment_count
 
 
-# Module-level cache: minute-bucket → list[dict]
-_pressure_cache: dict[str, list[dict]] = {}
+# Module-level cache: data_version key → (rows, manifest active-event segment count)
+_pressure_cache: dict[str, tuple[list[dict], int]] = {}
 _pressure_cache_max = 8
 
 
@@ -336,25 +395,27 @@ def get_pressure_data_version(at: Optional[datetime] = None) -> str:
     return hashlib.sha1(basis.encode("utf-8")).hexdigest()[:16]
 
 
-def get_pressure_by_data_version(at: Optional[datetime] = None) -> tuple[str, list[dict]]:
-    """Return (data_version, pressure_rows). Cached until source/time version changes."""
+def get_pressure_by_data_version(at: Optional[datetime] = None) -> tuple[str, list[dict], int]:
+    """Return (data_version, pressure_rows, active_event_segment_count). Cached until version changes."""
     at_eff = (at or datetime.now(MELB_TZ)).replace(second=0, microsecond=0)
     key = get_pressure_data_version(at_eff)
     if key not in _pressure_cache:
         if len(_pressure_cache) >= _pressure_cache_max:
             _pressure_cache.pop(next(iter(_pressure_cache)))
-        _pressure_cache[key] = compute_segment_pressure(at_eff)
-    return key, _pressure_cache[key]
+        rows, active_count = compute_segment_pressure(at_eff)
+        _pressure_cache[key] = (rows, active_count)
+    cached = _pressure_cache[key]
+    return key, cached[0], cached[1]
 
 
-def get_pressure_by_minute(at: Optional[datetime] = None) -> tuple[str, list[dict]]:
+def get_pressure_by_minute(at: Optional[datetime] = None) -> tuple[str, list[dict], int]:
     """Backward-compatible alias for pressure data-version cache."""
     return get_pressure_by_data_version(at)
 
 
 def get_segment_detail(seg_id: str) -> Optional[dict]:
     """Return a single segment's pressure dict, or None."""
-    _, rows = get_pressure_by_minute()
+    _, rows, _ = get_pressure_by_minute()
     for r in rows:
         if r["segment_id"] == str(seg_id):
             return r

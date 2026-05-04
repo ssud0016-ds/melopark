@@ -83,8 +83,12 @@ async def lifespan(app: FastAPI):
     from app.services.segment_pressure_service import load_segment_data
     await start_background_refresh()
     await start_background_restrictions_refresh()
-    load_gold_data()
-    load_segment_data()
+    # Heavy parquet + geometry init: run in threads so event loop stays responsive
+    # during startup (health checks, logging). Wall-clock similar unless I/O overlaps.
+    await asyncio.gather(
+        asyncio.to_thread(load_gold_data),
+        asyncio.to_thread(load_segment_data),
+    )
 
     # B8 — pre-warm CBD tiles in the background (skip when MELOPARK_TILE_PREWARM=0).
     if os.getenv("MELOPARK_TILE_PREWARM", "1") == "1":

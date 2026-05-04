@@ -51,7 +51,7 @@ def test_haversine_known_distance():
 
 
 def test_compute_segment_pressure_returns_levels():
-    rows = sps.compute_segment_pressure()
+    rows, _ = sps.compute_segment_pressure()
     assert len(rows) > 0
     levels = {r["level"] for r in rows}
     assert levels.issubset({"low", "medium", "high", "unknown"})
@@ -107,7 +107,7 @@ def test_compute_segment_pressure_excludes_segments_without_parking_zones(monkey
     monkeypatch.setattr(sps, "_active_events", lambda at: pd.DataFrame())
     monkeypatch.setattr(sps, "_segment_event_load", lambda active: {})
 
-    rows = sps.compute_segment_pressure()
+    rows, _ = sps.compute_segment_pressure()
 
     assert [r["segment_id"] for r in rows] == ["in-zone"]
     assert rows[0]["street_name"] == "Scoped Street"
@@ -130,7 +130,7 @@ def test_compute_segment_pressure_marks_unknown_when_no_live_traffic_or_events(m
     monkeypatch.setattr(sps, "_active_events", lambda at: pd.DataFrame())
     monkeypatch.setattr(sps, "_segment_event_load", lambda active: {})
 
-    rows = sps.compute_segment_pressure()
+    rows, _ = sps.compute_segment_pressure()
 
     assert len(rows) == 1
     assert rows[0]["segment_id"] == "in-zone"
@@ -141,8 +141,8 @@ def test_compute_segment_pressure_marks_unknown_when_no_live_traffic_or_events(m
 
 
 def test_minute_bucket_cache_returns_same_key_within_minute():
-    k1, _ = sps.get_pressure_by_minute()
-    k2, _ = sps.get_pressure_by_minute()
+    k1, _, _ = sps.get_pressure_by_minute()
+    k2, _, _ = sps.get_pressure_by_minute()
     assert k1 == k2
 
 
@@ -232,6 +232,7 @@ def test_build_tile_excludes_segments_without_parking_zones(monkeypatch):
                 "events_nearby": [],
                 "pressure": 0.1,
             }],
+            0,
         ),
     )
 
@@ -271,6 +272,7 @@ def test_router_manifest_counts_active_events_from_events_nearby(monkeypatch):
                 {"segment_id": "b", "events_nearby": [{"start_iso": (now.replace(year=now.year + 1)).isoformat()}]},
                 {"segment_id": "c", "events_nearby": []},
             ],
+            1,
         ),
     )
     data = pressure_router.get_tile_manifest()
@@ -374,6 +376,7 @@ def test_router_segments_bbox_excludes_segments_without_parking_zones(monkeypatc
                     "total_bays": 3,
                 },
             ],
+            0,
         ),
     )
 
@@ -429,6 +432,7 @@ def test_router_alternatives_falls_back_to_segment_pressure_when_gold_missing(mo
                     "components": {"occupancy_pct": 0.2, "traffic_z": 0.2, "event_load": 0.0},
                 },
             ],
+            0,
         ),
     )
     monkeypatch.setattr(
