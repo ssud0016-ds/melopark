@@ -218,29 +218,59 @@ def _active_events(at: datetime) -> pd.DataFrame:
 
 
 def _segment_event_load(active: pd.DataFrame) -> dict[str, tuple[float, list[dict]]]:
-    if active.empty:
+    """Vectorised segment × event load using numpy broadcasting (avoids nested iterrows)."""
+    if active.empty or _segments_df.empty:
         return {}
+
+    import numpy as np
+
+    seg_lats = _segments_df["mid_lat"].to_numpy(dtype=float)
+    seg_lons = _segments_df["mid_lon"].to_numpy(dtype=float)
+    seg_ids = _segments_df["segment_id"].tolist()
+
+    ev_lats = active["lat"].to_numpy(dtype=float)
+    ev_lons = active["lon"].to_numpy(dtype=float)
+
+    # Haversine distance matrix: (n_segments, n_events)
+    R = 6_371_000.0
+    p1 = np.radians(seg_lats)[:, None]          # (S, 1)
+    p2 = np.radians(ev_lats)[None, :]            # (1, E)
+    dp = np.radians(ev_lats - seg_lats[:, None]) # (S, E) via broadcast
+    dp = np.radians(active["lat"].to_numpy(dtype=float) - seg_lats[:, None])
+    dl = np.radians(active["lon"].to_numpy(dtype=float) - seg_lons[:, None])
+    a = np.sin(dp / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dl / 2) ** 2
+    dist_m = R * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))  # (S, E)
+
+    gauss = np.where(
+        dist_m <= 1500,
+        np.exp(-(dist_m ** 2) / (2 * EVENT_DISTANCE_SIGMA_M ** 2)),
+        0.0,
+    )  # (S, E)
+
+    # Pre-extract event metadata once
+    ev_names = active["event_name"].tolist() if "event_name" in active.columns else [""] * len(active)
+    ev_cats = active["category_name"].tolist() if "category_name" in active.columns else [None] * len(active)
+    ev_starts = [_session_start_iso(v) for v in active["session_start"].tolist()] if "session_start" in active.columns else [""] * len(active)
+
     out: dict[str, tuple[float, list[dict]]] = {}
-    for _, row in _segments_df.iterrows():
-        mid_lat = float(row["mid_lat"])
-        mid_lon = float(row["mid_lon"])
-        load = 0.0
+    for s_idx, sid in enumerate(seg_ids):
+        row_gauss = gauss[s_idx]
+        total_load = float(row_gauss.sum())
+        if total_load == 0.0:
+            continue
         nearby: list[dict] = []
-        for _, ev in active.iterrows():
-            d = _haversine_m(mid_lat, mid_lon, float(ev["lat"]), float(ev["lon"]))
-            if d > 1500:
+        for e_idx in range(len(active)):
+            d = float(dist_m[s_idx, e_idx])
+            if d > 800:
                 continue
-            gauss = math.exp(-(d ** 2) / (2 * EVENT_DISTANCE_SIGMA_M ** 2))
-            load += gauss
-            if d <= 800:
-                nearby.append({
-                    "event_name": ev.get("event_name", ""),
-                    "category": ev.get("category_name"),
-                    "distance_m": int(d),
-                    "start_iso": _session_start_iso(ev.get("session_start")),
-                })
-        if load > 0 or nearby:
-            out[row["segment_id"]] = (load, nearby[:3])
+            nearby.append({
+                "event_name": ev_names[e_idx] or "",
+                "category": ev_cats[e_idx],
+                "distance_m": int(d),
+                "start_iso": ev_starts[e_idx],
+            })
+        nearby.sort(key=lambda x: x["distance_m"])
+        out[sid] = (total_load, nearby[:3])
     return out
 
 
