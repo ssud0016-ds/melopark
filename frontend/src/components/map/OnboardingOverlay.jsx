@@ -33,6 +33,7 @@ export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest }) {
   const [statusReq, setStatusReq] = useState('all')
   const [durationReq, setDurationReq] = useState(null)
   const [customDurationReq, setCustomDurationReq] = useState(60)
+  const [customDurationUnit, setCustomDurationUnit] = useState('min')
   const isHero = step === 'hero'
 
   const hasPressureData = busyNowManifest != null && (busyNowManifest.total_segments ?? 0) > 0
@@ -174,17 +175,32 @@ export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest }) {
                   </button>
                 ))}
                 {durationReq === 'custom' && (
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <input
                       type="number"
                       min="1"
-                      max="480"
-                      value={customDurationReq}
-                      onChange={(e) => setCustomDurationReq(Number(e.target.value))}
-                      placeholder="min"
-                      className="w-16 rounded-full border border-brand bg-white px-2 py-1.5 text-center text-xs font-semibold text-gray-700 outline-none dark:border-brand dark:bg-surface-dark dark:text-gray-100"
+                      max={customDurationUnit === 'hr' ? 24 : 1440}
+                      step={customDurationUnit === 'hr' ? 0.5 : 1}
+                      value={customDurationUnit === 'hr' ? Math.round(customDurationReq / 60 * 10) / 10 : customDurationReq}
+                      onChange={(e) => {
+                        const val = Number(e.target.value)
+                        setCustomDurationReq(customDurationUnit === 'hr' ? Math.round(val * 60) : val)
+                      }}
+                      placeholder={customDurationUnit === 'hr' ? 'hrs' : 'min'}
+                      className="w-14 rounded-full border border-brand bg-white px-2 py-1.5 text-center text-xs font-semibold text-gray-700 outline-none dark:border-brand dark:bg-surface-dark dark:text-gray-100"
                     />
-                    <span className="text-xs font-semibold text-gray-500">min</span>
+                    <div className="flex overflow-hidden rounded-full border border-gray-300 bg-white dark:border-gray-600 dark:bg-surface-dark">
+                      {['min', 'hr'].map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setCustomDurationUnit(u)}
+                          className={`px-2 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${customDurationUnit === u ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'}${u === 'hr' ? ' border-l border-gray-300 dark:border-gray-600' : ''}`}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

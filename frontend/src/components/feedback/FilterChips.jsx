@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cn } from '../../utils/cn'
 
 const STATUS_FILTERS = [
@@ -13,8 +14,56 @@ const DURATION_FILTERS = [
   { id: '2h', label: '2H' },
   { id: '3h', label: '3H' },
   { id: '4h', label: '4H' },
-  { id: 'custom', label: 'Custom' },
 ]
+
+function CustomDurationRow({ durationFilter, customDuration, onDurationFilterChange, onCustomDurationChange }) {
+  const [unit, setUnit] = useState('min')
+  const isActive = durationFilter === 'custom'
+
+  const displayValue = isActive
+    ? (unit === 'hr' ? Math.round((customDuration ?? 0) / 60 * 10) / 10 : (customDuration ?? ''))
+    : ''
+
+  const handleValueChange = (val) => {
+    const mins = unit === 'hr' ? Math.round(val * 60) : val
+    onCustomDurationChange(mins)
+  }
+
+  const unitBtn = (label) =>
+    `px-2 py-0.5 text-[10px] font-semibold transition-colors cursor-pointer ${unit === label ? 'bg-brand text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-gray-300 dark:hover:bg-slate-700'}`
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        role="radio"
+        aria-checked={isActive}
+        onClick={() => onDurationFilterChange(isActive ? null : 'custom')}
+        className={cn(chipBase, isActive ? chipActive : chipIdle)}
+      >
+        Custom
+      </button>
+      {isActive && (
+        <div className="flex shrink-0 items-center gap-1">
+          <input
+            type="number"
+            min="1"
+            max={unit === 'hr' ? 24 : 1440}
+            step={unit === 'hr' ? 0.5 : 1}
+            value={displayValue}
+            onChange={(e) => handleValueChange(Number(e.target.value))}
+            placeholder={unit === 'hr' ? 'hrs' : 'min'}
+            className="w-14 rounded-full border border-brand bg-white/70 px-2 py-1 text-center text-[11px] font-semibold text-slate-700 outline-none backdrop-blur-sm dark:border-brand dark:bg-surface-dark-secondary/60 dark:text-gray-100"
+          />
+          <div className="flex overflow-hidden rounded-full border border-slate-300/70 bg-white/70 backdrop-blur-sm dark:border-slate-500/60 dark:bg-surface-dark-secondary/60">
+            <button type="button" onClick={() => setUnit('min')} className={unitBtn('min')}>min</button>
+            <button type="button" onClick={() => setUnit('hr')} className={cn(unitBtn('hr'), 'border-l border-slate-300/70 dark:border-slate-500/60')}>hr</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const chipBase =
   'shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide transition-colors cursor-pointer backdrop-blur-sm'
@@ -100,30 +149,22 @@ export default function FilterChips({
 
       <span className={subheading}>Duration</span>
       <div className="relative">
-      <div
-        className="flex w-full items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        role="radiogroup"
-        aria-label="Filter bays by duration"
-      >
-        {DURATION_FILTERS.map((f) => renderDurationChip(f))}
-        {durationFilter === 'custom' && (
-          <div className="flex shrink-0 items-center gap-1">
-            <input
-              type="number"
-              min="1"
-              max="480"
-              value={customDuration ?? ''}
-              onChange={(e) => onCustomDurationChange(Number(e.target.value))}
-              placeholder="min"
-              className="w-16 rounded-full border border-brand bg-white/70 px-2 py-1 text-center text-[11px] font-semibold text-slate-700 outline-none backdrop-blur-sm dark:border-brand dark:bg-surface-dark-secondary/60 dark:text-gray-100"
-            />
-            <span className="shrink-0 text-[11px] font-semibold text-slate-600 dark:text-gray-300">min</span>
-          </div>
-        )}
+        <div
+          className="flex w-full items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          role="radiogroup"
+          aria-label="Filter bays by duration"
+        >
+          {DURATION_FILTERS.map((f) => renderDurationChip(f))}
+        </div>
+        {/* Right-edge fade — signals horizontal scrollability */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white/90 to-transparent dark:from-surface-dark-secondary/90" aria-hidden />
       </div>
-      {/* Right-edge fade — signals horizontal scrollability */}
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white/90 to-transparent dark:from-surface-dark-secondary/90" aria-hidden />
-      </div>
+      <CustomDurationRow
+        durationFilter={durationFilter}
+        customDuration={customDuration}
+        onDurationFilterChange={onDurationFilterChange}
+        onCustomDurationChange={onCustomDurationChange}
+      />
     </div>
   )
 }

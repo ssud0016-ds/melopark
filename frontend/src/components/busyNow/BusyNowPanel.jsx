@@ -103,16 +103,10 @@ function AlternativeRow({ alt, onClick, colorBlindMode, selected = false, mobile
                 Selected
               </span>
             )}
-            <span className="shrink-0 text-[10px] font-semibold text-gray-500 dark:text-gray-400">
-              {alt.walk_distance_m} m away
-            </span>
           </div>
-          <PressureBar pct={pct} color={dot} />
-          <div className="mt-0.5 text-[10px] font-medium text-gray-500 dark:text-gray-400">
-            {chance} · {alt.free_bays} bays free
-          </div>
-          <div className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">
-            Why: lower pressure · closer option
+          <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] font-medium text-gray-500 dark:text-gray-400">
+            <span>{chance} · {alt.free_bays} bays free</span>
+            <span className="shrink-0">{alt.walk_distance_m} m away</span>
           </div>
         </div>
       </button>
@@ -167,9 +161,6 @@ function QuietStreetChip({ seg, onClick, selected = false, featured = false, mob
           )}
           {' · '}
           <span>{coverage}</span>
-          <div className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">
-            Why: {hasLiveBays ? `${seg.free} free` : 'estimate only'} · {trendReason}
-          </div>
         </div>
       </button>
     </li>
@@ -343,7 +334,7 @@ export default function BusyNowPanel({
                 </div>
               )}
               {altData.target_zone && (
-                <div className="mb-2 rounded-lg border border-gray-200/70 bg-slate-50 px-2 py-1.5 dark:border-gray-600 dark:bg-surface-dark">
+                <div className="mb-1.5 rounded-lg border border-gray-200/70 bg-slate-50 px-2 py-1 dark:border-gray-600 dark:bg-surface-dark">
                   <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Target area
                   </div>
@@ -377,7 +368,7 @@ export default function BusyNowPanel({
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Better nearby options
                   </div>
-                  <ul className="flex flex-col gap-1.5">
+                  <ul className="flex flex-col gap-1 max-h-[180px] overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {betterAlternatives.map((alt) => (
                       <AlternativeRow
                         key={alt.zone_id}
