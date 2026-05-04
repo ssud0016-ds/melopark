@@ -7,8 +7,9 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.core.config import get_settings
 from app.routers.accessibility import router as accessibility_router
@@ -138,6 +139,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+
+@app.middleware("http")
+async def add_cache_headers(request: Request, call_next):
+    """Attach cache headers for high-traffic read endpoints."""
+    response: Response = await call_next(request)
+    if response.status_code != 200:
+        return response
+
+    path = request.url.path
+    if path == "/api/parking":
+        response.headers.setdefault("Cache-Control", "public, max-age=10, stale-while-revalidate=20")
+    elif path == "/api/pressure/tiles/manifest.json":
+        response.headers.setdefault("Cache-Control", "public, max-age=30, stale-while-revalidate=60")
+    elif path == "/api/pressure/segments":
+        response.headers.setdefault("Cache-Control", "public, max-age=15, stale-while-revalidate=30")
+    return response
 
 app.include_router(health_router)
 app.include_router(db_test_router)

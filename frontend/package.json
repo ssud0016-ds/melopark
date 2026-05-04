@@ -8,7 +8,8 @@
     "start": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "perf:lighthouse": "npx lighthouse https://www.melopark.app --only-categories=performance --chrome-flags=\"--headless --incognito --disable-extensions\" --emulated-form-factor=mobile --throttling.cpuSlowdownMultiplier=4 --output=html --output-path=./lighthouse.performance.html"
   },
   "dependencies": {
     "clsx": "^2.1.1",
