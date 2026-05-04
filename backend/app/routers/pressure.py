@@ -86,7 +86,14 @@ def get_alternatives(
     limit: int = Query(3, ge=1, le=10, description="Max alternatives to return"),
 ):
     if not is_gold_loaded():
-        raise HTTPException(status_code=503, detail="Pressure data not loaded yet")
+        if not sps.is_loaded():
+            raise HTTPException(status_code=503, detail="Pressure data not loaded yet")
+        return _fallback_alternatives_from_segments(
+            lat=lat,
+            lon=lon,
+            radius=radius,
+            limit=limit,
+        )
 
     query_time = _parse_at(at)
     result = find_alternatives(
@@ -94,6 +101,100 @@ def get_alternatives(
         radius_m=radius, limit=limit,
     )
     return result
+
+
+def _trend_for_zone(trend: str) -> str:
+    if trend == "up":
+        return "rising"
+    if trend == "down":
+        return "falling"
+    return "stable"
+
+
+def _stable_zone_id(raw_id: str) -> int:
+    digest = hashlib.md5(str(raw_id).encode()).hexdigest()[:8]
+    return int(digest, 16)
+
+
+def _fallback_alternatives_from_segments(lat: float, lon: float, radius: int, limit: int) -> dict:
+    _, rows = sps.get_pressure_by_data_version()
+    scope_df = sps.get_pressure_scope_df()
+    if scope_df.empty or not rows:
+        return {"target_zone": None, "alternatives": [], "fallback_mode": "segment_pressure"}
+
+    mids = {
+        str(r["segment_id"]): (float(r["mid_lat"]), float(r["mid_lon"]))
+        for _, r in scope_df.iterrows()
+    }
+    scored = [r for r in rows if r.get("pressure") is not None and str(r.get("segment_id")) in mids]
+    if not scored:
+        return {"target_zone": None, "alternatives": [], "fallback_mode": "segment_pressure"}
+
+    def dist_m(seg_row: dict) -> float:
+        sid = str(seg_row["segment_id"])
+        mid_lat, mid_lon = mids[sid]
+        return sps._haversine_m(lat, lon, mid_lat, mid_lon)
+
+    target = min(scored, key=dist_m)
+    target_pressure = float(target.get("pressure", 1.0))
+    target_level = str(target.get("level", "unknown"))
+    target_rank = {"low": 0, "medium": 1, "high": 2, "unknown": 3}.get(target_level, 3)
+
+    candidates = []
+    for row in scored:
+        sid = str(row["segment_id"])
+        if sid == str(target["segment_id"]):
+            continue
+        d = dist_m(row)
+        if d > radius:
+            continue
+        level = str(row.get("level", "unknown"))
+        rank = {"low": 0, "medium": 1, "high": 2, "unknown": 3}.get(level, 3)
+        pressure = float(row.get("pressure", 1.0))
+        if not (rank < target_rank or pressure < target_pressure):
+            continue
+        mid_lat, mid_lon = mids[sid]
+        walk_minutes = max(1, int(round((d * 1.4) / 83.3)))
+        candidates.append({
+            "zone_id": _stable_zone_id(sid),
+            "label": row.get("street_name") or f"Segment {sid}",
+            "pressure": pressure,
+            "level": level,
+            "free_bays": int(row.get("free_bays", 0)),
+            "walk_minutes": walk_minutes,
+            "walk_distance_m": int(round(d)),
+            "centroid_lat": mid_lat,
+            "centroid_lon": mid_lon,
+        })
+
+    candidates.sort(key=lambda r: ({"low": 0, "medium": 1, "high": 2, "unknown": 3}.get(r["level"], 3), r["pressure"], r["walk_distance_m"]))
+    candidates = candidates[:limit]
+
+    target_sid = str(target["segment_id"])
+    target_lat, target_lon = mids[target_sid]
+    target_zone = {
+        "zone_id": _stable_zone_id(target_sid),
+        "label": target.get("street_name") or f"Segment {target_sid}",
+        "centroid_lat": target_lat,
+        "centroid_lon": target_lon,
+        "pressure": target_pressure,
+        "level": target_level,
+        "trend": _trend_for_zone(str(target.get("trend", "flat"))),
+        "components": {
+            "occupancy_pct": float(target.get("components", {}).get("occupancy_pct", 0.0)),
+            "traffic_z": float(target.get("components", {}).get("traffic_z", 0.0)),
+            "event_load": float(target.get("components", {}).get("event_load", 0.0)),
+        },
+        "total_bays": int(target.get("total_bays", 0)),
+        "occupied_bays": int(target.get("occupied_bays", 0)),
+        "free_bays": int(target.get("free_bays", 0)),
+        "events_nearby": [],
+    }
+    return {
+        "target_zone": target_zone,
+        "alternatives": candidates,
+        "fallback_mode": "segment_pressure",
+    }
 
 
 @router.get(

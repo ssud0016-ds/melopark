@@ -397,6 +397,58 @@ def test_router_segments_bbox_non_float_422():
     assert r.status_code == 422
 
 
+def test_router_alternatives_falls_back_to_segment_pressure_when_gold_missing(monkeypatch):
+    monkeypatch.setattr(pressure_router, "is_gold_loaded", lambda: False)
+    monkeypatch.setattr(sps, "is_loaded", lambda: True)
+    monkeypatch.setattr(
+        sps,
+        "get_pressure_by_data_version",
+        lambda: (
+            "v1",
+            [
+                {
+                    "segment_id": "seg-a",
+                    "street_name": "Target St",
+                    "pressure": 0.8,
+                    "level": "high",
+                    "trend": "up",
+                    "free_bays": 1,
+                    "total_bays": 10,
+                    "occupied_bays": 9,
+                    "components": {"occupancy_pct": 0.9, "traffic_z": 0.8, "event_load": 0.4},
+                },
+                {
+                    "segment_id": "seg-b",
+                    "street_name": "Better St",
+                    "pressure": 0.2,
+                    "level": "low",
+                    "trend": "flat",
+                    "free_bays": 8,
+                    "total_bays": 10,
+                    "occupied_bays": 2,
+                    "components": {"occupancy_pct": 0.2, "traffic_z": 0.2, "event_load": 0.0},
+                },
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        sps,
+        "get_pressure_scope_df",
+        lambda: pd.DataFrame([
+            {"segment_id": "seg-a", "mid_lat": -37.81, "mid_lon": 144.96},
+            {"segment_id": "seg-b", "mid_lat": -37.8105, "mid_lon": 144.9605},
+        ]),
+    )
+
+    r = client.get("/api/pressure/alternatives?lat=-37.81&lon=144.96&radius=800&limit=3")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["fallback_mode"] == "segment_pressure"
+    assert data["target_zone"]["label"] == "Target St"
+    assert len(data["alternatives"]) == 1
+    assert data["alternatives"][0]["label"] == "Better St"
+
+
 # ── B7 — server-side tile LRU cache ──────────────────────────────────────────
 
 def test_tile_lru_cache_calls_compute_once_within_same_data_version():

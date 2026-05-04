@@ -35,7 +35,13 @@ function buildReasons(detail) {
   return reasons
 }
 
-export default function SegmentPopup({ detail, colorBlindMode = false, onRequestClose }) {
+export default function SegmentPopup({
+  detail,
+  colorBlindMode = false,
+  onRequestClose,
+  onMarkAsTarget,
+  isMobile = false,
+}) {
   const rootRef = useRef(null)
 
   useLayoutEffect(() => {
@@ -111,6 +117,17 @@ export default function SegmentPopup({ detail, colorBlindMode = false, onRequest
         </div>
       )}
       <EventBadge events={detail.events_nearby} />
+      {onMarkAsTarget && (
+        <button
+          type="button"
+          onClick={onMarkAsTarget}
+          className={`mt-2 w-full rounded-lg border border-emerald-300 bg-emerald-50 px-2 font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-100 ${
+            isMobile ? 'min-h-[44px] py-2 text-[12px]' : 'py-1 text-[11px]'
+          }`}
+        >
+          {isMobile ? 'Use this street' : 'Mark as less busy pick'}
+        </button>
+      )}
     </div>
   )
 }

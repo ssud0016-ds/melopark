@@ -33,7 +33,7 @@ export function useQuietestSegments({ bounds, enabled }) {
       abortRef.current = ctrl
 
       setLoading(true)
-      fetchQuietestSegments(bounds, 3, { signal: ctrl.signal })
+      fetchQuietestSegments(bounds, 150, { signal: ctrl.signal })
         .then((data) => {
           if (ctrl.signal.aborted) return
           setSegments(Array.isArray(data) ? data : [])

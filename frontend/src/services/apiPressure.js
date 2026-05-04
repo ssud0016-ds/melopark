@@ -46,7 +46,7 @@ async function _fetchJsonOrThrow(url, init) {
   return res.json()
 }
 
-export async function fetchPressureManifest({ force = false } = {}) {
+export async function fetchPressureManifest({ force = false, signal } = {}) {
   const now = Date.now()
   if (!force && _manifestCache && now - _manifestCacheTs < MANIFEST_TTL_MS) {
     return _manifestCache
@@ -54,7 +54,7 @@ export async function fetchPressureManifest({ force = false } = {}) {
   if (_manifestInflight) return _manifestInflight
 
   const url = `${apiBase()}/api/pressure/tiles/manifest.json`
-  _manifestInflight = _fetchJsonOrThrow(url)
+  _manifestInflight = _fetchJsonOrThrow(url, signal ? { signal } : undefined)
     .then((data) => {
       _manifestCache = data
       _manifestCacheTs = Date.now()
@@ -74,7 +74,7 @@ export function buildTileUrlTemplate(manifest) {
   return `${base}${manifest.tile_url_template}?v=${v}`
 }
 
-export async function fetchSegmentDetail(segmentId, { signal, force = false } = {}) {
+export async function fetchSegmentDetail(segmentId, { signal, force = false, dataVersion = null } = {}) {
   const id = segmentId != null ? String(segmentId) : ''
   if (!id) {
     throw new Error('fetchSegmentDetail requires segment id')
@@ -83,7 +83,14 @@ export async function fetchSegmentDetail(segmentId, { signal, force = false } = 
   if (!force) {
     const hit = _segmentDetailCache.get(id)
     if (hit && now - hit.ts < SEGMENT_DETAIL_TTL_MS) {
-      return hit.data
+      const cachedVer = hit.dataVersion
+      const wantVer = dataVersion != null ? String(dataVersion) : null
+      const stale =
+        (wantVer != null && cachedVer == null) ||
+        (wantVer != null && cachedVer != null && String(cachedVer) !== wantVer)
+      if (!stale) {
+        return hit.data
+      }
     }
     const inflight = _segmentDetailInflight.get(id)
     if (inflight) return inflight
@@ -91,7 +98,8 @@ export async function fetchSegmentDetail(segmentId, { signal, force = false } = 
 
   const url = `${apiBase()}/api/pressure/segments/${encodeURIComponent(id)}`
   const p = _fetchJsonOrThrow(url, { signal }).then((data) => {
-    _segmentDetailCache.set(id, { ts: Date.now(), data })
+    const ver = data?.data_version ?? data?.minute_bucket ?? dataVersion
+    _segmentDetailCache.set(id, { ts: Date.now(), data, dataVersion: ver })
     return data
   }).finally(() => {
     _segmentDetailInflight.delete(id)

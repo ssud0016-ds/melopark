@@ -86,6 +86,42 @@ describe('apiPressure', () => {
     )
   })
 
+  it('refetches segment detail when cached data_version differs from request', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        segment_id: 'sv',
+        data_version: 'v1',
+        events: [],
+        trend: 'flat',
+        level: 'low',
+        street_name: 'V',
+        occ_pct: null,
+        free: 0,
+        total: 0,
+        pressure: null,
+      }),
+    })
+    await fetchSegmentDetail('sv', { dataVersion: 'v1' })
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        segment_id: 'sv',
+        data_version: 'v2',
+        events: [],
+        trend: 'flat',
+        level: 'low',
+        street_name: 'V',
+        occ_pct: null,
+        free: 0,
+        total: 0,
+        pressure: null,
+      }),
+    })
+    await fetchSegmentDetail('sv', { dataVersion: 'v2' })
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+  })
+
   it('refetches segment detail when force=true', async () => {
     global.fetch.mockResolvedValue({
       ok: true,

@@ -120,6 +120,25 @@ describe('BusyNowPanel', () => {
     expect(names).toEqual(['Lygon', 'Swanston', 'Collins'])
   })
 
+  it('uses mobile sheet copy and keeps first recommendation prominent', () => {
+    const quietStreets = [
+      { segment_id: '1', street_name: 'Lygon St', pressure: 0.1, level: 'low', free: 7, total: 9, mid_lat: -37.81, mid_lon: 144.96 },
+      { segment_id: '2', street_name: 'Swanston St', pressure: 0.2, level: 'low', free: 5, total: 8, mid_lat: -37.812, mid_lon: 144.962 },
+    ]
+    render(
+      <BusyNowPanel
+        manifest={null}
+        status="ready"
+        quietStreets={quietStreets}
+        mobileSheet
+      />
+    )
+
+    expect(screen.getByText(/Best nearby parking/i)).toBeInTheDocument()
+    const firstChip = screen.getByRole('button', { name: /Lygon St/i })
+    expect(firstChip.className).toContain('min-h-[52px]')
+  })
+
   it('calls onStreetClick with lat/lng when chip is clicked', () => {
     const quietStreets = [
       { segment_id: '1', street_name: 'Lygon St', pressure: 0.1, level: 'low', free: 7, total: 9, mid_lat: -37.81, mid_lon: 144.96 },
@@ -138,7 +157,28 @@ describe('BusyNowPanel', () => {
     const chip = streetNameEls[streetNameEls.length - 1].closest('button')
     expect(chip).not.toBeNull()
     fireEvent.click(chip)
-    expect(onStreetClick).toHaveBeenCalledWith({ lat: -37.81, lng: 144.96 })
+    expect(onStreetClick).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lat: -37.81,
+        lng: 144.96,
+        street_name: 'Lygon St',
+      }),
+    )
+  })
+
+  it('marks selected quiet street chip', () => {
+    const quietStreets = [
+      { segment_id: '1', street_name: 'Lygon St', pressure: 0.1, level: 'low', free: 7, total: 9, mid_lat: -37.81, mid_lon: 144.96 },
+    ]
+    render(
+      <BusyNowPanel
+        manifest={null}
+        status="ready"
+        quietStreets={quietStreets}
+        selectedSuggestion={{ source: 'quiet-street', segmentId: '1' }}
+      />
+    )
+    expect(screen.getByRole('button', { name: /Lygon St/i }).textContent).toMatch(/Selected/)
   })
 
   it('shows no-coverage label for quiet street without live sample', () => {
@@ -192,6 +232,100 @@ describe('BusyNowPanel', () => {
     expect(screen.getByText(/320 m away/i)).toBeInTheDocument()
     expect(screen.queryByText(/4 min walk/i)).not.toBeInTheDocument()
     expect(screen.getByText(/Good chance · 8 bays free/i)).toBeInTheDocument()
+  })
+
+  it('does not show better alternatives when destination pressure is low', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        target_zone: {
+          label: 'Target Zone',
+          level: 'low',
+          pressure: 0.2,
+          free_bays: 8,
+          total_bays: 10,
+        },
+        alternatives: [{
+          zone_id: 123,
+          label: 'Queensberry St',
+          level: 'low',
+          pressure: 0.1,
+          free_bays: 9,
+          walk_distance_m: 320,
+        }],
+      }),
+    })
+    render(
+      <BusyNowPanel
+        manifest={null}
+        status="ready"
+        destination={{ lat: -37.81, lng: 144.96 }}
+      />
+    )
+
+    await waitFor(() => expect(screen.getByText(/Target Zone/i)).toBeInTheDocument())
+    expect(screen.queryByText(/Better nearby options/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Try Queensberry St/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/Destination area looks okay/i)).toBeInTheDocument()
+  })
+
+  it('marks selected alternative row', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        target_zone: {
+          label: 'Target Zone',
+          level: 'high',
+          pressure: 0.8,
+          free_bays: 1,
+          total_bays: 10,
+        },
+        alternatives: [{
+          zone_id: 123,
+          label: 'Queensberry St',
+          level: 'low',
+          pressure: 0.2,
+          free_bays: 8,
+          walk_distance_m: 320,
+        }],
+      }),
+    })
+    render(
+      <BusyNowPanel
+        manifest={null}
+        status="ready"
+        destination={{ lat: -37.81, lng: 144.96 }}
+        selectedSuggestion={{ source: 'alternative', zoneId: 123 }}
+      />
+    )
+
+    await waitFor(() => expect(screen.getByText(/Better nearby options/i)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /Queensberry St/i }).textContent).toMatch(/Selected/)
+  })
+
+  it('shows fallback note when backend uses segment-pressure alternatives fallback', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        fallback_mode: 'segment_pressure',
+        target_zone: {
+          label: 'Target Zone',
+          level: 'high',
+          pressure: 0.8,
+          free_bays: 1,
+          total_bays: 10,
+        },
+        alternatives: [],
+      }),
+    })
+    render(
+      <BusyNowPanel
+        manifest={null}
+        status="ready"
+        destination={{ lat: -37.81, lng: 144.96 }}
+      />
+    )
+    await waitFor(() => expect(screen.getByText(/live street model fallback/i)).toBeInTheDocument())
   })
 })
 

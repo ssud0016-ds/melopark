@@ -80,9 +80,9 @@ describe('BusyNowTrendMarkers', () => {
 
   it('does not create markers at zoom < 16', async () => {
     const map = makeMap(15) // below threshold
-    fetchQuietestSegments.mockResolvedValue(makeSegments(3))
+    const segs = makeSegments(3)
 
-    render(<BusyNowTrendMarkers map={map} busyNow={true} bounds={defaultBounds} />)
+    render(<BusyNowTrendMarkers map={map} busyNow={true} bounds={defaultBounds} quietSegments={segs} />)
 
     await new Promise((r) => setTimeout(r, 10))
 
@@ -94,9 +94,8 @@ describe('BusyNowTrendMarkers', () => {
   it('creates markers at zoom >= 16', async () => {
     const map = makeMap(16)
     const segs = makeSegments(3)
-    fetchQuietestSegments.mockResolvedValue(segs)
 
-    render(<BusyNowTrendMarkers map={map} busyNow={true} bounds={defaultBounds} />)
+    render(<BusyNowTrendMarkers map={map} busyNow={true} bounds={defaultBounds} quietSegments={segs} />)
 
     await new Promise((r) => setTimeout(r, 10))
 
@@ -113,9 +112,8 @@ describe('BusyNowTrendMarkers', () => {
       mid_lon: 144.96 + i * 0.001,
       trend: 'flat',
     }))
-    fetchQuietestSegments.mockResolvedValue(segs)
 
-    render(<BusyNowTrendMarkers map={map} busyNow={true} bounds={defaultBounds} />)
+    render(<BusyNowTrendMarkers map={map} busyNow={true} bounds={defaultBounds} quietSegments={segs} />)
 
     await new Promise((r) => setTimeout(r, 10))
 
@@ -132,9 +130,8 @@ describe('BusyNowTrendMarkers', () => {
       mid_lon: 144.96 + i * 0.0001,
       trend: 'up',
     }))
-    fetchQuietestSegments.mockResolvedValue(segs)
 
-    render(<BusyNowTrendMarkers map={map} busyNow={true} bounds={defaultBounds} />)
+    render(<BusyNowTrendMarkers map={map} busyNow={true} bounds={defaultBounds} quietSegments={segs} />)
 
     await new Promise((r) => setTimeout(r, 10))
 
@@ -148,9 +145,8 @@ describe('BusyNowTrendMarkers', () => {
       { segment_id: 3, mid_lat: -37.811, mid_lon: 144.961, trend: 'flat' },
       { segment_id: 6, mid_lat: -37.812, mid_lon: 144.962, trend: 'down' },
     ]
-    fetchQuietestSegments.mockResolvedValue(segs)
 
-    render(<BusyNowTrendMarkers map={map} busyNow={true} bounds={defaultBounds} />)
+    render(<BusyNowTrendMarkers map={map} busyNow={true} bounds={defaultBounds} quietSegments={segs} />)
 
     await new Promise((r) => setTimeout(r, 10))
 

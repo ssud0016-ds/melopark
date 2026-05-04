@@ -76,4 +76,19 @@ describe('SegmentPopup', () => {
     expect(screen.getByText(/No live bay coverage/)).toBeInTheDocument()
     expect(screen.queryByText(/of 10 bays free/)).not.toBeInTheDocument()
   })
+
+  it('uses thumb-friendly mobile CTA copy', () => {
+    const onMarkAsTarget = vi.fn()
+    render(
+      <SegmentPopup
+        detail={baseDetail}
+        onMarkAsTarget={onMarkAsTarget}
+        isMobile
+      />,
+    )
+    const button = screen.getByRole('button', { name: /Use this street/i })
+    expect(button.className).toContain('min-h-[44px]')
+    fireEvent.click(button)
+    expect(onMarkAsTarget).toHaveBeenCalledTimes(1)
+  })
 })

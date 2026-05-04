@@ -169,7 +169,84 @@ describe('MapPage alt-pin (Phase 2 — A11)', () => {
       lat: -37.8123,
       lng: 144.9612,
       name: 'Drummond St',
+      subtitle: '',
+      source: 'alternative',
+      zoneId: undefined,
     })
+  })
+
+  it('mounts a less-busy street pin when BusyNowPanel reports a quiet street click', async () => {
+    setViewportWidth(1200)
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+
+    const panelProps = mockBusyNowPanel.mock.calls.at(-1)?.[0]
+    expect(typeof panelProps.onStreetClick).toBe('function')
+
+    await act(async () => {
+      panelProps.onStreetClick({
+        street_name: 'Lygon St',
+        segment_id: 'seg-1',
+        level: 'low',
+        free: 7,
+        total: 9,
+        mid_lat: -37.81,
+        mid_lon: 144.96,
+        lat: -37.81,
+        lng: 144.96,
+      })
+    })
+
+    const mapProps = mockParkingMap.mock.calls.at(-1)?.[0]
+    expect(mapProps.altPinPos).toEqual({
+      lat: -37.81,
+      lng: 144.96,
+      name: 'Lygon St',
+      subtitle: 'Good chance · 7/9 bays free',
+      source: 'quiet-street',
+      segmentId: 'seg-1',
+    })
+  })
+
+  it('clears selected less-busy pick with Escape on desktop', async () => {
+    setViewportWidth(1200)
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+
+    const panelProps = mockBusyNowPanel.mock.calls.at(-1)?.[0]
+    await act(async () => {
+      panelProps.onAlternativeClick({
+        centroid_lat: -37.8123,
+        centroid_lon: 144.9612,
+        name: 'Drummond St',
+      })
+    })
+    expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).not.toBeNull()
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'Escape' })
+    })
+
+    expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).toBeNull()
+  })
+
+  it('clears selected less-busy pick when ParkingMap reports blank map click', async () => {
+    setViewportWidth(1200)
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+
+    const panelProps = mockBusyNowPanel.mock.calls.at(-1)?.[0]
+    await act(async () => {
+      panelProps.onAlternativeClick({
+        centroid_lat: -37.8123,
+        centroid_lon: 144.9612,
+        name: 'Drummond St',
+      })
+    })
+    expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).not.toBeNull()
+
+    await act(async () => {
+      mockParkingMap.mock.calls.at(-1)?.[0]?.onMapEmptyClick()
+    })
+
+    expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).toBeNull()
   })
 })
 
@@ -265,6 +342,56 @@ describe('MapPage parking chance main-map integration', () => {
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
     expect(useBusyNowModule.useBusyNow).toHaveBeenCalledWith(true)
     expect(screen.queryByRole('button', { name: /parking chance overlay/i })).not.toBeInTheDocument()
+  })
+
+  it('renders parking chance inside a mobile bottom decision sheet', () => {
+    setViewportWidth(414)
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+
+    expect(screen.getByText('Best nearby parking')).toBeInTheDocument()
+    expect(screen.getByText(/Quiet streets around current map view/i)).toBeInTheDocument()
+    expect(mockBusyNowPanel.mock.calls.at(-1)?.[0]?.mobileSheet).toBe(true)
+    expect(screen.queryByLabelText('Total parking bays on the live feed')).not.toBeInTheDocument()
+  })
+
+  it('keeps parking chance as floating desktop panel', () => {
+    setViewportWidth(1200)
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+
+    expect(mockBusyNowPanel.mock.calls.at(-1)?.[0]?.mobileSheet).toBeUndefined()
+    expect(screen.queryByText('Best nearby parking')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Total parking bays on the live feed')).toBeInTheDocument()
+  })
+
+  it('shows selected pick in mobile sheet and clears via thumb-safe button', async () => {
+    setViewportWidth(414)
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+
+    const panelProps = mockBusyNowPanel.mock.calls.at(-1)?.[0]
+    await act(async () => {
+      panelProps.onStreetClick({
+        street_name: 'Lygon St',
+        segment_id: 'seg-1',
+        level: 'low',
+        free: 7,
+        total: 9,
+        mid_lat: -37.81,
+        mid_lon: 144.96,
+        lat: -37.81,
+        lng: 144.96,
+      })
+    })
+
+    expect(screen.getAllByText('Less busy pick').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Lygon St').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Clear pick' })).toBeInTheDocument()
+    expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).not.toBeNull()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Clear pick' }))
+    })
+
+    expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).toBeNull()
   })
 
   it('does not mount the vector layer while manifest is loading, but keeps panel visible', () => {

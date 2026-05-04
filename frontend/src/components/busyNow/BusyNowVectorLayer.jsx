@@ -75,6 +75,7 @@ export default function BusyNowVectorLayer({
 
   const movingRef = useRef(false)
   const pendingUrlRef = useRef(null)
+  const pendingRedrawRef = useRef(false)
 
   // A2 — guard so only the very first vectorGrid load event fires the perf mark.
   const paintFiredRef = useRef(false)
@@ -97,6 +98,10 @@ export default function BusyNowVectorLayer({
       if (layer && pendingUrl && typeof layer.setUrl === 'function') {
         layer.setUrl(pendingUrl)
         pendingUrlRef.current = null
+      }
+      if (layer && pendingRedrawRef.current && typeof layer.redraw === 'function') {
+        pendingRedrawRef.current = false
+        layer.redraw()
       }
     }
     map.on('movestart', markMoving)
@@ -189,10 +194,12 @@ export default function BusyNowVectorLayer({
   // Re-style on destination / dimRadius / colorBlind change. No fetch.
   useEffect(() => {
     const layer = layerRef.current
-    if (!layer) return
-    if (typeof layer.redraw === 'function') {
-      layer.redraw()
+    if (!layer || typeof layer.redraw !== 'function') return
+    if (movingRef.current) {
+      pendingRedrawRef.current = true
+      return
     }
+    layer.redraw()
   }, [destination, dimRadiusM, colorBlindMode])
 
   return null
