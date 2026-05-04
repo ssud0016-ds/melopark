@@ -905,6 +905,16 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           accessibilityBayIds={accessibleBayIds}
         />
 
+        {busyNowStatus === 'loading' && !apiLoading && (
+          <div
+            className="absolute bottom-20 left-1/2 z-[480] -translate-x-1/2 pointer-events-none rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium text-white shadow-md dark:bg-black/70"
+            role="status"
+            aria-live="polite"
+          >
+            Loading parking pressure…
+          </div>
+        )}
+
         {apiLoading && (
           <div className="absolute inset-0 z-[400] bg-white/35 dark:bg-black/25 pointer-events-none flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-300">
             Loading bays...

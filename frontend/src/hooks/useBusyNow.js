@@ -36,7 +36,9 @@ export function useBusyNow(enabled) {
       const ctrl = new AbortController()
       const timeoutId = window.setTimeout(() => ctrl.abort(), MANIFEST_TIMEOUT_MS)
       try {
-        const m = await fetchPressureManifest({ force: true, signal: ctrl.signal })
+        // Use client TTL in apiPressure (MANIFEST_TTL_MS) so polls do not
+        // bypass cache and hammer /tiles/manifest.json on production.
+        const m = await fetchPressureManifest({ force: false, signal: ctrl.signal })
         if (cancelledRef.current) return
         setManifest(m)
         setStatus('ready')
