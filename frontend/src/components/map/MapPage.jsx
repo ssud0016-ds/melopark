@@ -205,7 +205,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const rightInsetPx = 14 + desktopSheetReservePx
   /** Keep search + filters the same max width as the default map view (do not stretch when bay sheet opens). */
   const TOOLBAR_MAX_PX = 560
-  const FILTER_RIGHT_RESERVE_PX = isMobile ? 0 : (selectedBay ? 76 : 24)
+  const FILTER_RIGHT_RESERVE_PX = isMobile ? 0 : 24
   const ZOOM_GROUP_WIDTH_PX = 72
 
   const activeFilterLabel = useMemo(() => {
@@ -284,10 +284,9 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           style={
             desktopSheetReservePx
               ? {
-                  /* Centre within strip [14px, 100% − rightInset] so it matches “main” feel with sheet open */
-                  left: `calc(14px + (100% - 14px - ${rightInsetPx}px) / 2)`,
+                  left: 'calc(50% - 80px)',
                   transform: 'translateX(-50%)',
-                  width: `min(${TOOLBAR_MAX_PX}px, calc(100% - ${14 + rightInsetPx}px))`,
+                  width: `min(${TOOLBAR_MAX_PX}px, calc(100% - 408px))`,
                   maxWidth: TOOLBAR_MAX_PX,
                 }
               : {
@@ -400,8 +399,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
         {destination && (
           <div
-            className="absolute bottom-3.5 z-[500] bg-surface-secondary text-gray-900 rounded-2xl px-5 py-2.5 text-sm font-semibold shadow-overlay flex flex-col items-center gap-0.5 max-w-[calc(100%-120px)] border-2 border-brand"
-            style={{ left: '50%', transform: 'translateX(-50%)' }}
+            className="absolute bottom-3.5 z-[500] bg-white/95 text-gray-900 rounded-2xl px-5 py-2.5 text-sm font-semibold shadow-overlay flex flex-col items-center gap-0.5 max-w-[calc(100%-120px)] border border-brand dark:bg-surface-dark-secondary/95 dark:text-gray-100"
+            style={selectedBay ? { left: 'calc(50% - 190px)', transform: 'translateX(-50%)' } : { left: '50%', transform: 'translateX(-50%)' }}
           >
             <span>
               {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across&nbsp;

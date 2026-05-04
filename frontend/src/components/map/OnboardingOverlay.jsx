@@ -13,10 +13,27 @@ function toLocalDateTimeInputValue(date = new Date()) {
   return `${y}-${m}-${d}T${hh}:${mm}`
 }
 
+const DURATION_CHIPS = [
+  { id: '15min', label: '15 min' },
+  { id: '30min', label: '30 min' },
+  { id: '1h', label: '1H' },
+  { id: '2h', label: '2H' },
+  { id: '3h', label: '3H' },
+  { id: '4h', label: '4H' },
+  { id: 'custom', label: 'Custom' },
+]
+
+const chipBase = 'rounded-full border px-3 py-2 text-xs font-bold transition cursor-pointer'
+const chipActive = 'border-brand bg-brand text-white'
+const chipIdle = 'border-gray-200/80 bg-white text-gray-500 hover:border-brand-300 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-300'
+
 export default function OnboardingOverlay({ onPick, onSkip }) {
   const [step, setStep] = useState('hero')
   const [localDestination, setLocalDestination] = useState(null)
   const [arriveByLocal, setArriveByLocal] = useState(() => toLocalDateTimeInputValue())
+  const [durationReq, setDurationReq] = useState(null)
+  const [customDurationReq, setCustomDurationReq] = useState(60)
+  const [customDurationUnit, setCustomDurationUnit] = useState('min')
 
   const quickPicks = QUICK_PICK_NAMES
     .map((name) => LANDMARKS.find((l) => l.name === name))
@@ -131,6 +148,49 @@ export default function OnboardingOverlay({ onPick, onSkip }) {
                     {lm.name}
                   </button>
                 ))}
+              </div>
+
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Duration</div>
+              <div className="flex flex-wrap gap-2 items-center">
+                {DURATION_CHIPS.map((chip) => (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    onClick={() => setDurationReq(durationReq === chip.id ? null : chip.id)}
+                    className={`${chipBase} ${durationReq === chip.id ? chipActive : chipIdle}`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+                {durationReq === 'custom' && (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="1"
+                      max={customDurationUnit === 'hr' ? 24 : 1440}
+                      step={customDurationUnit === 'hr' ? 0.5 : 1}
+                      value={customDurationUnit === 'hr' ? Math.round(customDurationReq / 60 * 10) / 10 : customDurationReq}
+                      onChange={(e) => {
+                        const val = Number(e.target.value)
+                        setCustomDurationReq(customDurationUnit === 'hr' ? Math.round(val * 60) : val)
+                      }}
+                      placeholder={customDurationUnit === 'hr' ? 'hrs' : 'min'}
+                      className="w-14 rounded-full border border-brand bg-white px-2 py-1.5 text-center text-xs font-semibold text-gray-700 outline-none dark:border-brand dark:bg-surface-dark dark:text-gray-100"
+                    />
+                    <div className="flex overflow-hidden rounded-full border border-gray-300 bg-white dark:border-gray-600 dark:bg-surface-dark">
+                      {['min', 'hr'].map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setCustomDurationUnit(u)}
+                          className={`px-2 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${customDurationUnit === u ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'}${u === 'hr' ? ' border-l border-gray-300 dark:border-gray-600' : ''}`}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
