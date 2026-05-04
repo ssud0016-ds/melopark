@@ -159,6 +159,12 @@ function QuietStreetChip({ seg, onClick, selected = false, featured = false, mob
               <span>{seg.free}/{seg.total} bays free</span>
             </>
           )}
+          {seg.walk_distance_m != null && (
+            <>
+              {' · '}
+              <span>{seg.walk_distance_m} m away</span>
+            </>
+          )}
           {' · '}
           <span>{coverage}</span>
           <div className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">
@@ -264,7 +270,7 @@ export default function BusyNowPanel({
           {mobileSheet ? panelLabel : inDestMode ? 'Around your destination' : 'Parking chance'}
         </span>
         <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">
-          {status === 'loading' ? 'loading…' : status === 'error' ? 'error' : 'live'}
+          {status === 'loading' ? 'loading...' : status === 'error' ? 'error' : 'live'}
         </span>
       </div>
       <div className="mb-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-700/70 dark:text-gray-200">
@@ -273,7 +279,7 @@ export default function BusyNowPanel({
 
       {!isReady && status === 'loading' && (
         <div className="px-1 py-2 text-[11px] text-gray-500 dark:text-gray-400">
-          Loading parking chance data…
+          Loading parking chance data...
         </div>
       )}
       {status === 'error' && (
@@ -312,7 +318,7 @@ export default function BusyNowPanel({
         <>
           {altLoading && (
             <div className="px-1 py-2 text-[11px] text-gray-500 dark:text-gray-400">
-              Loading alternatives…
+              Loading alternatives...
             </div>
           )}
           {altError && !altLoading && (

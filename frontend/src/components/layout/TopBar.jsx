@@ -31,7 +31,7 @@ function MoonGlyph({ className }) {
   )
 }
 
-export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark }) {
+export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark, onHelpOpen }) {
   const time = useClock()
   const logoSrc = darkMode ? logoDarkMode : logoLight
 
@@ -90,8 +90,24 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
             </div>
           </div>
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/85 animate-pulse-dot dark:bg-brand-700" />
-          Live CBD&nbsp;{time}
+          Live CBD {time}
         </div>
+
+        {onHelpOpen && (
+          <button
+            type="button"
+            onClick={onHelpOpen}
+            aria-label="Open help"
+            className={cn(
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors',
+              'border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:border-gray-300',
+              'dark:bg-surface-dark-secondary dark:border-slate-600 dark:text-gray-300 dark:hover:bg-surface-dark dark:hover:border-slate-500',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2',
+            )}
+          >
+            ?
+          </button>
+        )}
 
         <div className="flex items-center gap-1">
           <span

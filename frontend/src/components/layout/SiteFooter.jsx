@@ -48,7 +48,7 @@ export default function SiteFooter({ onNavigate }) {
           <div>
             <img
               src={logoDarkMode}
-              alt="MelOPark — Smarter Parking, Cleaner City"
+              alt="MelOPark - Smarter Parking, Cleaner City"
               className={LOGO_FOOTER_IMG_CLASS}
               decoding="async"
             />
