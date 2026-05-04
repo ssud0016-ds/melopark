@@ -58,6 +58,9 @@ data/bronze/*.parquet
 data/bronze/*.json
 data/silver/
 data/gold/
+!data/gold/epic5_segment_pressure_static.parquet
+!data/gold/epic5_event_sessions_gold.parquet
+!data/sensor_to_segment_lookup.csv
 # API runtime copy for hosts that only ship the backend/ tree (e.g. some App Platform slugs)
 !backend/data/gold/
 !backend/data/silver/
