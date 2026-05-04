@@ -1,12 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, waitFor, act } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { renderHook, waitFor } from '@testing-library/react'
 import { useBusyNow } from './useBusyNow'
-import { _resetManifestCacheForTest } from '../services/apiPressure'
+import * as apiPressure from '../services/apiPressure'
 
 describe('useBusyNow', () => {
   beforeEach(() => {
-    _resetManifestCacheForTest()
+    apiPressure._resetManifestCacheForTest()
     global.fetch = vi.fn()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('stays idle when disabled', () => {
@@ -23,6 +27,16 @@ describe('useBusyNow', () => {
     const { result } = renderHook(() => useBusyNow(true))
     await waitFor(() => expect(result.current.status).toBe('ready'))
     expect(result.current.manifest.minute_bucket).toBe('2026')
+  })
+
+  it('requests manifest without force (uses client TTL cache)', async () => {
+    const spy = vi.spyOn(apiPressure, 'fetchPressureManifest').mockResolvedValue({
+      minute_bucket: '2026',
+      tile_url_template: '/x',
+    })
+    const { result } = renderHook(() => useBusyNow(true))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ force: false }))
   })
 
   it('records error on fetch failure', async () => {
