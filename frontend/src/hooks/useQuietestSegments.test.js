@@ -109,6 +109,6 @@ describe('useQuietestSegments', () => {
     expect(global.fetch).toHaveBeenCalled()
     const calledUrl = global.fetch.mock.calls[0][0]
     expect(calledUrl).toContain('bbox=144.95')
-    expect(calledUrl).toContain('limit=3')
+    expect(calledUrl).toContain('limit=150')
   })
 })

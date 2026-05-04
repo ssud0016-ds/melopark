@@ -5,6 +5,7 @@ import {
   Circle,
   CircleMarker,
   Marker,
+  Polyline,
   Popup,
   useMap,
   useMapEvents,
@@ -196,29 +197,16 @@ function MapBoundsNotifier({ onBoundsChange }) {
  * Tracks viewport bounds internally so BusyNowTrendMarkers gets fresh bounds on
  * every moveend/zoomend without adding state to ParkingMap.
  */
-function TrendMarkersController({ busyNow }) {
+function TrendMarkersController({ busyNow, quietSegments, colorBlindMode }) {
   const map = useMap()
-  const [bounds, setBounds] = useState(null)
-  useEffect(() => {
-    if (!map) return
-    const report = () => {
-      const b = map.getBounds()
-      setBounds({
-        west: b.getWest(),
-        south: b.getSouth(),
-        east: b.getEast(),
-        north: b.getNorth(),
-      })
-    }
-    report()
-    map.on('moveend', report)
-    map.on('zoomend', report)
-    return () => {
-      map.off('moveend', report)
-      map.off('zoomend', report)
-    }
-  }, [map])
-  return <BusyNowTrendMarkers map={map} busyNow={busyNow} bounds={bounds} />
+  return (
+    <BusyNowTrendMarkers
+      map={map}
+      busyNow={busyNow}
+      quietSegments={quietSegments}
+      colorBlindMode={colorBlindMode}
+    />
+  )
 }
 
 function destinationDivIcon(name) {
@@ -236,16 +224,24 @@ function destinationDivIcon(name) {
 
 /** Distinct alt-zone marker (Phase 2 — A11). Diamond glyph + amber chip so it's
  *  visually separable from the primary destination pin above. */
-function altPinDivIcon(name) {
+function altPinDivIcon(pin) {
+  const name = pin?.name || 'Less busy option'
+  const subtitle = pin?.subtitle || 'Selected less busy parking option'
   const esc = String(name || 'Alternative zone')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/\"/g, '&quot;')
+  const subEsc = String(subtitle)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/\"/g, '&quot;')
   return L.divIcon({
     className: 'mp-alt-marker',
-    html: `<div style="display:flex;flex-direction:column;align-items:center;width:180px;margin-left:-90px;margin-top:-44px;text-align:center;pointer-events:none;">
-      <span style="font-size:26px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2))">🔶</span>
-      <span style="margin-top:2px;background:#b45309;color:#fff;font:700 11px Inter,system-ui,sans-serif;padding:4px 10px;border-radius:8px;max-width:180px;overflow:hidden;text-overflow:ellipsis;">${esc}</span>
+    html: `<div style="display:flex;flex-direction:column;align-items:center;width:210px;margin-left:-105px;margin-top:-62px;text-align:center;pointer-events:none;">
+      <span style="font-size:28px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.25))">◆</span>
+      <span style="margin-top:2px;background:#047857;color:#fff;font:800 10px Inter,system-ui,sans-serif;padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:0.04em;">Less busy pick</span>
+      <span style="margin-top:2px;background:#064e3b;color:#fff;font:800 12px Inter,system-ui,sans-serif;padding:5px 10px;border-radius:10px;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc}</span>
+      ${subEsc ? `<span style="margin-top:2px;background:#ecfdf5;color:#064e3b;border:1px solid #a7f3d0;font:700 10px Inter,system-ui,sans-serif;padding:3px 8px;border-radius:999px;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${subEsc}</span>` : ''}
     </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
@@ -272,9 +268,11 @@ export default function ParkingMap({
   hideHint = false,
   busyNow = false,
   busyNowManifest = null,
+  busyNowQuietSegments = undefined,
   onSegmentClick = null,
   colorBlindMode = false,
   altPinPos = null,
+  onMapEmptyClick = null,
   dimRadiusM = 600,
 }) {
   const [isDark, setIsDark] = useState(
@@ -295,7 +293,7 @@ export default function ParkingMap({
   )
 
   const altIcon = useMemo(
-    () => (altPinPos ? altPinDivIcon(altPinPos.name) : null),
+    () => (altPinPos ? altPinDivIcon(altPinPos) : null),
     [altPinPos],
   )
 
@@ -430,7 +428,12 @@ export default function ParkingMap({
         <MapReadyNotifier onReady={onMapReady} />
         <MapBoundsNotifier onBoundsChange={onBoundsChange} />
         <MapZoomTracker onZoomChange={setZoomLevel} />
-        <MapEmptyClick onEmptyClick={() => onBayClick(null)} />
+        <MapEmptyClick
+          onEmptyClick={() => {
+            onBayClick(null)
+            onMapEmptyClick?.()
+          }}
+        />
 
         {destination && destLatLng && (
           <Circle
@@ -457,7 +460,13 @@ export default function ParkingMap({
           />
         )}
 
-        {busyNow && <TrendMarkersController busyNow={busyNow} />}
+        {busyNow && (
+          <TrendMarkersController
+            busyNow={busyNow}
+            quietSegments={busyNowQuietSegments}
+            colorBlindMode={colorBlindMode}
+          />
+        )}
 
         {zoomLevel < CLUSTER_ZOOM_CUTOFF &&
           clustered.map((c) => (
@@ -575,15 +584,45 @@ export default function ParkingMap({
           <Marker position={[destLatLng.lat, destLatLng.lng]} icon={destIcon} interactive={false} />
         )}
 
-        {altPinPos && altIcon && (
-          <Marker
-            position={[altPinPos.lat, altPinPos.lng]}
-            icon={altIcon}
+        {destination && destLatLng && altPinPos && (
+          <Polyline
+            positions={[
+              [destLatLng.lat, destLatLng.lng],
+              [altPinPos.lat, altPinPos.lng],
+            ]}
             interactive={false}
-            data-testid="alt-pin-marker"
-          >
-            <Popup>{altPinPos.name}</Popup>
-          </Marker>
+            pathOptions={{
+              color: '#047857',
+              opacity: 0.75,
+              weight: 3,
+              dashArray: '8 8',
+            }}
+          />
+        )}
+
+        {altPinPos && altIcon && (
+          <>
+            <Circle
+              center={[altPinPos.lat, altPinPos.lng]}
+              radius={140}
+              interactive={false}
+              pathOptions={{
+                color: '#047857',
+                fillColor: '#10b981',
+                fillOpacity: 0.16,
+                weight: 3,
+                dashArray: '6 5',
+              }}
+            />
+            <Marker
+              position={[altPinPos.lat, altPinPos.lng]}
+              icon={altIcon}
+              interactive={false}
+              data-testid="alt-pin-marker"
+            >
+              <Popup>{altPinPos.name}</Popup>
+            </Marker>
+          </>
         )}
 
         <div
