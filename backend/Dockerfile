@@ -16,6 +16,7 @@ COPY backend/certs ./certs
 RUN mkdir -p /data/gold /data/silver
 COPY data/gold /data/gold
 COPY data/silver /data/silver
+COPY data/sensor_to_segment_lookup.csv /data/sensor_to_segment_lookup.csv
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8080
