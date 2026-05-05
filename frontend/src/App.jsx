@@ -5,6 +5,7 @@ import AttributionPage from './components/legal/AttributionPage'
 import TermsPage from './components/legal/TermsPage'
 import MapPage from './components/map/MapPage'
 import PredictionsPage from './components/predictions/PredictionsPage'
+import HelpModal from './components/help/HelpModal'
 import { useBays } from './hooks/useBays'
 import { useDarkMode } from './hooks/useDarkMode'
 
@@ -12,6 +13,7 @@ export default function App() {
   const [page, setPage] = useState('map')
   const { bays, lastUpdated, error, loading, refresh } = useBays()
   const [darkMode, toggleDark] = useDarkMode()
+  const [helpOpen, setHelpOpen] = useState(false)
   const [flyTarget, setFlyTarget] = useState(null)
 
   const handleNavigateToMap = (lat, lon, label) => {
@@ -21,7 +23,14 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col font-sans">
-      <TopBar activePage={page} onNavigate={setPage} darkMode={darkMode} onToggleDark={toggleDark} />
+      <TopBar
+        activePage={page}
+        onNavigate={setPage}
+        darkMode={darkMode}
+        onToggleDark={toggleDark}
+        onHelpOpen={() => setHelpOpen(true)}
+      />
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
       <div className="flex min-h-0 flex-1 flex-col pt-16">
         {page === 'map' && (
           <MapPage bays={bays} lastUpdated={lastUpdated} apiError={error}
