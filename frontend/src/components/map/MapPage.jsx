@@ -585,7 +585,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const rightInsetPx = 14 + desktopSheetReservePx
   /** Keep search + filters the same max width as the default map view (do not stretch when bay sheet opens). */
   const TOOLBAR_MAX_PX = 560
-  const FILTER_RIGHT_RESERVE_PX = isMobile ? 0 : (selectedBay ? 76 : 24)
+  const FILTER_RIGHT_RESERVE_PX = isMobile ? 0 : 24
   const ZOOM_GROUP_WIDTH_PX = 72
 
 const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plannerArrivalIso)
@@ -737,6 +737,30 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               onCustomDurationChange={setCustomDuration}
             />
             {arriveChip}
+            <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-slate-200/60 bg-white/60 px-2.5 py-1.5 dark:border-slate-600/40 dark:bg-surface-dark/50">
+              <span className="text-[11px] font-semibold text-slate-600 dark:text-gray-300">Color-blind palette</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={colorBlindMode}
+                aria-label={colorBlindMode ? 'Disable color-blind mode' : 'Enable color-blind mode'}
+                onClick={() => setColorBlindMode((v) => !v)}
+                className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-1 ${
+                  colorBlindMode
+                    ? 'border-sky-400 bg-sky-500 dark:border-sky-500 dark:bg-sky-600'
+                    : 'border-gray-300 bg-gray-200 hover:bg-gray-300 dark:border-slate-600 dark:bg-slate-700'
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className={`pointer-events-none absolute left-0.5 top-0.5 h-4 w-4 rounded-full shadow ring-1 transition-transform duration-200 ease-out ${
+                    colorBlindMode
+                      ? 'translate-x-5 bg-white ring-sky-300/40'
+                      : 'translate-x-0 bg-white ring-black/10 dark:bg-slate-300 dark:ring-white/10'
+                  }`}
+                />
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -754,27 +778,6 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
     </>
   )
 
-  const mapTopRightControls = (
-    <div className="relative flex flex-nowrap items-start gap-2">
-      <button
-        type="button"
-        onClick={() => setColorBlindMode((v) => !v)}
-        aria-pressed={colorBlindMode}
-        aria-label={colorBlindMode ? 'Disable color-blind mode' : 'Enable color-blind mode'}
-        className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
-          colorBlindMode
-            ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
-            : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
-        }`}
-        title={colorBlindMode ? 'Color-blind palette: ON' : 'Color-blind palette: OFF'}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path d="M4 12h16M4 7h16M4 17h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-        </svg>
-        <span className="text-[9px] font-semibold leading-none">{colorBlindMode ? 'CB ON' : 'CB OFF'}</span>
-      </button>
-    </div>
-  )
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden">
@@ -869,9 +872,6 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                 {filterInnerContent}
               </div>
 
-              <div className="w-full min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin]">
-                <div className="pointer-events-auto ml-auto w-max max-w-full min-w-0 pl-1">{mapTopRightControls}</div>
-              </div>
             </div>
           </div>
         ) : (
@@ -882,10 +882,9 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               style={
                 desktopSheetReservePx
                   ? {
-                      /* Centre within strip [14px, 100% − rightInset] so it matches "main" feel with sheet open */
-                      left: `calc(14px + (100% - 14px - ${rightInsetPx}px) / 2)`,
+                      left: 'calc(50% - 80px)',
                       transform: 'translateX(-50%)',
-                      width: `min(${TOOLBAR_MAX_PX}px, calc(100% - ${14 + rightInsetPx}px))`,
+                      width: `min(${TOOLBAR_MAX_PX}px, calc(100% - 408px))`,
                       maxWidth: TOOLBAR_MAX_PX,
                     }
                   : {
@@ -935,7 +934,6 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               className="absolute top-5 z-[600] pointer-events-auto"
               style={{ right: rightInsetPx }}
             >
-              {mapTopRightControls}
             </div>
           </>
         )}
@@ -943,7 +941,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
         {destination && !isMobile && (
           <div
             className="absolute bottom-3.5 z-[500] bg-surface-secondary text-gray-900 rounded-2xl px-5 py-2.5 text-sm font-semibold shadow-overlay flex flex-col items-center gap-0.5 max-w-[calc(100%-120px)] border-2 border-brand"
-            style={{ left: '50%', transform: 'translateX(-50%)' }}
+            style={selectedBay ? { left: 'calc(50% - 190px)', transform: 'translateX(-50%)' } : { left: '50%', transform: 'translateX(-50%)' }}
           >
             <span>
               {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across&nbsp;
@@ -973,25 +971,6 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           </div>
         )}
 
-        {parkingChanceActive && showPressureCoach && !showOnboarding && (
-          <div className={`absolute left-3.5 z-[510] max-w-[260px] rounded-xl border border-emerald-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-card dark:border-emerald-800 dark:bg-surface-dark-secondary/95 dark:text-gray-100 ${
-            isMobile ? 'top-[230px]' : 'top-[126px]'
-          }`}>
-            <div className="font-semibold text-emerald-700 dark:text-emerald-200">
-              Parking chance is live now
-            </div>
-            <div className="mt-0.5 leading-snug">
-              Green streets are easier. Tap any colored street to see why.
-            </div>
-            <button
-              type="button"
-              onClick={dismissPressureCoach}
-              className="mt-1 text-[11px] font-semibold text-brand hover:underline dark:text-brand-light"
-            >
-              Got it
-            </button>
-          </div>
-        )}
 
         {!isMobile && (
         <div
@@ -1050,8 +1029,28 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           ]
           return (
             <div
-              className="absolute bottom-3.5 z-[500] rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
+              className="absolute bottom-3.5 z-[510] flex flex-col gap-2"
               style={{ right: rightInsetPx }}
+            >
+              {parkingChanceActive && showPressureCoach && !showOnboarding && !selectedBay && (
+                <div className="self-end max-w-[260px] rounded-xl border border-emerald-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-card dark:border-emerald-800 dark:bg-surface-dark-secondary/95 dark:text-gray-100">
+                  <div className="font-semibold text-emerald-700 dark:text-emerald-200">
+                    Parking chance is live now
+                  </div>
+                  <div className="mt-0.5 leading-snug">
+                    Green streets are easier. Tap any colored street to see why.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={dismissPressureCoach}
+                    className="mt-1 text-[11px] font-semibold text-brand hover:underline dark:text-brand-light"
+                  >
+                    Got it
+                  </button>
+                </div>
+              )}
+            <div
+              className="rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
             >
               {isMobile && !legendOpen ? (
                 <button
@@ -1097,6 +1096,15 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
+                  <div className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
+                    <div className="relative h-3.5 w-3.5 shrink-0">
+                      <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full">
+                        <circle cx="12" cy="12" r="12" fill="#60a5fa"/>
+                        <path fill="white" d="M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2m9 7h-6v13h-2v-6h-2v6H9V9H3V7h18v2z"/>
+                      </svg>
+                    </div>
+                    <span className="truncate">Accessible bays</span>
+                  </div>
                   <div className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
                     Street parking chance
                   </div>
@@ -1109,17 +1117,9 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
-                  <div className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
-                    <div className="relative h-3.5 w-3.5 shrink-0">
-                      <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full">
-                        <circle cx="12" cy="12" r="12" fill="#60a5fa"/>
-                        <path fill="white" d="M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2m9 7h-6v13h-2v-6h-2v6H9V9H3V7h18v2z"/>
-                      </svg>
-                    </div>
-                    <span className="truncate">Accessible bays</span>
-                  </div>
                 </div>
               )}
+            </div>
             </div>
           )
         })()}
