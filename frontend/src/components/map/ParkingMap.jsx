@@ -294,7 +294,7 @@ export default function ParkingMap({
   colorBlindMode = false,
   altPinPos = null,
   onMapEmptyClick = null,
-  dimRadiusM = 600,
+  dimRadiusM = SEARCH_RADIUS_M,
   accessibilityBayIds = null,
 }) {
   const [isDark, setIsDark] = useState(

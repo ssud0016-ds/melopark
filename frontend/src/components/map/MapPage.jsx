@@ -15,7 +15,7 @@ import { useMapState } from '../../hooks/useMapState'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
 import { fetchAccessibilityAll, fetchEvaluateBulk } from '../../services/apiBays'
-import { destinationLatLng } from '../../utils/mapGeo'
+import { destinationLatLng, SEARCH_RADIUS_M } from '../../utils/mapGeo'
 import ParkingForecastPanel from './ParkingForecastPanel'
 import { useParkingForecast } from '../../hooks/useParkingForecast'
 import {
@@ -424,6 +424,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
 
+  useEffect(() => {
+    if (!filtersOpen) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setFiltersOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [filtersOpen])
+
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
 
   // Quietest segments in viewport (single fetch, limit 150 — panel uses first 3, trend markers use full list).
@@ -612,14 +621,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     limitedCount,
     proxFreeSpots,
     proxFreeBays,
-    proxLimitedCount,
     proxModeLabel,
   } = useMemo(() => {
     // hasRules === parking API has_restriction_data (CoM cache); not evaluate coverage.
     const verified = mapVisibleBays.filter((b) => b.hasRules)
     const limited = mapVisibleBays.filter((b) => !b.hasRules)
     const proxVerified = mapProximityBays.filter((b) => b.hasRules)
-    const proxLimited = mapProximityBays.filter((b) => !b.hasRules)
 
     const proxLive = mapProximityBays.filter((b) => b.source === 'live')
     const proxLiveAvailable = proxLive.filter((b) => b.type === 'available')
@@ -631,7 +638,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         ? proxVerified.reduce((a, b) => a + (b.type === 'available' ? b.free : 0), 0)
         : proxLiveAvailable.reduce((a, b) => a + (b.free || 0), 0),
       proxFreeBays: showLimitedBays ? proxVerified.filter((b) => b.type === 'available').length : proxLiveAvailable.length,
-      proxLimitedCount: proxLimited.length,
       proxModeLabel: showLimitedBays ? 'verified bay' : 'live bay',
     }
   }, [mapVisibleBays, mapProximityBays, showLimitedBays])
@@ -900,6 +906,13 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                 />
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(false)}
+              className="mt-2 w-full rounded-lg bg-brand px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-brand/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:focus-visible:ring-offset-surface-dark-secondary"
+            >
+              Done
+            </button>
           </div>
         )}
       </div>
@@ -946,7 +959,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           colorBlindMode={colorBlindMode}
           altPinPos={altPinPos}
           onMapEmptyClick={clearSelectedSuggestion}
-          dimRadiusM={600}
+          dimRadiusM={SEARCH_RADIUS_M}
           accessibilityBayIds={accessibleBayIds}
         />
 
@@ -1114,15 +1127,19 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
             style={selectedBay ? { left: 'calc(50% - 190px)', transform: 'translateX(-50%)' } : { left: '50%', transform: 'translateX(-50%)' }}
           >
             <span>
-              {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across 
-              {proxFreeBays} {proxModeLabel}
-              {proxFreeBays !== 1 ? 's' : ''} within 600 m of {destination.name}
+              {proxFreeSpots === proxFreeBays ? (
+                <>
+                  {proxFreeBays} free {proxModeLabel}
+                  {proxFreeBays !== 1 ? 's' : ''} within {SEARCH_RADIUS_M} m of {destination.name}
+                </>
+              ) : (
+                <>
+                  {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across {proxFreeBays}{' '}
+                  {proxModeLabel}
+                  {proxFreeBays !== 1 ? 's' : ''} within {SEARCH_RADIUS_M} m of {destination.name}
+                </>
+              )}
             </span>
-            {!showLimitedBays && proxLimitedCount > 0 && (
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                +{proxLimitedCount} no CoM row nearby
-              </span>
-            )}
           </div>
         )}
 
