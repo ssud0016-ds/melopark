@@ -1235,7 +1235,11 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
         )}
 
         {showOnboarding && (
-          <OnboardingOverlay onPick={handleOnboardingPick} onSkip={dismissOnboarding} />
+          <OnboardingOverlay
+            onPick={handleOnboardingPick}
+            onSkip={dismissOnboarding}
+            busyNowManifest={busyNowManifest}
+          />
         )}
 
         {selectedBay && (
