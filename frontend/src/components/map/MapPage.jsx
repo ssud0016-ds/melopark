@@ -42,8 +42,17 @@ function splitMelbourneDateTimeParts(iso) {
   return { date: date || '', time: time || '' }
 }
 
-export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry }) {
+export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry, flyTarget }) {
   const mapRef = useRef(null)
+
+  // Navigate from Predictions page: fly to selected zone
+  useEffect(() => {
+    if (!flyTarget || !mapRef.current) return
+    const { lat, lon } = flyTarget
+    if (typeof lat === 'number' && typeof lon === 'number') {
+      setTimeout(() => mapRef.current?.flyTo([lat, lon], 17, { duration: 1.2 }), 300)
+    }
+  }, [flyTarget])
   const segmentPopupRef = useRef(null)
   const segmentReactRootRef = useRef(null)
   const segmentFetchAbortRef = useRef(null)
