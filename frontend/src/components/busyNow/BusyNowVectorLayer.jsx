@@ -5,7 +5,7 @@ import L from 'leaflet'
 import 'leaflet.vectorgrid'
 import { getStatusFillColor } from '../map/ParkingMap'
 import { buildTileUrlTemplate } from '../../services/apiPressure'
-import { haversineMeters } from '../../utils/mapGeo'
+import { haversineMeters, SEARCH_RADIUS_M } from '../../utils/mapGeo'
 
 /**
  * Mounts a Leaflet.VectorGrid.Protobuf layer for segment pressure tiles.
@@ -21,7 +21,7 @@ import { haversineMeters } from '../../utils/mapGeo'
  *   to `opacity: 0.25`. Otherwise full `0.85`.
  */
 
-export function styleSegment(props, { colorBlindMode = false, destination = null, dimRadiusM = 600 } = {}) {
+export function styleSegment(props, { colorBlindMode = false, destination = null, dimRadiusM = SEARCH_RADIUS_M } = {}) {
   const { level = 'unknown', total = 0, mid_lat, mid_lon } = props || {}
   // B6 — zero-bay segments get a fixed mid-opacity to signal no coverage data.
   const totalNum = Number(total)
@@ -60,7 +60,7 @@ export default function BusyNowVectorLayer({
   manifest,
   colorBlindMode = false,
   destination = null,
-  dimRadiusM = 600,
+  dimRadiusM = SEARCH_RADIUS_M,
   /** Leaflet dark/light map basemap — triggers canvas redraw when theme flips. */
   mapThemeDark = false,
   onSegmentClick,
