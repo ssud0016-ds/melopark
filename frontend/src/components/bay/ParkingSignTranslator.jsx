@@ -84,15 +84,15 @@ function condenseHeading(heading) {
   const range = heading.match(/^(\w+) to (\w+) from (.+?) to (.+)$/)
   if (range) {
     return {
-      days: `${DAY_SHORT[range[1]] || range[1]}–${DAY_SHORT[range[2]] || range[2]}`,
-      window: `${condenseTime(range[3])}–${condenseTime(range[4])}`,
+      days: `${DAY_SHORT[range[1]] || range[1]}-${DAY_SHORT[range[2]] || range[2]}`,
+      window: `${condenseTime(range[3])}-${condenseTime(range[4])}`,
     }
   }
   const single = heading.match(/^(\w+) from (.+?) to (.+)$/)
   if (single) {
     return {
       days: DAY_SHORT[single[1]] || single[1],
-      window: `${condenseTime(single[2])}–${condenseTime(single[3])}`,
+      window: `${condenseTime(single[2])}-${condenseTime(single[3])}`,
     }
   }
   return { days: heading, window: '' }
@@ -132,8 +132,6 @@ const BADGE_LABEL = {
 
 function RuleChip({ rule, tone, isOpen, onToggle }) {
   const cleanBody = sanitizeRuleBody(rule.body)
-  const sig = detectSignal(cleanBody)
-  const stayLimit = detectStayLimit(cleanBody)
   const cond = condenseHeading(rule.heading)
   const isOutside = cond?.isOutside
 
@@ -146,7 +144,7 @@ function RuleChip({ rule, tone, isOpen, onToggle }) {
       type="button"
       onClick={onToggle}
       aria-expanded={isOpen}
-      title={`${rule.heading} — ${cleanBody}`}
+      title={`${rule.heading}: ${cleanBody}`}
       className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${toneClass}`}
     >
       <div className="flex items-center gap-2">
@@ -157,9 +155,6 @@ function RuleChip({ rule, tone, isOpen, onToggle }) {
             {badgeLabel}
           </span>
         )}
-        <span className="shrink-0 text-base leading-none" aria-hidden>
-          {sig.emoji}
-        </span>
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-gray-900 dark:text-gray-100">
           {isOutside ? (
             <>No restrictions <span className="opacity-70">· free, no payment</span></>
@@ -167,8 +162,6 @@ function RuleChip({ rule, tone, isOpen, onToggle }) {
             <>
               {cond?.days}
               {cond?.window && <span className="opacity-70"> · {cond.window}</span>}
-              {stayLimit && <span className="opacity-90"> · {stayLimit}</span>}
-              {sig.label !== 'Parking' && <span className="opacity-70"> · {sig.label}</span>}
             </>
           )}
         </span>
