@@ -1,10 +1,13 @@
-import { Suspense, lazy, useRef, useCallback, useEffect, useState, useMemo } from 'react'
+
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
 import ParkingMap from './ParkingMap'
+import OnboardingOverlay from './OnboardingOverlay'
 import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import FilterChips from '../feedback/FilterChips'
 import BusyNowPanel from '../busyNow/BusyNowPanel'
+import SegmentPopup from '../busyNow/SegmentPopup'
 import BottomSheet, { SNAP_PEEK, SNAP_HALF } from '../layout/BottomSheet'
 import { segmentDetailFromApi } from '../busyNow/segmentDetailFromApi'
 import { useBusyNow } from '../../hooks/useBusyNow'
@@ -14,10 +17,8 @@ import { fetchSegmentDetail } from '../../services/apiPressure'
 import { useMapState } from '../../hooks/useMapState'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
-import { fetchAccessibilityAll, fetchEvaluateBulk } from '../../services/apiBays'
-import { destinationLatLng, SEARCH_RADIUS_M } from '../../utils/mapGeo'
-import ParkingForecastPanel from './ParkingForecastPanel'
-import { useParkingForecast } from '../../hooks/useParkingForecast'
+import { fetchAccessibilityNearby, fetchAccessibilityAll, fetchEvaluateBulk } from '../../services/apiBays'
+import { destinationLatLng } from '../../utils/mapGeo'
 import {
   DEFAULT_PLANNER_DURATION_MINS,
   melbourneWallClockToAwareIso,
@@ -32,77 +33,6 @@ const CHANCE_TEXT = {
   medium: 'Getting busy',
   high: 'Hard to park',
   unknown: 'No live estimate',
-}
-
-const OnboardingOverlay = lazy(() => import('./OnboardingOverlay'))
-
-function AltPinCard({ altPinPos, destination, onClear, compact = false }) {
-  const parts = (altPinPos.subtitle || '').split(' · ')
-  const pressureLabel = parts[0] || null
-  const bayLabel = parts[1] || null
-  const distLabel = parts[2] || null
-
-  const pressureColor =
-    pressureLabel === 'Good chance'
-      ? 'text-emerald-700 dark:text-emerald-300'
-      : pressureLabel === 'Getting busy'
-        ? 'text-amber-700 dark:text-amber-300'
-        : pressureLabel === 'Hard to park'
-          ? 'text-rose-700 dark:text-rose-300'
-          : 'text-gray-500 dark:text-gray-400'
-
-  return (
-    <div className={`rounded-2xl border border-emerald-200/80 bg-white shadow-card backdrop-blur-sm dark:border-emerald-800/50 dark:bg-surface-dark-secondary ${compact ? 'mb-2' : 'mb-2'}`}>
-      {/* Header row */}
-      <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2 border-b border-emerald-100/70 dark:border-emerald-800/40">
-        <div className="flex items-center gap-1.5">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] text-white">◆</span>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-            Less busy pick
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={onClear}
-          aria-label="Clear selection"
-          className="flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 hover:bg-gray-50 hover:text-gray-600 dark:border-slate-600 dark:bg-surface-dark dark:text-gray-400 transition-colors"
-        >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-          </svg>
-        </button>
-      </div>
-
-      {/* Zone info */}
-      <div className="px-3 pt-2.5 pb-3">
-        <div className="truncate text-sm font-semibold text-gray-900 dark:text-white">{altPinPos.name}</div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          {pressureLabel && (
-            <span className={`text-xs font-semibold ${pressureColor}`}>{pressureLabel}</span>
-          )}
-          {bayLabel && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">{bayLabel}</span>
-          )}
-          {distLabel && (
-            <span className="text-xs text-gray-400 dark:text-gray-500">{distLabel}</span>
-          )}
-        </div>
-
-        {/* Destination context */}
-        {destination && (
-          <div className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-gray-50 px-2.5 py-1.5 dark:bg-surface-dark/60">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0 text-gray-400">
-              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-              <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            <span className="truncate text-[11px] text-gray-500 dark:text-gray-400">
-              Near <span className="font-semibold text-gray-700 dark:text-gray-200">{destination.name}</span>
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  )
 }
 
 function splitMelbourneDateTimeParts(iso) {
@@ -127,10 +57,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setDurationFilter,
     customDuration,
     setCustomDuration,
-    filterTime = '',
-    setFilterTime = () => {},
-    filterDate = '',
-    setFilterDate = () => {},
+    filterTime,
+    setFilterTime,
+    filterDate,
+    setFilterDate,
     destination,
     pickDestination,
     clearDestination,
@@ -154,61 +84,21 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   /** Persisted across bay opens: last debounced plan from the detail sheet. */
   const [plannerArrivalIso, setPlannerArrivalIso] = useState(null)
   const [plannerDurationMins, setPlannerDurationMins] = useState(null)
+
   /** True after "Show all bays at this time" in the panel. */
   const [mapBaysAtPlannedTime, setMapBaysAtPlannedTime] = useState(false)
   /** Bump to force sheet form reset when banner or Clear resets live mode. */
   const [plannerResetNonce, setPlannerResetNonce] = useState(0)
   const [parkingChanceSnap, setParkingChanceSnap] = useState(SNAP_PEEK)
-  const forecast = useParkingForecast({
-    destination: destinationStable,
-    plannerArrivalIso,
-    enabled: true,
-    hoursAhead: 6,
-  })
 
   // ── Parking chance context (internal vector-tile street pressure layer) ──
   const { manifest: busyNowManifest, status: busyNowStatus } = useBusyNow(true)
   const [colorBlindMode, setColorBlindMode] = useState(false)
-  const [overlayGateOpen, setOverlayGateOpen] = useState(false)
-  const [showMapVeil, setShowMapVeil] = useState(true)
 
-  const parkingChanceDataReady =
+  const parkingChanceActive =
     busyNowStatus === 'ready' &&
     busyNowManifest != null &&
     busyNowManifest.total_segments > 0
-  const parkingChanceActive = parkingChanceDataReady && overlayGateOpen
-
-  useEffect(() => {
-    if (overlayGateOpen || typeof window === 'undefined') return undefined
-    const openGate = () => setOverlayGateOpen(true)
-    const timerId = window.setTimeout(openGate, 800)
-    const opts = { passive: true, once: true }
-    window.addEventListener('pointerdown', openGate, opts)
-    window.addEventListener('wheel', openGate, opts)
-    window.addEventListener('keydown', openGate, { once: true })
-    return () => {
-      window.clearTimeout(timerId)
-      window.removeEventListener('pointerdown', openGate)
-      window.removeEventListener('wheel', openGate)
-      window.removeEventListener('keydown', openGate)
-    }
-  }, [overlayGateOpen])
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !showMapVeil) return undefined
-    const closeVeil = () => setShowMapVeil(false)
-    const timerId = window.setTimeout(closeVeil, 900)
-    const opts = { passive: true, once: true }
-    window.addEventListener('pointerdown', closeVeil, opts)
-    window.addEventListener('wheel', closeVeil, opts)
-    window.addEventListener('keydown', closeVeil, { once: true })
-    return () => {
-      window.clearTimeout(timerId)
-      window.removeEventListener('pointerdown', closeVeil)
-      window.removeEventListener('wheel', closeVeil)
-      window.removeEventListener('keydown', closeVeil)
-    }
-  }, [showMapVeil])
 
   // Alternative-pin position (Phase 2 — A11). Set when the user clicks an
   // alternative zone in the BusyNowPanel; cleared when destination changes.
@@ -318,16 +208,14 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
       const segmentId = props?.id != null ? String(props.id) : null
       if (!segmentId) return
 
-      const segmentPopupModule = import('../busyNow/SegmentPopup')
       fetchSegmentDetail(segmentId, {
         signal: ac.signal,
         dataVersion: busyNowManifest?.data_version ?? busyNowManifest?.minute_bucket ?? null,
       })
-        .then(async (apiDetail) => {
+        .then((apiDetail) => {
           if (segmentPopupRef.current !== popup) return
           const detail = segmentDetailFromApi(apiDetail)
           if (!detail) return
-          const { default: SegmentPopup } = await segmentPopupModule
           const wrap = document.createElement('div')
           const root = createRoot(wrap)
           segmentReactRootRef.current = root
@@ -407,7 +295,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     if (df === 'custom') setCustomDuration(cd)
     setAccessibilityMode(accessible)
     setAccessibilityAvailableOnly(accessible)
-    // Sync arrival time -> filterDate/filterTime (via plannerArrivalIso useEffect)
+    // Sync arrival time → filterDate/filterTime (via plannerArrivalIso useEffect)
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
       setPlannerDurationMins(DEFAULT_PLANNER_DURATION_MINS)
@@ -424,21 +312,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
 
-  useEffect(() => {
-    if (!filtersOpen) return
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') setFiltersOpen(false)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [filtersOpen])
-
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
 
   // Quietest segments in viewport (single fetch, limit 150 — panel uses first 3, trend markers use full list).
   const { segments: quietSegmentsAll } = useQuietestSegments({
     bounds: debouncedBounds,
-    enabled: parkingChanceActive && parkingChanceDataReady,
+    enabled: parkingChanceActive,
   })
   const quietStreets = useMemo(() => {
     const levelScore = { low: 0, medium: 1, high: 2, unknown: 3 }
@@ -621,12 +500,14 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     limitedCount,
     proxFreeSpots,
     proxFreeBays,
+    proxLimitedCount,
     proxModeLabel,
   } = useMemo(() => {
     // hasRules === parking API has_restriction_data (CoM cache); not evaluate coverage.
     const verified = mapVisibleBays.filter((b) => b.hasRules)
     const limited = mapVisibleBays.filter((b) => !b.hasRules)
     const proxVerified = mapProximityBays.filter((b) => b.hasRules)
+    const proxLimited = mapProximityBays.filter((b) => !b.hasRules)
 
     const proxLive = mapProximityBays.filter((b) => b.source === 'live')
     const proxLiveAvailable = proxLive.filter((b) => b.type === 'available')
@@ -638,6 +519,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         ? proxVerified.reduce((a, b) => a + (b.type === 'available' ? b.free : 0), 0)
         : proxLiveAvailable.reduce((a, b) => a + (b.free || 0), 0),
       proxFreeBays: showLimitedBays ? proxVerified.filter((b) => b.type === 'available').length : proxLiveAvailable.length,
+      proxLimitedCount: proxLimited.length,
       proxModeLabel: showLimitedBays ? 'verified bay' : 'live bay',
     }
   }, [mapVisibleBays, mapProximityBays, showLimitedBays])
@@ -694,7 +576,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const rightInsetPx = 14 + desktopSheetReservePx
   /** Keep search + filters the same max width as the default map view (do not stretch when bay sheet opens). */
   const TOOLBAR_MAX_PX = 560
-  const FILTER_RIGHT_RESERVE_PX = isMobile ? 0 : 24
+  const FILTER_RIGHT_RESERVE_PX = isMobile ? 0 : (selectedBay ? 76 : 24)
   const ZOOM_GROUP_WIDTH_PX = 72
 
 const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plannerArrivalIso)
@@ -716,22 +598,14 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
     : 'Any duration'
 
   const scopeStrip = (
-    <button
-      type="button"
-      onClick={() => setFiltersOpen(true)}
-      className="w-full px-1 text-[12px] font-medium text-gray-600 dark:text-gray-300 text-left hover:text-brand dark:hover:text-brand-100 transition-colors flex flex-wrap items-center gap-x-1 gap-y-0"
-      aria-label="Open filters"
-    >
+    <div className="px-1 text-[10px] font-medium text-gray-600 dark:text-gray-300 truncate">
+      <span>Showing: </span>
       <span className="font-semibold text-slate-700 dark:text-gray-200">{_statusLabel}</span>
-      <span className="text-slate-400">·</span>
+      <span className="mx-1 text-slate-400">·</span>
       <span className="font-semibold text-slate-700 dark:text-gray-200">{_durationLabel}</span>
-      {(_scopeDateLabel || _scopeTimeLabel) && (
-        <>
-          <span className="text-slate-400">·</span>
-          <span className="font-semibold text-slate-700 dark:text-gray-200 truncate">{_scopeDateLabel}{_scopeTimeLabel ? ` ${_scopeTimeLabel}` : ''}</span>
-        </>
-      )}
-    </button>
+      <span className="mx-1 text-slate-400">·</span>
+      <span className="font-semibold text-slate-700 dark:text-gray-200">{_scopeDateLabel} {_scopeTimeLabel}</span>
+    </div>
   )
 
   const updateArriveBy = useCallback((nextDate, nextTime) => {
@@ -758,7 +632,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
 
   const arriveChip = (
     <div className="flex w-full flex-col gap-1">
-      <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">Arrival time</span>
+      <span className="px-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">Arrival time</span>
       {/* Hidden inputs — off-screen but rendered so showPicker() works */}
       <input
         ref={dateInputRef}
@@ -826,38 +700,10 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           type="button"
           onClick={() => setFiltersOpen((v) => !v)}
           className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
-          aria-expanded={filtersOpen}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0 text-brand">
-              <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span className="text-[11px] font-semibold text-slate-600 dark:text-gray-300">Filters</span>
-            {!filtersOpen && (
-              <div className="flex min-w-0 items-center gap-1 overflow-hidden">
-                {statusFilter !== 'all' && (
-                  <span className="shrink-0 rounded-full bg-brand px-2 py-0.5 text-[10px] font-semibold text-white">
-                    {statusFilter === 'available' ? 'Available' : statusFilter === 'trap' ? 'Caution' : statusFilter}
-                  </span>
-                )}
-                {durationFilter && (
-                  <span className="shrink-0 rounded-full bg-brand px-2 py-0.5 text-[10px] font-semibold text-white">
-                    {durationFilter === 'custom' ? `${customDuration ?? '?'} min` : durationFilter}
-                  </span>
-                )}
-                {plannerArrivalIso && (
-                  <span className="shrink-0 rounded-full bg-brand/80 px-2 py-0.5 text-[10px] font-semibold text-white">
-                    Planned
-                  </span>
-                )}
-                {colorBlindMode && (
-                  <span className="shrink-0 rounded-full bg-sky-500 px-2 py-0.5 text-[10px] font-semibold text-white">
-                    CB
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+          <span className="text-[11px] font-semibold text-slate-600 dark:text-gray-300">
+            Filters
+          </span>
           <svg
             width="12"
             height="12"
@@ -882,37 +728,6 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               onCustomDurationChange={setCustomDuration}
             />
             {arriveChip}
-            <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-slate-200/60 bg-white/60 px-2.5 py-1.5 dark:border-slate-600/40 dark:bg-surface-dark/50">
-              <span className="text-[11px] font-semibold text-slate-600 dark:text-gray-300">Color-blind palette</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={colorBlindMode}
-                aria-label={colorBlindMode ? 'Disable color-blind mode' : 'Enable color-blind mode'}
-                onClick={() => setColorBlindMode((v) => !v)}
-                className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-1 ${
-                  colorBlindMode
-                    ? 'border-sky-400 bg-sky-500 dark:border-sky-500 dark:bg-sky-600'
-                    : 'border-gray-300 bg-gray-200 hover:bg-gray-300 dark:border-slate-600 dark:bg-slate-700'
-                }`}
-              >
-                <span
-                  aria-hidden
-                  className={`pointer-events-none absolute left-0.5 top-0.5 h-4 w-4 rounded-full shadow ring-1 transition-transform duration-200 ease-out ${
-                    colorBlindMode
-                      ? 'translate-x-5 bg-white ring-sky-300/40'
-                      : 'translate-x-0 bg-white ring-black/10 dark:bg-slate-300 dark:ring-white/10'
-                  }`}
-                />
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => setFiltersOpen(false)}
-              className="mt-2 w-full rounded-lg bg-brand px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-brand/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:focus-visible:ring-offset-surface-dark-secondary"
-            >
-              Done
-            </button>
           </div>
         )}
       </div>
@@ -930,6 +745,27 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
     </>
   )
 
+  const mapTopRightControls = (
+    <div className="relative flex flex-nowrap items-start gap-2">
+      <button
+        type="button"
+        onClick={() => setColorBlindMode((v) => !v)}
+        aria-pressed={colorBlindMode}
+        aria-label={colorBlindMode ? 'Disable color-blind mode' : 'Enable color-blind mode'}
+        className={`flex h-[64px] w-[64px] flex-col items-center justify-center gap-1 rounded-2xl shadow-map-float transition-colors sm:h-[74px] sm:w-[74px] ${
+          colorBlindMode
+            ? 'border border-brand bg-brand-50 text-brand dark:border-brand-300 dark:bg-brand-100/35 dark:text-brand-100'
+            : 'border border-slate-200 bg-white text-gray-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark'
+        }`}
+        title={colorBlindMode ? 'Color-blind palette: ON' : 'Color-blind palette: OFF'}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M4 12h16M4 7h16M4 17h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+        <span className="text-[9px] font-semibold leading-none">{colorBlindMode ? 'CB ON' : 'CB OFF'}</span>
+      </button>
+    </div>
+  )
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden">
@@ -959,46 +795,9 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           colorBlindMode={colorBlindMode}
           altPinPos={altPinPos}
           onMapEmptyClick={clearSelectedSuggestion}
-          dimRadiusM={SEARCH_RADIUS_M}
+          dimRadiusM={600}
           accessibilityBayIds={accessibleBayIds}
         />
-
-        {showMapVeil && (
-          <div className="pointer-events-none absolute inset-0 z-[395]" aria-hidden>
-            <div className="absolute inset-0 bg-gradient-to-br from-slate-50/95 via-white/88 to-indigo-50/80 dark:from-slate-950/92 dark:via-slate-900/86 dark:to-indigo-950/70" />
-            <div className="absolute inset-0 overflow-hidden">
-              <div className="absolute -left-[35%] top-0 h-full w-[55%] bg-gradient-to-r from-transparent via-white/45 to-transparent dark:via-white/15 animate-[pulse_1.3s_ease-in-out_infinite]" />
-            </div>
-            <div className="absolute left-1/2 top-[44%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/40 bg-white/55 px-5 py-3 shadow-[0_10px_40px_rgba(15,23,42,0.18)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/50">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300/80">
-                MeloPark Live
-              </div>
-              <div className="mt-1 text-xs font-medium text-slate-700 dark:text-slate-100">
-                Preparing premium map experience…
-              </div>
-            </div>
-          </div>
-        )}
-
-        {busyNowStatus !== 'idle' && !parkingChanceActive && !apiLoading && (
-          <div
-            className="absolute bottom-20 left-1/2 z-[480] -translate-x-1/2 pointer-events-none"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="rounded-2xl border border-white/20 bg-gradient-to-r from-slate-950/80 via-slate-900/80 to-slate-950/80 px-4 py-2 text-[11px] font-medium tracking-wide text-white shadow-[0_10px_35px_rgba(2,6,23,0.45)] backdrop-blur-md dark:border-white/15">
-              <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
-                <span className="uppercase text-white/85">Live street intelligence</span>
-              </div>
-              <div className="mt-0.5 text-[10px] text-white/75">
-                {busyNowStatus === 'loading'
-                  ? 'Warming map pressure data…'
-                  : 'Optimizing first paint, overlay starts now…'}
-              </div>
-            </div>
-          </div>
-        )}
 
         {apiLoading && (
           <div className="absolute inset-0 z-[400] bg-white/35 dark:bg-black/25 pointer-events-none flex items-center justify-center text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -1033,36 +832,39 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
         )}
 
         {isMobile ? (
-          <>
-            <div
-              data-testid="map-toolbar-mobile-stack"
-              className="absolute top-3.5 left-3.5 right-3.5 z-[500] flex flex-col gap-2 pointer-events-none"
-            >
-              <div className="flex flex-col gap-2.5 w-full pointer-events-auto">
-                <div className="w-full">
+          <div
+            data-testid="map-toolbar-mobile-stack"
+            className="absolute top-3.5 left-3.5 right-3.5 z-[500] flex flex-col gap-2 pointer-events-none"
+          >
+            <div className="flex flex-col gap-2.5 w-full pointer-events-auto">
+              <div className="flex items-center gap-2 w-full">
+                <div className="min-w-0 flex-1">
                   <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
                 </div>
-
-                <div className="mt-1 flex w-full flex-col gap-1.5">
-                  {filterInnerContent}
+                <div className="flex flex-row gap-1 shrink-0">
+                  {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => zoomBy(delta)}
+                      aria-label={delta > 0 ? 'Zoom in' : 'Zoom out'}
+                      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white font-sans text-base font-semibold text-gray-700 shadow-map-float transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </div>
 
-            <div className="absolute right-3.5 z-[500] flex flex-col gap-1.5 pointer-events-auto" style={{ top: '90px' }}>
-              {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => zoomBy(delta)}
-                  aria-label={delta > 0 ? 'Zoom in' : 'Zoom out'}
-                  className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border border-slate-200/80 bg-white/90 backdrop-blur-sm font-sans text-lg font-semibold text-gray-700 shadow-map-float transition-colors hover:bg-white dark:border-slate-600 dark:bg-surface-dark-secondary/90 dark:text-gray-100"
-                >
-                  {label}
-                </button>
-              ))}
+              <div className="mt-1 flex w-full flex-col gap-1.5">
+                {filterInnerContent}
+              </div>
+
+              <div className="w-full min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:thin]">
+                <div className="pointer-events-auto ml-auto w-max max-w-full min-w-0 pl-1">{mapTopRightControls}</div>
+              </div>
             </div>
-          </>
+          </div>
         ) : (
           <>
             <div
@@ -1071,9 +873,10 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               style={
                 desktopSheetReservePx
                   ? {
-                      left: 'calc(50% - 80px)',
+                      /* Centre within strip [14px, 100% − rightInset] so it matches "main" feel with sheet open */
+                      left: `calc(14px + (100% - 14px - ${rightInsetPx}px) / 2)`,
                       transform: 'translateX(-50%)',
-                      width: `min(${TOOLBAR_MAX_PX}px, calc(100% - 408px))`,
+                      width: `min(${TOOLBAR_MAX_PX}px, calc(100% - ${14 + rightInsetPx}px))`,
                       maxWidth: TOOLBAR_MAX_PX,
                     }
                   : {
@@ -1098,13 +901,14 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                       type="button"
                       onClick={() => zoomBy(delta)}
                       aria-label={delta > 0 ? 'Zoom in' : 'Zoom out'}
-                      className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white font-sans text-base font-semibold text-gray-700 shadow-map-float transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
+                      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white font-sans text-base font-semibold text-gray-700 shadow-map-float transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
                     >
                       {label}
                     </button>
                   ))}
                 </div>
               </div>
+
               <div
                 className="w-full pointer-events-auto"
                 style={FILTER_RIGHT_RESERVE_PX ? { paddingRight: FILTER_RIGHT_RESERVE_PX } : undefined}
@@ -1118,28 +922,30 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               </div>
             </div>
 
+            <div
+              className="absolute top-5 z-[600] pointer-events-auto"
+              style={{ right: rightInsetPx }}
+            >
+              {mapTopRightControls}
+            </div>
           </>
         )}
 
         {destination && !isMobile && (
           <div
-            className="absolute bottom-3.5 z-[500] bg-white/95 text-gray-900 rounded-2xl px-5 py-2.5 text-sm font-semibold shadow-overlay flex flex-col items-center gap-0.5 max-w-[calc(100%-120px)] border border-brand dark:bg-surface-dark-secondary/95 dark:text-gray-100"
-            style={selectedBay ? { left: 'calc(50% - 190px)', transform: 'translateX(-50%)' } : { left: '50%', transform: 'translateX(-50%)' }}
+            className="absolute bottom-3.5 z-[500] bg-surface-secondary text-gray-900 rounded-2xl px-5 py-2.5 text-sm font-semibold shadow-overlay flex flex-col items-center gap-0.5 max-w-[calc(100%-120px)] border-2 border-brand"
+            style={{ left: '50%', transform: 'translateX(-50%)' }}
           >
             <span>
-              {proxFreeSpots === proxFreeBays ? (
-                <>
-                  {proxFreeBays} free {proxModeLabel}
-                  {proxFreeBays !== 1 ? 's' : ''} within {SEARCH_RADIUS_M} m of {destination.name}
-                </>
-              ) : (
-                <>
-                  {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across {proxFreeBays}{' '}
-                  {proxModeLabel}
-                  {proxFreeBays !== 1 ? 's' : ''} within {SEARCH_RADIUS_M} m of {destination.name}
-                </>
-              )}
+              {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across&nbsp;
+              {proxFreeBays} {proxModeLabel}
+              {proxFreeBays !== 1 ? 's' : ''} within 600 m of {destination.name}
             </span>
+            {!showLimitedBays && proxLimitedCount > 0 && (
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                +{proxLimitedCount} no CoM row nearby
+              </span>
+            )}
           </div>
         )}
 
@@ -1158,6 +964,25 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           </div>
         )}
 
+        {parkingChanceActive && showPressureCoach && !showOnboarding && (
+          <div className={`absolute left-3.5 z-[510] max-w-[260px] rounded-xl border border-emerald-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-card dark:border-emerald-800 dark:bg-surface-dark-secondary/95 dark:text-gray-100 ${
+            isMobile ? 'top-[230px]' : 'top-[126px]'
+          }`}>
+            <div className="font-semibold text-emerald-700 dark:text-emerald-200">
+              Parking chance is live now
+            </div>
+            <div className="mt-0.5 leading-snug">
+              Green streets are easier. Tap any colored street to see why.
+            </div>
+            <button
+              type="button"
+              onClick={dismissPressureCoach}
+              className="mt-1 text-[11px] font-semibold text-brand hover:underline dark:text-brand-light"
+            >
+              Got it
+            </button>
+          </div>
+        )}
 
         {!isMobile && (
         <div
@@ -1216,43 +1041,8 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           ]
           return (
             <div
-              className="absolute bottom-3.5 z-[510] flex flex-col gap-2"
+              className="absolute bottom-3.5 z-[500] rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
               style={{ right: rightInsetPx }}
-            >
-              {parkingChanceActive && showPressureCoach && !showOnboarding && !selectedBay && (
-                <div className="self-end max-w-[260px] rounded-xl border border-emerald-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-card dark:border-emerald-800 dark:bg-surface-dark-secondary/95 dark:text-gray-100">
-                  <div className="font-semibold text-emerald-700 dark:text-emerald-200">
-                    Parking chance is live now
-                  </div>
-                  <div className="mt-0.5 leading-snug">
-                    Green streets are easier. Tap any colored street to see why.
-                  </div>
-                  <button
-                    type="button"
-                    onClick={dismissPressureCoach}
-                    className="mt-1 text-[11px] font-semibold text-brand hover:underline dark:text-brand-light"
-                  >
-                    Got it
-                  </button>
-                </div>
-              )}
-              {!isMobile && (
-                <ParkingForecastPanel
-                  zoneWarnings={forecast.zoneWarnings}
-                  warnings={forecast.warnings}
-                  worstLevel={forecast.worstLevel}
-                  alternatives={forecast.alternatives}
-                  loading={forecast.loading}
-                  onZoneClick={(zone) => {
-                    const lat = zone?.zone_lat ?? zone?.centroid_lat
-                    const lon = zone?.zone_lon ?? zone?.centroid_lon
-                    if (mapRef.current && lat && lon) mapRef.current.flyTo([lat, lon], 15)
-                  }}
-                  isMobile={false}
-                />
-              )}
-            <div
-              className="rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
             >
               {isMobile && !legendOpen ? (
                 <button
@@ -1298,15 +1088,6 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
-                  <div className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
-                    <div className="relative h-3.5 w-3.5 shrink-0">
-                      <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full">
-                        <circle cx="12" cy="12" r="12" fill="#60a5fa"/>
-                        <path fill="white" d="M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2m9 7h-6v13h-2v-6h-2v6H9V9H3V7h18v2z"/>
-                      </svg>
-                    </div>
-                    <span className="truncate">Accessible bays</span>
-                  </div>
                   <div className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
                     Street parking chance
                   </div>
@@ -1319,9 +1100,17 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
+                  <div className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
+                    <div className="relative h-3.5 w-3.5 shrink-0">
+                      <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full">
+                        <circle cx="12" cy="12" r="12" fill="#60a5fa"/>
+                        <path fill="white" d="M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2m9 7h-6v13h-2v-6h-2v6H9V9H3V7h18v2z"/>
+                      </svg>
+                    </div>
+                    <span className="truncate">Accessible bays</span>
+                  </div>
                 </div>
               )}
-            </div>
             </div>
           )
         })()}
@@ -1336,11 +1125,36 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
             >
               <div className="px-3 pb-4">
                 {altPinPos && (
-                  <AltPinCard
-                    altPinPos={altPinPos}
-                    destination={destination}
-                    onClear={clearSelectedSuggestion}
-                  />
+                  <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50/95 p-3 dark:border-emerald-800/60 dark:bg-emerald-950/80">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
+                      Less busy pick
+                    </div>
+                    <div className="truncate text-sm font-semibold text-emerald-950 dark:text-emerald-50">
+                      {altPinPos.name}
+                    </div>
+                    {altPinPos.subtitle && (
+                      <div className="mt-0.5 text-[11px] text-emerald-800 dark:text-emerald-100">
+                        {altPinPos.subtitle}
+                      </div>
+                    )}
+                    {destination && altPinPos.source === 'alternative' && (
+                      <div className="mt-2 rounded-lg bg-white/65 px-2 py-1.5 text-[11px] text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100">
+                        <div>
+                          <span className="font-semibold">Destination:</span> {destination.name}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Selected:</span> {altPinPos.subtitle || 'Less busy option'}
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={clearSelectedSuggestion}
+                      className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-bold text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-surface-dark dark:text-emerald-100"
+                    >
+                      Clear pick
+                    </button>
+                  </div>
                 )}
                 <BusyNowPanel
                   manifest={busyNowManifest}
@@ -1354,17 +1168,46 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                   pressureModeNote={pressureModeNote}
                   mobileSheet
                 />
+
               </div>
             </BottomSheet>
           ) : (
             <div className="absolute bottom-28 left-3.5 z-[510] flex max-w-[min(320px,calc(100vw-28px))] flex-col gap-2 sm:bottom-20">
               {altPinPos && (
-                <AltPinCard
-                  altPinPos={altPinPos}
-                  destination={destination}
-                  onClear={clearSelectedSuggestion}
-                  compact
-                />
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/95 p-2.5 shadow-card backdrop-blur-sm dark:border-emerald-800/60 dark:bg-emerald-950/80">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
+                        Less busy pick
+                      </div>
+                      <div className="truncate text-[12px] font-semibold text-emerald-950 dark:text-emerald-50">
+                        {altPinPos.name}
+                      </div>
+                      {altPinPos.subtitle && (
+                        <div className="mt-0.5 text-[10px] text-emerald-800 dark:text-emerald-100">
+                          {altPinPos.subtitle}
+                        </div>
+                      )}
+                      {destination && altPinPos.source === 'alternative' && (
+                        <div className="mt-1 rounded-lg bg-white/65 px-2 py-1 text-[10px] text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100">
+                          <div>
+                            <span className="font-semibold">Destination:</span> {destination.name}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Selected:</span> {altPinPos.subtitle || 'Less busy option'}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearSelectedSuggestion}
+                      className="shrink-0 rounded-lg border border-emerald-300 bg-white px-2 py-1 text-[10px] font-bold text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-surface-dark dark:text-emerald-100"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
               )}
               <BusyNowPanel
                 manifest={busyNowManifest}
@@ -1377,18 +1220,13 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                 selectedSuggestion={altPinPos}
                 pressureModeNote={pressureModeNote}
               />
+
             </div>
           )
         )}
 
         {showOnboarding && (
-          <Suspense fallback={null}>
-            <OnboardingOverlay
-              onPick={handleOnboardingPick}
-              onSkip={dismissOnboarding}
-              busyNowManifest={busyNowManifest}
-            />
-          </Suspense>
+          <OnboardingOverlay onPick={handleOnboardingPick} onSkip={dismissOnboarding} />
         )}
 
         {selectedBay && (
