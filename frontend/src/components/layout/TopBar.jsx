@@ -31,6 +31,17 @@ function MoonGlyph({ className }) {
   )
 }
 
+// Chart icon for Predictions nav
+function ChartIcon({ className }) {
+  return (
+    <svg className={className} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden>
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  )
+}
+
 export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark }) {
   const time = useClock()
   const logoSrc = darkMode ? logoDarkMode : logoLight
@@ -41,7 +52,7 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
                  border-gray-200/60 dark:border-gray-700/60 shadow-sm px-2 sm:px-4 md:px-6
                  flex items-center gap-1.5 sm:gap-3"
     >
-      {/* Logo – left */}
+      {/* Logo */}
       <a
         href="#"
         onClick={(e) => { e.preventDefault(); onNavigate('map') }}
@@ -50,8 +61,8 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
         <img src={logoSrc} alt="MelOPark" className={LOGO_HEADER_IMG_CLASS} />
       </a>
 
-      {/* Centre – Live Map + About Us */}
-      <div className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-3 px-0 sm:px-1">
+      {/* Centre nav — Live Map · Predictions · About Us */}
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-2 px-0 sm:px-1">
         <button
           type="button"
           onClick={() => onNavigate('map')}
@@ -66,9 +77,29 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
         >
           Live Map
         </button>
+
+        {/* Predictions — new Epic 6 page */}
+        <button
+          type="button"
+          onClick={() => onNavigate('predictions')}
+          aria-current={activePage === 'predictions' ? 'page' : undefined}
+          aria-label="Go to Predictions"
+          className={cn(
+            'shrink-0 rounded-lg border-0 px-2.5 py-1.5 text-xs transition-colors sm:px-3 sm:text-sm',
+            'flex items-center gap-1',
+            activePage === 'predictions'
+              ? 'bg-brand-50 font-medium text-brand dark:bg-brand dark:font-semibold dark:text-white'
+              : 'bg-transparent font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:bg-transparent dark:font-normal dark:text-gray-200 dark:hover:bg-white/5 dark:hover:text-white',
+          )}
+        >
+          <ChartIcon className="hidden sm:block" />
+          Predictions
+        </button>
+
         <button
           type="button"
           onClick={() => onNavigate('about')}
+          aria-current={activePage === 'about' ? 'page' : undefined}
           className={cn(
             'shrink-0 rounded-lg border-0 px-2.5 py-1.5 text-xs transition-colors sm:px-3 sm:text-sm',
             activePage === 'about'
@@ -80,7 +111,7 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark 
         </button>
       </div>
 
-      {/* Right – live badge + theme toggle */}
+      {/* Right — live badge + theme toggle */}
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <div className="group relative hidden sm:flex items-center gap-2 rounded-full border border-brand bg-brand px-3.5 py-1.5 text-xs font-medium text-white dark:border-brand-300/80 dark:bg-brand-50 dark:text-brand-900">
           <div className="pointer-events-none absolute right-0 top-[calc(100%+6px)] hidden w-60 rounded-lg border border-brand-800/80 bg-brand px-3 py-2 text-xs text-white shadow-card-lg group-hover:block dark:border-brand-300/70 dark:bg-surface-dark-secondary dark:text-gray-100">

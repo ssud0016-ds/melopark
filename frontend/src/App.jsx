@@ -4,6 +4,7 @@ import AboutPage from './components/home/AboutPage'
 import AttributionPage from './components/legal/AttributionPage'
 import TermsPage from './components/legal/TermsPage'
 import MapPage from './components/map/MapPage'
+import PredictionsPage from './components/predictions/PredictionsPage'
 import { useBays } from './hooks/useBays'
 import { useDarkMode } from './hooks/useDarkMode'
 
@@ -31,6 +32,9 @@ export default function App() {
             onRetry={refresh}
           />
         )}
+
+        {/* Epic 6 — dedicated predictions page */}
+        {page === 'predictions' && <PredictionsPage />}
 
         {page === 'about' && <AboutPage onNavigate={setPage} />}
 

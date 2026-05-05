@@ -1,3 +1,4 @@
+
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
 import ParkingMap from './ParkingMap'
@@ -22,6 +23,7 @@ import {
   DEFAULT_PLANNER_DURATION_MINS,
   melbourneWallClockToAwareIso,
   toMelbourneDateTimeInputValue,
+  formatAtDateTime,
 } from '../../utils/plannerTime'
 import L from 'leaflet'
 import { getStatusFillColor } from './ParkingMap'
@@ -82,6 +84,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   /** Persisted across bay opens: last debounced plan from the detail sheet. */
   const [plannerArrivalIso, setPlannerArrivalIso] = useState(null)
   const [plannerDurationMins, setPlannerDurationMins] = useState(null)
+
   /** True after "Show all bays at this time" in the panel. */
   const [mapBaysAtPlannedTime, setMapBaysAtPlannedTime] = useState(false)
   /** Bump to force sheet form reset when banner or Clear resets live mode. */
@@ -699,7 +702,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
         >
           <span className="text-[11px] font-semibold text-slate-600 dark:text-gray-300">
-            Pick parking status, duration, date and time
+            Filters
           </span>
           <svg
             width="12"
@@ -1165,6 +1168,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                   pressureModeNote={pressureModeNote}
                   mobileSheet
                 />
+
               </div>
             </BottomSheet>
           ) : (
@@ -1216,6 +1220,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                 selectedSuggestion={altPinPos}
                 pressureModeNote={pressureModeNote}
               />
+
             </div>
           )
         )}
