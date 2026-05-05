@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import MapPage from './MapPage'
 import { getStatusFillColor } from './ParkingMap'
+import { SEARCH_RADIUS_M } from '../../utils/mapGeo'
 import * as useBusyNowModule from '../../hooks/useBusyNow'
 
 const mockMapState = vi.hoisted(() => ({ destination: null }))
@@ -139,11 +140,11 @@ describe('MapPage alt-pin (Phase 2 — A11)', () => {
     mockBusyNowPanel.mockClear()
   })
 
-  it('passes dimRadiusM=600 to ParkingMap', () => {
+  it('passes SEARCH_RADIUS_M as dimRadiusM to ParkingMap', () => {
     setViewportWidth(1200)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
     const props = mockParkingMap.mock.calls.at(-1)?.[0]
-    expect(props?.dimRadiusM).toBe(600)
+    expect(props?.dimRadiusM).toBe(SEARCH_RADIUS_M)
     expect(props?.altPinPos).toBeNull()
   })
 

@@ -258,11 +258,11 @@ function altPinDivIcon(pin) {
     .replace(/\"/g, '&quot;')
   return L.divIcon({
     className: 'mp-alt-marker',
-    html: `<div style="display:flex;flex-direction:column;align-items:center;width:210px;margin-left:-105px;margin-top:-62px;text-align:center;pointer-events:none;">
-      <span style="font-size:28px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.25))">◆</span>
-      <span style="margin-top:2px;background:#047857;color:#fff;font:800 10px Inter,system-ui,sans-serif;padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:0.04em;">Less busy pick</span>
-      <span style="margin-top:2px;background:#064e3b;color:#fff;font:800 12px Inter,system-ui,sans-serif;padding:5px 10px;border-radius:10px;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc}</span>
-      ${subEsc ? `<span style="margin-top:2px;background:#ecfdf5;color:#064e3b;border:1px solid #a7f3d0;font:700 10px Inter,system-ui,sans-serif;padding:3px 8px;border-radius:999px;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${subEsc}</span>` : ''}
+    html: `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none;transform:translate(-50%,-100%);padding-bottom:4px;" aria-label="${esc}">
+      <div style="width:36px;height:36px;background:#047857;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(4,120,87,0.45),0 0 0 3px #fff;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.18));">
+        <span style="font-size:15px;line-height:1;color:#fff;">◆</span>
+      </div>
+      <div style="width:1px;height:8px;background:#047857;opacity:0.6;"></div>
     </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
@@ -294,7 +294,7 @@ export default function ParkingMap({
   colorBlindMode = false,
   altPinPos = null,
   onMapEmptyClick = null,
-  dimRadiusM = 600,
+  dimRadiusM = SEARCH_RADIUS_M,
   accessibilityBayIds = null,
 }) {
   const [isDark, setIsDark] = useState(
@@ -320,6 +320,14 @@ export default function ParkingMap({
   )
 
   const destLatLng = destination ? destinationLatLng(destination) : null
+  const proximityBayIdSet = useMemo(
+    () => new Set(proximityBays.map((p) => p.id)),
+    [proximityBays],
+  )
+  const visibleBayIdSet = useMemo(
+    () => new Set(visibleBays.map((v) => v.id)),
+    [visibleBays],
+  )
 
   const { verifiedBays, limitedBays } = useMemo(() => {
     // hasRules === parking has_restriction_data. limited = no CoM row in cache.
@@ -327,13 +335,13 @@ export default function ParkingMap({
     // (e.g. accessibility mode) cannot be bypassed by "All bays".
     const byType = visibleBays
     const inRange = destination
-      ? byType.filter((b) => proximityBays.some((p) => p.id === b.id))
+      ? byType.filter((b) => proximityBayIdSet.has(b.id))
       : byType
     return {
       verifiedBays: inRange.filter((b) => b.hasRules),
       limitedBays: inRange.filter((b) => !b.hasRules),
     }
-  }, [visibleBays, destination, proximityBays])
+  }, [visibleBays, destination, proximityBayIdSet])
 
   const baysForClustering = useMemo(() => {
     const live = verifiedBays.filter((b) => b.source === 'live')
@@ -349,7 +357,7 @@ export default function ParkingMap({
 
     baysForClustering.forEach((bay) => {
       const ll = bayLatLng(bay)
-      const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)
+      const inRadius = !destination || proximityBayIdSet.has(bay.id)
       if (!inRadius) return
 
       const gx = Math.floor(ll.lat / cellSize)
@@ -386,7 +394,7 @@ export default function ParkingMap({
       trap: g.trap,
       name: g.name,
     }))
-  }, [baysForClustering, zoomLevel, destination, proximityBays])
+  }, [baysForClustering, zoomLevel, destination, proximityBayIdSet])
 
   const clusterIcon = (available, occupied, trap, total) => {
     const a = Number(available) || 0
@@ -429,13 +437,14 @@ export default function ParkingMap({
         scrollWheelZoom
         zoomControl={false}
       >
+        {/* No key by theme: remounting TileLayer breaks Leaflet canvas tile renderer
+            used by BusyNowVectorGrid — segments go blank until full map remount. */}
         <TileLayer
-          key={isDark ? 'dark' : 'light'}
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url={
             isDark
-              ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-              : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+              ? 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png'
+              : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
           }
           subdomains="abcd"
           maxZoom={20}
@@ -478,6 +487,7 @@ export default function ParkingMap({
             colorBlindMode={colorBlindMode}
             destination={destination ? destinationLatLng(destination) : null}
             dimRadiusM={dimRadiusM}
+            mapThemeDark={isDark}
             onSegmentClick={onSegmentClick}
           />
         )}
@@ -525,8 +535,8 @@ export default function ParkingMap({
           zoomLevel >= CLUSTER_ZOOM_CUTOFF &&
           limitedBays.map((bay) => {
             const ll = bayLatLng(bay)
-            const inFilter = visibleBays.some((v) => v.id === bay.id)
-            const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)
+            const inFilter = visibleBayIdSet.has(bay.id)
+            const inRadius = !destination || proximityBayIdSet.has(bay.id)
             let opacity = 1
             if (!inRadius) opacity = 0.12
             else if (!inFilter) opacity = 0.22
@@ -580,8 +590,8 @@ export default function ParkingMap({
 
         {zoomLevel >= CLUSTER_ZOOM_CUTOFF && verifiedBays.map((bay) => {
           const ll = bayLatLng(bay)
-          const inFilter = visibleBays.some((v) => v.id === bay.id)
-          const inRadius = !destination || proximityBays.some((p) => p.id === bay.id)
+          const inFilter = visibleBayIdSet.has(bay.id)
+          const inRadius = !destination || proximityBayIdSet.has(bay.id)
           let opacity = 1
           if (!inRadius) opacity = 0.12
           else if (!inFilter) opacity = 0.22
@@ -661,9 +671,10 @@ export default function ParkingMap({
               pathOptions={{
                 color: '#047857',
                 fillColor: '#10b981',
-                fillOpacity: 0.16,
-                weight: 3,
-                dashArray: '6 5',
+                fillOpacity: 0.07,
+                weight: 1.5,
+                opacity: 0.35,
+                dashArray: '5 6',
               }}
             />
             <Marker
