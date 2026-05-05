@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render } from '@testing-library/react'
 import React from 'react'
 import BusyNowVectorLayer, { styleSegment } from './BusyNowVectorLayer'
+import { SEARCH_RADIUS_M } from '../../utils/mapGeo'
 
 describe('styleSegment', () => {
   it('uses green for low pressure', () => {
@@ -69,23 +70,23 @@ describe('styleSegment', () => {
     const destLng = 144.9631
     const destination = { lat: destLat, lng: destLng }
 
-    // 599 m N of destination
-    const closeLat = destLat + 599 / 111_320
-    // 601 m N of destination
-    const farLat = destLat + 601 / 111_320
+    // (SEARCH_RADIUS_M − 1) m N of destination — strictly inside radius
+    const closeLat = destLat + (SEARCH_RADIUS_M - 1) / 111_320
+    // (SEARCH_RADIUS_M + 1) m N — strictly outside
+    const farLat = destLat + (SEARCH_RADIUS_M + 1) / 111_320
 
-    it('keeps full opacity for segment within dimRadiusM (599 m)', () => {
+    it(`keeps full opacity for segment within dimRadiusM (${SEARCH_RADIUS_M - 1} m)`, () => {
       const s = styleSegment(
         { level: 'medium', total: 10, mid_lat: closeLat, mid_lon: destLng },
-        { destination, dimRadiusM: 600 },
+        { destination, dimRadiusM: SEARCH_RADIUS_M },
       )
       expect(s.opacity).toBe(0.85)
     })
 
-    it('dims segment beyond dimRadiusM (601 m)', () => {
+    it(`dims segment beyond dimRadiusM (${SEARCH_RADIUS_M + 1} m)`, () => {
       const s = styleSegment(
         { level: 'medium', total: 10, mid_lat: farLat, mid_lon: destLng },
-        { destination, dimRadiusM: 600 },
+        { destination, dimRadiusM: SEARCH_RADIUS_M },
       )
       expect(s.opacity).toBe(0.25)
     })
@@ -93,7 +94,7 @@ describe('styleSegment', () => {
     it('does not dim when no destination set', () => {
       const s = styleSegment(
         { level: 'medium', total: 10, mid_lat: farLat, mid_lon: destLng },
-        { destination: null, dimRadiusM: 600 },
+        { destination: null, dimRadiusM: SEARCH_RADIUS_M },
       )
       expect(s.opacity).toBe(0.85)
     })
@@ -101,7 +102,7 @@ describe('styleSegment', () => {
     it('does not dim unknown level (already dim grey)', () => {
       const s = styleSegment(
         { level: 'unknown', total: 0, mid_lat: farLat, mid_lon: destLng },
-        { destination, dimRadiusM: 600 },
+        { destination, dimRadiusM: SEARCH_RADIUS_M },
       )
       expect(s.opacity).toBe(0.35)
     })

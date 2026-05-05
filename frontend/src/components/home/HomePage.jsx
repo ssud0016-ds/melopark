@@ -40,11 +40,11 @@ const IconParking = () => (
 )
 
 const WHY_CARDS = [
-  { icon: <IconCar />,      title: 'Reduced Congestion',       body: "Drivers spend an average of 17 minutes cruising for parking in Melbourne's CBD. MeloPark guides you to available bays in real time, slashing that wasted time \u2013 and the traffic it creates." },
-  { icon: <IconLeaf />,     title: 'Lower Emissions',          body: "Every minute a car cruises for parking releases unnecessary CO\u2082. By reducing search time, MeloPark directly cuts vehicle emissions \u2013 supporting Melbourne's net-zero targets by 2040." },
-  { icon: <IconSignal />,   title: 'Predictive Intelligence',  body: "We don't just show you what's available now \u2013 our models predict which bays will free up in the next 30 minutes, so you can plan your journey before leaving home." },
-  { icon: <IconBuilding />, title: 'Better City Utilisation',  body: "Melbourne already has the infrastructure. MeloPark makes it smarter \u2013 no new construction required. Existing sensors, existing bays, better outcomes for everyone." },
-  { icon: <IconParking />,  title: 'Plain-English restrictions', body: "Raw codes such as 2P Meter 8\u201318 Mon\u2013Fri become clear wording: 2-hour parking, Mon\u2013Fri 8 am\u20136 pm, pay by meter. Parking signage is notoriously confusing; MeloPark decodes it so you do not have to." },
+  { icon: <IconCar />,      title: 'Reduced Congestion',       body: "Drivers spend an average of 17 minutes cruising for parking in Melbourne's CBD. MeloPark guides you to available bays in real time, slashing that wasted time - and the traffic it creates." },
+  { icon: <IconLeaf />,     title: 'Lower Emissions',          body: "Every minute a car cruises for parking releases unnecessary CO\u2082. By reducing search time, MeloPark directly cuts vehicle emissions - supporting Melbourne's net-zero targets by 2040." },
+  { icon: <IconSignal />,   title: 'Predictive Intelligence',  body: "We don't just show you what's available now - our models predict which bays will free up in the next 30 minutes, so you can plan your journey before leaving home." },
+  { icon: <IconBuilding />, title: 'Better City Utilisation',  body: "Melbourne already has the infrastructure. MeloPark makes it smarter - no new construction required. Existing sensors, existing bays, better outcomes for everyone." },
+  { icon: <IconParking />,  title: 'Plain-English restrictions', body: "Raw codes such as 2P Meter 8-18 Mon-Fri become clear wording: 2-hour parking, Mon-Fri 8 am-6 pm, pay by meter. Parking signage is notoriously confusing; MeloPark decodes it so you do not have to." },
 ]
 
 function SectionLabel({ children }) {
