@@ -61,11 +61,8 @@ describe('styleSegment', () => {
   })
 
   describe('destination dimming (Phase 2 — A9 / B1)', () => {
-    // Use a fixed CBD anchor and offset another point by ~1 m of latitude per
-    // 0.000009 deg. We pick midpoints far apart in longitude where 0.001 deg
-    // ≈ 88 m at this latitude, so we can craft 599 m vs 601 m precisely.
-    // Simpler: anchor the destination, and set mid_lat slightly N/S so
-    // distance is purely a function of |Δlat| × 111_320 m/deg.
+    // Fixed CBD anchor; offset mid_lat N so distance ≈ |Δlat| × 111_320 m/deg.
+    // (SEARCH_RADIUS_M ± 1) m → strictly inside vs outside dimRadius.
     const destLat = -37.8136
     const destLng = 144.9631
     const destination = { lat: destLat, lng: destLng }
