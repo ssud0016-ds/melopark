@@ -510,8 +510,13 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     if (date) setFilterDate(date)
   }, [plannerArrivalIso, setFilterTime, setFilterDate])
 
-  const visibleBays = getVisibleBays(bays)
-  const proximityBays = getProximityBays(bays)
+  const radiusCenterOverride = useMemo(() => {
+    if (!altPinPos || altPinPos.source !== 'alternative') return null
+    return { lat: altPinPos.lat, lng: altPinPos.lng, name: altPinPos.name || 'Alternative zone' }
+  }, [altPinPos])
+
+  const visibleBays = getVisibleBays(bays, radiusCenterOverride)
+  const proximityBays = getProximityBays(bays, radiusCenterOverride)
   const accessibleBayIds = useMemo(
     () => new Set(accessibilityNearby.map((b) => String(b.bay_id))),
     [accessibilityNearby],
