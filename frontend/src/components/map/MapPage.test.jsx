@@ -391,7 +391,7 @@ describe('MapPage parking chance main-map integration', () => {
     setViewportWidth(414)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
 
-    expect(screen.getByText('Best nearby parking')).toBeInTheDocument()
+    expect(screen.getByText('Parking chance nearby')).toBeInTheDocument()
     expect(screen.getByText(/Quiet streets around current map view/i)).toBeInTheDocument()
     expect(mockBusyNowPanel.mock.calls.at(-1)?.[0]?.mobileSheet).toBe(true)
     expect(screen.queryByLabelText('Total parking bays on the live feed')).not.toBeInTheDocument()
@@ -425,13 +425,13 @@ describe('MapPage parking chance main-map integration', () => {
       })
     })
 
-    expect(screen.getAllByText('Less busy pick').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Your pick').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Lygon St').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Clear pick' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
     expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).not.toBeNull()
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Clear pick' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     })
 
     expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).toBeNull()
