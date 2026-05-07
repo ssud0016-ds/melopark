@@ -700,52 +700,56 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
   const arriveChip = (
     <div className="flex w-full flex-col gap-1">
       <span className="px-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">Arrival time</span>
-      {/* Hidden inputs — off-screen but rendered so showPicker() works */}
-      <input
-        ref={dateInputRef}
-        type="date"
-        value={arriveDate}
-        onChange={(e) => updateArriveBy(e.target.value, arriveTime || '09:00')}
-        style={{ position: 'fixed', opacity: 0, pointerEvents: 'none', width: 1, height: 1, top: 0, left: 0 }}
-        tabIndex={-1}
-      />
-      <input
-        ref={timeInputRef}
-        type="time"
-        value={arriveTime}
-        onChange={(e) => {
-          const today = new Date()
-          const d = arriveDate || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-          updateArriveBy(d, e.target.value)
-        }}
-        style={{ position: 'fixed', opacity: 0, pointerEvents: 'none', width: 1, height: 1, top: 0, left: 0 }}
-        tabIndex={-1}
-      />
       <div className="flex w-full items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <button
-        type="button"
-        onClick={() => dateInputRef.current?.showPicker()}
-        className={`${chipBase} ${plannerArrivalIso ? chipActive : chipIdle} inline-flex items-center gap-1`}
-        aria-label="Set arrival date"
-      >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
-          <rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" strokeWidth="2" />
-          <path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-        {dateLabel}
-      </button>
-      <button
-        type="button"
-        onClick={() => timeInputRef.current?.showPicker()}
-        className={`${chipBase} ${plannerArrivalIso ? chipActive : chipIdle} inline-flex items-center gap-1`}
-        aria-label="Set arrival time"
-      >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
-          <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="2" />
-          <path d="M12 7.5v5l3.5 2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-        {arriveTime || 'Time'}
-      </button>
+      {/* Wrapper positions input over its button so showPicker() anchors picker near the button, not at top-left of viewport */}
+      <div className="relative inline-flex shrink-0">
+        <input
+          ref={dateInputRef}
+          type="date"
+          value={arriveDate}
+          onChange={(e) => updateArriveBy(e.target.value, arriveTime || '09:00')}
+          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', inset: 0, width: '100%', height: '100%' }}
+          tabIndex={-1}
+        />
+        <button
+          type="button"
+          onClick={() => dateInputRef.current?.showPicker()}
+          className={`${chipBase} ${plannerArrivalIso ? chipActive : chipIdle} inline-flex items-center gap-1`}
+          aria-label="Set arrival date"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
+            <rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" strokeWidth="2" />
+            <path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          {dateLabel}
+        </button>
+      </div>
+      <div className="relative inline-flex shrink-0">
+        <input
+          ref={timeInputRef}
+          type="time"
+          value={arriveTime}
+          onChange={(e) => {
+            const today = new Date()
+            const d = arriveDate || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+            updateArriveBy(d, e.target.value)
+          }}
+          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', inset: 0, width: '100%', height: '100%' }}
+          tabIndex={-1}
+        />
+        <button
+          type="button"
+          onClick={() => timeInputRef.current?.showPicker()}
+          className={`${chipBase} ${plannerArrivalIso ? chipActive : chipIdle} inline-flex items-center gap-1`}
+          aria-label="Set arrival time"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
+            <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="2" />
+            <path d="M12 7.5v5l3.5 2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          {arriveTime || 'Time'}
+        </button>
+      </div>
       {plannerArrivalIso && (
         <button
           type="button"
