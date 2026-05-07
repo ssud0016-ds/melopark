@@ -14,6 +14,16 @@ vi.mock('../../hooks/useMapState', () => ({
     setSelectedBayId: vi.fn(),
     activeFilter: 'all',
     setActiveFilter: vi.fn(),
+    statusFilter: 'all',
+    setStatusFilter: vi.fn(),
+    durationFilter: null,
+    setDurationFilter: vi.fn(),
+    customDuration: 60,
+    setCustomDuration: vi.fn(),
+    filterTime: '12:00',
+    setFilterTime: vi.fn(),
+    filterDate: '2026-01-01',
+    setFilterDate: vi.fn(),
     destination: mockMapState.destination,
     pickDestination: vi.fn(),
     clearDestination: vi.fn(),
@@ -122,6 +132,17 @@ describe('MapPage toolbar layout', () => {
     expect(screen.getByTestId('map-toolbar-mobile-stack')).toBeInTheDocument()
     expect(screen.queryByTestId('map-toolbar-desktop')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /accessibility mode/i })).not.toBeInTheDocument()
+  })
+
+  it('uses a single filter summary on mobile and opens filters in a bottom sheet', () => {
+    setViewportWidth(414)
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    expect(screen.queryByText(/^Showing:/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('map-mobile-filter-trigger')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('map-mobile-filter-trigger'))
+    expect(screen.getByTestId('mock-filter-chips')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^done$/i }))
+    expect(screen.queryByTestId('mock-filter-chips')).not.toBeInTheDocument()
   })
 
   it('uses desktop-centered toolbar and separate right control column on wide viewports', () => {
@@ -287,14 +308,16 @@ describe('MapPage verified bays legend', () => {
     setViewportWidth(1200)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
 
-    expect(screen.getByRole('button', { name: 'Enable color-blind mode' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^filters$/i }))
+
+    expect(screen.getByRole('switch', { name: 'Enable color-blind mode' })).toBeInTheDocument()
     expect(mockParkingMap).toHaveBeenCalled()
     const initialProps = mockParkingMap.mock.calls.at(-1)?.[0]
     expect(initialProps?.colorBlindMode).toBe(false)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enable color-blind mode' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable color-blind mode' }))
 
-    expect(screen.getByRole('button', { name: 'Disable color-blind mode' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Disable color-blind mode' })).toBeInTheDocument()
     const toggledProps = mockParkingMap.mock.calls.at(-1)?.[0]
     expect(toggledProps?.colorBlindMode).toBe(true)
   })
@@ -303,6 +326,8 @@ describe('MapPage verified bays legend', () => {
     setViewportWidth(1200)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
 
+    fireEvent.click(screen.getByRole('button', { name: /^filters$/i }))
+
     const available = document.querySelector('.legend-symbol-available')
     expect(available).toBeTruthy()
     expect(available?.getAttribute('style') || '').toContain('rgb(163, 236, 72)')
@@ -310,7 +335,7 @@ describe('MapPage verified bays legend', () => {
     expect(screen.getByText('Caution: Tow Away / Loading Zone')).toBeInTheDocument()
     expect(screen.getByText('Parking spots occupied')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enable color-blind mode' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable color-blind mode' }))
 
     const availableCb = document.querySelector('.legend-symbol-available')
     expect(availableCb).toBeTruthy()

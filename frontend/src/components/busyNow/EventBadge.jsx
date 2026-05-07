@@ -15,7 +15,7 @@ export default function EventBadge({ events = [] }) {
         return (
           <span
             key={i}
-            className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-200"
+            className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-200"
             title={title}
           >
             {label.slice(0, 22)}
@@ -23,7 +23,7 @@ export default function EventBadge({ events = [] }) {
         )
       })}
       {more > 0 && (
-        <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400">+{more}</span>
+        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">+{more}</span>
       )}
     </div>
   )

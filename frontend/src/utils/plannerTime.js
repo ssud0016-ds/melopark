@@ -235,6 +235,29 @@ export function formatDurationLabel(mins) {
   return `${m} min`
 }
 
+/**
+ * "Today, 3:24 pm" / "Tomorrow, 9:00 am" / "DD/MM/YYYY, H:mm am" for display.
+ * Always Melbourne wall-clock. Pass a planner ISO string.
+ * @param {string | null | undefined} iso
+ * @returns {string}
+ */
+export function formatRelativeDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const now = readMelbourneWallParts(Date.now())
+  const target = readMelbourneWallParts(d.getTime())
+  const todayStr = `${now.y}-${pad2(now.m)}-${pad2(now.d)}`
+  const tomorrowMs = Date.UTC(now.y, now.m - 1, now.d + 1)
+  const tomorrow = readMelbourneWallParts(tomorrowMs)
+  const tomorrowStr = `${tomorrow.y}-${pad2(tomorrow.m)}-${pad2(tomorrow.d)}`
+  const targetStr = `${target.y}-${pad2(target.m)}-${pad2(target.d)}`
+  const timePart = d.toLocaleTimeString('en-AU', TIME_OPTS)
+  if (targetStr === todayStr) return `Today, ${timePart}`
+  if (targetStr === tomorrowStr) return `Tomorrow, ${timePart}`
+  return `${pad2(target.d)}/${pad2(target.m)}/${target.y}, ${timePart}`
+}
+
 /** e.g. "2 hr" for "Stay limit:" row */
 export function formatStayLimitShort(mins) {
   if (mins == null || !Number.isFinite(Number(mins))) return null

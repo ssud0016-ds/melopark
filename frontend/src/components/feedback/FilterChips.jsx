@@ -66,7 +66,7 @@ function CustomDurationRow({ durationFilter, customDuration, onDurationFilterCha
 }
 
 const chipBase =
-  'shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide transition-colors cursor-pointer backdrop-blur-sm'
+  'shrink-0 whitespace-nowrap rounded-full border px-3 py-2 text-[11px] font-semibold tracking-wide transition-colors cursor-pointer backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1'
 const chipActive =
   'border-brand bg-brand text-white shadow-sm dark:border-brand dark:bg-brand'
 const chipIdle =
@@ -132,7 +132,11 @@ export default function FilterChips({
             type="button"
             role="switch"
             aria-checked={accessibleOn}
-            aria-label={accessibleOn ? 'Disable accessibility filter' : 'Enable accessibility filter'}
+            aria-label={
+              accessibleOn
+                ? 'Accessibility filter on, map shows accessible bays only. Click to disable.'
+                : 'Enable accessibility filter to show accessible bays only'
+            }
             onClick={onToggleAccessible}
             className={cn(
               chipBase,
@@ -140,7 +144,7 @@ export default function FilterChips({
               accessibleOn ? chipActive : chipIdle,
             )}
           >
-            <span>Accessible</span>
+            <span>{accessibleOn ? 'Accessible · on' : 'Accessible'}</span>
           </button>
         )}
 

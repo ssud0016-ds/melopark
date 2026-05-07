@@ -47,21 +47,34 @@ export function getStatusFillColor(status, colorBlindMode = false) {
 }
 
 export function getClusterBadgeColors({ available, occupied, trap, total, isDark, colorBlindMode = false }) {
-  let bg = isDark ? '#35338c' : '#dce8ff'
-  let text = isDark ? '#f4f6ff' : '#35338c'
+  const a = Number(available) || 0
+  const t = Number(total) || 0
+  const ratio = t > 0 ? a / t : 0
 
-  if (total > 0 && available === total) bg = getStatusFillColor('available', colorBlindMode)
-  else if (total > 0 && occupied === total) bg = getStatusFillColor('occupied', colorBlindMode)
-  else if (total > 0 && trap === total) bg = getStatusFillColor('caution', colorBlindMode)
+  let bg, text
 
   if (colorBlindMode) {
-    if (bg === getStatusFillColor('available', true)) text = '#f3f4f6'
-    else if (bg === getStatusFillColor('caution', true)) text = '#512500'
-    else if (bg === getStatusFillColor('occupied', true)) text = '#f3f4f6'
+    // Color-blind palette: preserve existing accessible colors
+    if (t === 0 || ratio === 0) {
+      bg = getStatusFillColor('occupied', true); text = '#f3f4f6'
+    } else if (ratio >= 0.40) {
+      bg = getStatusFillColor('available', true); text = '#f3f4f6'
+    } else if (ratio >= 0.15) {
+      bg = getStatusFillColor('caution', true); text = '#512500'
+    } else {
+      bg = getStatusFillColor('occupied', true); text = '#f3f4f6'
+    }
   } else {
-    if (bg === '#a3ec48') text = '#3f5618'
-    else if (bg === '#FFB382') text = '#8f3f22'
-    else if (bg === '#ed6868') text = '#611d1d'
+    // Semantic status palette: green/amber/red by availability ratio
+    if (t === 0) {
+      bg = isDark ? '#374151' : '#e2e8f0'; text = isDark ? '#9ca3af' : '#64748b'
+    } else if (ratio >= 0.40) {
+      bg = '#16a34a'; text = '#ffffff'  // status-good green
+    } else if (ratio >= 0.15) {
+      bg = '#d97706'; text = '#ffffff'  // status-caution amber
+    } else {
+      bg = '#dc2626'; text = '#ffffff'  // status-avoid red
+    }
   }
 
   return { bg, text }
@@ -399,8 +412,7 @@ export default function ParkingMap({
   const clusterIcon = (available, occupied, trap, total) => {
     const a = Number(available) || 0
     const t = Number(total) || 0
-    const label = `${a}/${t}`
-    const labelLen = label.length
+    const label = String(a)
     const { bg, text } = getClusterBadgeColors({
       available,
       occupied,
@@ -410,14 +422,15 @@ export default function ParkingMap({
       colorBlindMode,
     })
 
-    const size = 42
-
-    const fontSize = labelLen >= 10 ? 7 : labelLen >= 8 ? 8 : labelLen >= 6 ? 9 : 11
+    const isOccupied = a === 0
+    const size = isOccupied ? 34 : 42
+    const border = isOccupied ? '2px solid rgba(0,0,0,0.12)' : '2px solid #ffffff'
+    const fontSize = label.length >= 3 ? 11 : label.length === 2 ? 13 : 15
     return L.divIcon({
       className: 'mp-cluster-icon',
       html: `<div style="
         box-sizing:border-box;width:${size}px;height:${size}px;border-radius:999px;
-        background:${bg};border:2px solid #ffffff;
+        background:${bg};border:${border};
         display:flex;align-items:center;justify-content:center;
         color:${text};font-family:Inter,system-ui,sans-serif;font-weight:700;font-size:${fontSize}px;line-height:1;
         letter-spacing:-0.1px;white-space:nowrap;overflow:hidden;text-align:center;
@@ -425,6 +438,7 @@ export default function ParkingMap({
       ">${label}</div>`,
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
+      title: `${a} free of ${t} bays`,
     })
   }
 
@@ -688,51 +702,46 @@ export default function ParkingMap({
           </>
         )}
 
-        <div
-          className={`pointer-events-none absolute z-[450] rounded-xl border border-brand bg-white/95 px-3 py-1.5 text-xs font-semibold text-brand shadow-card text-center dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100 ${hideHint ? 'hidden' : ''}`}
-          style={
-            isMobile
-              ? {
-                  left: '14px',
-                  bottom: destination ? '108px' : '86px',
-                  width: 'max-content',
-                  maxWidth: 'calc(100% - 144px)',
-                  whiteSpace: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'nowrap' : 'normal') : 'normal',
-                  overflow: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'hidden' : 'visible') : 'visible',
-                  textOverflow: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'ellipsis' : 'clip') : 'clip',
-                }
-              : selectedBayId
-              ? {
-                  // Bay panel open: horizontally centred in the map area left of the panel
-                  left: 'calc(50% - 190px)',
-                  transform: 'translateX(-50%)',
-                  bottom: destination ? '118px' : '18px',
-                  width: 'max-content',
-                  maxWidth: 'calc(100% - 440px)',
-                }
-              : {
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  bottom: destination ? '118px' : '18px',
-                  width: 'max-content',
-                  maxWidth: 'calc(100% - 440px)',
-                  whiteSpace: zoomLevel < CLUSTER_ZOOM_CUTOFF ? (showLimitedBays ? 'nowrap' : 'normal') : 'normal',
-                }
-          }
-        >
-          {zoomLevel < CLUSTER_ZOOM_CUTOFF ? (
-            <>
-              <div>{isMobile ? MOBILE_CLUSTER_ZOOM_HINT : 'Zoom in to see individual parking bays.'}</div>
-              {!isMobile && (
-                <div className="mt-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300">
-                  Cluster numbers show available/total bays and change as you zoom.
-                </div>
-              )}
-            </>
-          ) : (
-            <div>Tap a parking spot to view its rules.</div>
-          )}
-        </div>
+        {zoomLevel < CLUSTER_ZOOM_CUTOFF && !hideHint && (
+          <div
+            className="pointer-events-none absolute z-[450] rounded-xl border border-brand bg-white/95 px-3 py-1.5 text-xs font-semibold text-brand shadow-card text-center dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
+            style={
+              isMobile
+                ? {
+                    left: '14px',
+                    bottom: destination ? '108px' : '86px',
+                    width: 'max-content',
+                    maxWidth: 'calc(100% - 144px)',
+                    whiteSpace: showLimitedBays ? 'nowrap' : 'normal',
+                    overflow: showLimitedBays ? 'hidden' : 'visible',
+                    textOverflow: showLimitedBays ? 'ellipsis' : 'clip',
+                  }
+                : selectedBayId
+                ? {
+                    left: 'calc(50% - 190px)',
+                    transform: 'translateX(-50%)',
+                    bottom: '18px',
+                    width: 'max-content',
+                    maxWidth: 'calc(100% - 440px)',
+                  }
+                : {
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    bottom: '18px',
+                    width: 'max-content',
+                    maxWidth: 'calc(100% - 440px)',
+                    whiteSpace: showLimitedBays ? 'nowrap' : 'normal',
+                  }
+            }
+          >
+            <div>{isMobile ? MOBILE_CLUSTER_ZOOM_HINT : 'Zoom in to see individual parking bays.'}</div>
+            {!isMobile && (
+              <div className="mt-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-300">
+                Cluster numbers show available/total bays.
+              </div>
+            )}
+          </div>
+        )}
       </MapContainer>
     </div>
   )
