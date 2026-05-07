@@ -30,7 +30,8 @@ function buildReasons(detail) {
   if (detail.occ_pct >= 80) reasons.push('Most bays taken')
   else if (detail.occ_pct >= 50) reasons.push('Bays filling up')
   if (detail.trend === 'up') reasons.push('Traffic rising')
-  if (detail.events_nearby?.length > 0) reasons.push('Event nearby')
+  const evts = detail.events ?? detail.events_nearby
+  if (evts?.length > 0) reasons.push('Event nearby')
   if (reasons.length === 0 && detail.level === 'low') reasons.push('Bays look available')
   return reasons
 }
@@ -89,7 +90,7 @@ export default function SegmentPopup({
         </span>
       </div>
       {detail.seg_descr && (
-        <div className="mb-1 text-[10px] text-gray-500 dark:text-gray-400">
+        <div className="mb-1 text-[11px] text-gray-500 dark:text-gray-400">
           {detail.seg_descr}
         </div>
       )}
@@ -107,16 +108,16 @@ export default function SegmentPopup({
           {detail.free_bays} of {detail.total_bays} bays free
         </div>
       )}
-      <div className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">
+      <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
         {coverage}
         {pct != null && ` · ${pct}% pressure signal`}
       </div>
       {reasons.length > 0 && (
-        <div className="mt-1 text-[10px] text-gray-600 dark:text-gray-300">
+        <div className="mt-1 text-[11px] text-gray-600 dark:text-gray-300">
           Why: {reasons.join(' · ')}
         </div>
       )}
-      <EventBadge events={detail.events_nearby} />
+      <EventBadge events={detail.events ?? detail.events_nearby} />
       {onMarkAsTarget && (
         <button
           type="button"
