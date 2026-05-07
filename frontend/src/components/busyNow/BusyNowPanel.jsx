@@ -9,6 +9,17 @@ const CHANCE_TEXT = {
   unknown: 'No live estimate',
 }
 
+function splitStreetName(name) {
+  if (!name) return { main: name, cross: null }
+  const m = name.match(/^([^(]+?)\s*\(([^)]+)\)\s*$/)
+  return m ? { main: m[1].trim(), cross: m[2].trim() } : { main: name, cross: null }
+}
+
+function displayLabel(label) {
+  if (/^Zone \d+$/.test(label || '')) return `Nearby · ${label}`
+  return label
+}
+
 const LEVEL_RANK = { low: 0, medium: 1, high: 2, unknown: 3 }
 
 function levelToTone(level) {
@@ -45,7 +56,7 @@ function SourcePills({ manifest }) {
     { key: 'events', label: `Events · ${activeCount} active` },
   ]
   return (
-    <div className="mt-2 flex flex-wrap gap-1 border-t border-gray-200/60 pt-2 dark:border-gray-700/60">
+    <div className="mt-1.5 flex flex-wrap gap-1">
       {pills.map((p) => (
         <span
           key={p.key}
@@ -59,16 +70,6 @@ function SourcePills({ manifest }) {
   )
 }
 
-function PressureBar({ pct, color }) {
-  return (
-    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-gray-200/70 dark:bg-gray-700/60">
-      <div
-        className="h-full rounded-full"
-        style={{ width: `${Math.min(100, Math.max(0, pct))}%`, backgroundColor: color }}
-      />
-    </div>
-  )
-}
 
 function AlternativeRow({ alt, onClick, colorBlindMode, selected = false, mobileSheet = false }) {
   const tone = levelToTone(alt.level)
@@ -80,7 +81,8 @@ function AlternativeRow({ alt, onClick, colorBlindMode, selected = false, mobile
       <button
         type="button"
         onClick={() => onClick?.(alt)}
-        className={`flex w-full items-center gap-2 rounded-lg border px-2 text-left transition-colors ${
+        aria-label={`${alt.label || `Zone ${alt.zone_id}`} — ${chance}, ${alt.free_bays} bays free, ${alt.walk_distance_m}m away`}
+        className={`flex w-full items-center gap-2 rounded-lg border px-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 cursor-pointer ${
           mobileSheet ? 'min-h-[52px] py-2' : 'py-1.5'
         } ${
           selected
@@ -94,17 +96,25 @@ function AlternativeRow({ alt, onClick, colorBlindMode, selected = false, mobile
           aria-hidden
         />
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="truncate text-[12px] font-semibold text-gray-900 dark:text-gray-100">
-              Try {alt.label || `Zone ${alt.zone_id}`}
-            </span>
-            {selected && (
-              <span className="rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-                Selected
-              </span>
-            )}
-          </div>
-          <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] font-medium text-gray-500 dark:text-gray-400">
+          {(() => {
+            const { main, cross } = splitStreetName(displayLabel(alt.label || `Zone ${alt.zone_id}`))
+            return (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-gray-900 dark:text-gray-100 leading-tight">{main}</span>
+                  {selected && (
+                    <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white" aria-hidden>
+                      Selected
+                    </span>
+                  )}
+                </div>
+                {cross && (
+                  <div className="text-[11px] text-gray-400 dark:text-gray-500 leading-tight">{cross}</div>
+                )}
+              </>
+            )
+          })()}
+          <div className="mt-0.5 flex items-center justify-between gap-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
             <span>{chance} · {alt.free_bays} bays free</span>
             <span className="shrink-0">{alt.walk_distance_m} m away</span>
           </div>
@@ -127,7 +137,8 @@ function QuietStreetChip({ seg, onClick, selected = false, featured = false, mob
           if (seg.mid_lat == null || seg.mid_lon == null) return
           onClick?.({ ...seg, lat: seg.mid_lat, lng: seg.mid_lon })
         }}
-        className={`flex w-full items-start gap-2 rounded-lg border px-2 text-left transition-colors ${
+        aria-label={`${seg.street_name} — ${chance}, ${coverage}`}
+        className={`flex w-full items-start gap-2 rounded-lg border px-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 cursor-pointer ${
           mobileSheet ? 'min-h-[52px] py-2' : 'py-1.5'
         } ${
           selected
@@ -135,32 +146,31 @@ function QuietStreetChip({ seg, onClick, selected = false, featured = false, mob
             : 'border-gray-200/70 bg-white hover:bg-slate-50 dark:border-gray-600 dark:bg-surface-dark dark:hover:bg-surface-dark-secondary'
         }`}
       >
-        <div className={`min-w-0 flex-1 text-gray-700 dark:text-gray-200 ${featured ? 'text-[12px]' : 'text-[11px]'}`}>
-          <span className={`font-semibold text-gray-900 dark:text-gray-100 ${featured ? 'text-[13px]' : ''}`}>{seg.street_name}</span>
-          {selected && (
-            <>
-              {' · '}
-              <span className="rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-                Selected
-              </span>
-            </>
-          )}
-          {' · '}
-          <span>{chance}</span>
-          {hasLiveBays && (
-            <>
-              {' · '}
-              <span>{seg.free}/{seg.total} bays free</span>
-            </>
-          )}
-          {seg.walk_distance_m != null && (
-            <>
-              {' · '}
-              <span>{seg.walk_distance_m} m away</span>
-            </>
-          )}
-          {' · '}
-          <span>{coverage}</span>
+        <div className="min-w-0 flex-1">
+          {(() => {
+            const { main, cross } = splitStreetName(seg.street_name)
+            return (
+              <>
+                <div className={`flex items-center gap-1.5 font-semibold text-gray-900 dark:text-gray-100 leading-tight ${featured ? 'text-sm' : 'text-xs'}`}>
+                  {main}
+                  {selected && (
+                    <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">Selected</span>
+                  )}
+                </div>
+                {cross && (
+                  <div className="text-[11px] text-gray-400 dark:text-gray-500 leading-tight">{cross}</div>
+                )}
+              </>
+            )
+          })()}
+          <div className={`mt-0.5 text-gray-500 dark:text-gray-400 ${featured ? 'text-xs' : 'text-[11px]'}`}>
+            {[
+              chance,
+              hasLiveBays ? `${seg.free}/${seg.total} bays free` : null,
+              seg.walk_distance_m != null ? `${seg.walk_distance_m} m away` : null,
+              coverage,
+            ].filter(Boolean).join(' · ')}
+          </div>
         </div>
       </button>
     </li>
@@ -177,12 +187,14 @@ export default function BusyNowPanel({
   onStreetClick,
   selectedSuggestion = null,
   pressureModeNote = 'Parking chance: live now',
+  isPlanning = false,
   mobileSheet = false,
 }) {
   const [altData, setAltData] = useState(null)
   const [altError, setAltError] = useState(null)
   const [altLoading, setAltLoading] = useState(false)
   const [altRetryKey, setAltRetryKey] = useState(0)
+  const [showSources, setShowSources] = useState(false)
 
   useEffect(() => {
     if (!destination?.lat || !destination?.lng) {
@@ -242,30 +254,33 @@ export default function BusyNowPanel({
       })
       .slice(0, 3)
   })()
-  const selectedAlt = selectedZoneId != null
-    ? betterAlternatives.find((alt) => String(alt.zone_id) === String(selectedZoneId))
-    : null
-  const panelLabel = selectedSuggestion
-    ? 'Less busy pick'
-    : inDestMode
-      ? 'Near destination'
-      : 'Best nearby parking'
-
   return (
     <div className={mobileSheet
       ? 'w-full rounded-xl bg-transparent'
       : 'w-[280px] rounded-xl border border-gray-200/60 bg-white/95 p-2.5 shadow-card backdrop-blur-sm dark:border-gray-700 dark:bg-surface-dark-secondary/95'
     }>
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-          {mobileSheet ? panelLabel : inDestMode ? 'Around your destination' : 'Parking chance'}
+      {!mobileSheet && (
+        <div className="mb-1.5 flex items-center justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            {inDestMode ? 'Around your destination' : 'Parking chance'}
+          </span>
+          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
+            {status === 'loading' ? 'loading...' : status === 'error' ? 'error' : 'live'}
+          </span>
+        </div>
+      )}
+      <div className={`mb-1.5 flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+        isPlanning
+          ? 'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200'
+          : 'bg-slate-100 text-gray-600 dark:bg-gray-700/70 dark:text-gray-200'
+      }`}>
+        <span
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${isPlanning ? 'bg-amber-400' : 'bg-emerald-500 animate-pulse-dot'}`}
+          aria-hidden
+        />
+        <span className="min-w-0 flex-1 truncate">
+          {isPlanning ? pressureModeNote.replace('Parking chance: live now · ', '') : 'Live'}
         </span>
-        <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">
-          {status === 'loading' ? 'loading...' : status === 'error' ? 'error' : 'live'}
-        </span>
-      </div>
-      <div className="mb-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-700/70 dark:text-gray-200">
-        {pressureModeNote}
       </div>
 
       {!isReady && status === 'loading' && (
@@ -287,8 +302,8 @@ export default function BusyNowPanel({
 
       {isReady && !inDestMode && quietStreets.length > 0 && (
         <div>
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-            Quietest nearby
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            Other quiet streets
           </div>
           <ul className="flex flex-col gap-1.5">
             {quietStreets.map((seg, index) => (
@@ -334,37 +349,12 @@ export default function BusyNowPanel({
                 </div>
               )}
               {altData.target_zone && (
-                <div className="mb-1.5 rounded-lg border border-gray-200/70 bg-slate-50 px-2 py-1 dark:border-gray-600 dark:bg-surface-dark">
-                  <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    Target area
-                  </div>
-                  <div className="text-[12px] font-semibold text-gray-900 dark:text-gray-100">
-                    {altData.target_zone.label}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-gray-700 dark:text-gray-200">
-                    {CHANCE_TEXT[altData.target_zone.level] || 'No live estimate'} ·{' '}
-                    {altData.target_zone.free_bays}/{altData.target_zone.total_bays} bays free
-                  </div>
-                  <PressureBar
-                    pct={Math.round((altData.target_zone.pressure || 0) * 100)}
-                    color={getStatusFillColor(levelToTone(altData.target_zone.level), colorBlindMode)}
-                  />
-                </div>
+                <p className="mb-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                  {`Destination: ${splitStreetName(altData.target_zone.label).main} · ${CHANCE_TEXT[altData.target_zone.level] || 'No live estimate'} · ${altData.target_zone.free_bays}/${altData.target_zone.total_bays} bays free`}
+                </p>
               )}
               {targetIsBusy && betterAlternatives.length > 0 ? (
                 <>
-                  {selectedAlt && altData.target_zone && (
-                    <div className="mb-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[10px] text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
-                      <div>
-                        <span className="font-semibold">Destination:</span>{' '}
-                        {CHANCE_TEXT[altData.target_zone.level] || 'No live estimate'} · {altData.target_zone.free_bays}/{altData.target_zone.total_bays} free
-                      </div>
-                      <div>
-                        <span className="font-semibold">Selected:</span>{' '}
-                        {CHANCE_TEXT[selectedAlt.level] || 'No live estimate'} · {selectedAlt.free_bays} free · {selectedAlt.walk_distance_m} m away
-                      </div>
-                    </div>
-                  )}
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Better nearby options
                   </div>
@@ -395,7 +385,20 @@ export default function BusyNowPanel({
         </>
       )}
 
-      <SourcePills manifest={manifest} />
+      {manifest && (
+        <div className="mt-2 border-t border-gray-200/60 pt-2 dark:border-gray-700/60">
+          <button
+            type="button"
+            onClick={() => setShowSources((v) => !v)}
+            className="flex items-center gap-1 text-[10px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-brand focus-visible:ring-offset-1 rounded"
+          >
+            <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-gray-300 text-[9px] font-bold dark:border-gray-600" aria-hidden>i</span>
+            Data sources
+            <span aria-hidden className="ml-0.5 text-gray-300">{showSources ? '↑' : '↓'}</span>
+          </button>
+          {showSources && <SourcePills manifest={manifest} />}
+        </div>
+      )}
     </div>
   )
 }

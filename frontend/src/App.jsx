@@ -22,7 +22,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col font-sans">
+    <div className="flex min-h-[100dvh] flex-col font-sans">
       <TopBar
         activePage={page}
         onNavigate={setPage}

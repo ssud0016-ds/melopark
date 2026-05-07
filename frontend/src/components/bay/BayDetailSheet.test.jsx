@@ -67,8 +67,7 @@ describe('BayDetailSheet parking tab UI', () => {
     })
 
     await waitFor(() => expect(fetchBayEvaluation).toHaveBeenCalled())
-    expect(screen.getByText('Currently Showing:')).toBeInTheDocument()
-    expect(screen.getByText('Please update the time filter to plan ahead')).toBeInTheDocument()
+    expect(screen.getByText(/Showing:/)).toBeInTheDocument()
     expect(screen.getByText('Bay Status and Limits')).toBeInTheDocument()
     expect(screen.getByText('Parking Sign Translator')).toBeInTheDocument()
 

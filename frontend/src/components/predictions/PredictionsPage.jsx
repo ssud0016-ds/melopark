@@ -419,10 +419,12 @@ export default function PredictionsPage({ onNavigateToMap = () => {} }) {
   const [altLoading, setAltLoading]     = useState(false)
 
   // UI state
-  const [selectedHour, setSelectedHour] = useState(0)
-  const [selectedZone, setSelectedZone] = useState(null)
-  const [zonesOpen, setZonesOpen]       = useState(false)
-  const [zonesHour, setZonesHour]       = useState(0)
+  const [selectedHour, setSelectedHour]     = useState(0)
+  const [selectedZone, setSelectedZone]     = useState(null)
+  const [zonesOpen, setZonesOpen]           = useState(false)
+  const [zonesHour, setZonesHour]           = useState(0)
+  const [forecastExpanded, setForecastExpanded] = useState(false)
+  const [busiestExpanded, setBusiestExpanded]   = useState(false)
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchWarnings = useCallback(async () => {
@@ -548,7 +550,7 @@ export default function PredictionsPage({ onNavigateToMap = () => {} }) {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen" style={{backgroundColor:'#f1f5f9'}}>
+    <div className="min-h-[100dvh] bg-slate-100 dark:bg-surface-dark">
 
       {/* ── Hero search bar ── */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 shadow-sm">
@@ -571,7 +573,7 @@ export default function PredictionsPage({ onNavigateToMap = () => {} }) {
                 onChange={e => { setQuery(e.target.value); setShowDropdown(true) }}
                 onFocus={() => { if (query) setShowDropdown(true) }}
                 placeholder="Search area or street name…"
-                className="w-full pl-10 pr-10 py-3 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                className="w-full pl-10 pr-10 py-3 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand shadow-sm"
               />
               {query && (
                 <button onClick={() => { setQuery(''); setDestination(null); setAlternatives(null); setSelectedZone(null) }}
@@ -601,7 +603,7 @@ export default function PredictionsPage({ onNavigateToMap = () => {} }) {
             <div className="relative sm:w-52">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">{I.Calendar}</span>
               <input type="datetime-local" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)}
-                className="w-full pl-10 pr-3 py-3 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" />
+                className="w-full pl-10 pr-3 py-3 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand shadow-sm" />
             </div>
             <button onClick={fetchWarnings} disabled={loading}
               className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-40 shrink-0">
@@ -638,44 +640,50 @@ export default function PredictionsPage({ onNavigateToMap = () => {} }) {
               <>
                 <PressureTimeline data={cbdChart} selectedHour={selectedHour} onSelect={setSelectedHour} />
 
-                {/* Multi-line forecast chart — hover to inspect */}
-                <div className="relative">
-                {(() => {
-                  const topZones = warnings
-                    .filter(w => w.hours_from_now === 0)
-                    .sort((a,b) => b.predicted_occupancy - a.predicted_occupancy)
-                    .slice(0, 6)
+                {/* Multi-line forecast chart — progressively disclosed */}
+                <div className="mt-4 pt-4 border-t border-gray-50 dark:border-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => setForecastExpanded(v => !v)}
+                    className="flex w-full items-center justify-between text-[11px] font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors"
+                  >
+                    <span>Forecast trend — top zones</span>
+                    <span className="normal-case font-medium tracking-normal">
+                      {forecastExpanded ? I.ChevUp : I.ChevDown}
+                    </span>
+                  </button>
+                  {forecastExpanded && (() => {
+                    const topZones = warnings
+                      .filter(w => w.hours_from_now === 0)
+                      .sort((a,b) => b.predicted_occupancy - a.predicted_occupancy)
+                      .slice(0, 6)
 
-                  const chartLines = topZones.map((z, i) => ({
-                    label: z.zone.length > 28 ? z.zone.slice(0, 28) + '…' : z.zone,
-                    fullLabel: z.zone,
-                    colour: CHART_COLOURS[i % CHART_COLOURS.length],
-                    pts: HRS.map(h => {
-                      const w = warnings.find(x => x.zone === z.zone && x.hours_from_now === h)
-                      return w?.predicted_occupancy ?? null
-                    })
-                  })).filter(l => l.pts.some(p => p !== null))
+                    const chartLines = topZones.map((z, i) => ({
+                      label: z.zone.length > 28 ? z.zone.slice(0, 28) + '…' : z.zone,
+                      fullLabel: z.zone,
+                      colour: CHART_COLOURS[i % CHART_COLOURS.length],
+                      pts: HRS.map(h => {
+                        const w = warnings.find(x => x.zone === z.zone && x.hours_from_now === h)
+                        return w?.predicted_occupancy ?? null
+                      })
+                    })).filter(l => l.pts.some(p => p !== null))
 
-                  if (!chartLines.length) return null
-                  return (
-                    <div className="mt-5 pt-4 border-t border-gray-50 dark:border-gray-800">
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                        Forecast trend — top zones
-                      </p>
-                      <ForecastLineChart
-                        lines={chartLines}
-                        selectedHour={selectedHour}
-                        onHourClick={setSelectedHour}
-                        hlabels={HLABELS}
-                        onLineSelect={(label)=>{
-                          const z=warnings.find(w=>w.zone===label&&w.hours_from_now===0)
-                          if(z) handleSelectZone(z)
-                        }}
-                      />
-
-                    </div>
-                  )
-                })()}
+                    if (!chartLines.length) return null
+                    return (
+                      <div className="mt-3 relative">
+                        <ForecastLineChart
+                          lines={chartLines}
+                          selectedHour={selectedHour}
+                          onHourClick={setSelectedHour}
+                          hlabels={HLABELS}
+                          onLineSelect={(label)=>{
+                            const z=warnings.find(w=>w.zone===label&&w.hours_from_now===0)
+                            if(z) handleSelectZone(z)
+                          }}
+                        />
+                      </div>
+                    )
+                  })()}
                 </div>
               </>
             )}
@@ -906,9 +914,9 @@ export default function PredictionsPage({ onNavigateToMap = () => {} }) {
                 <p className="text-[11px] text-gray-400 mt-0.5">Highest predicted demand — avoid if possible</p>
               </div>
             </div>
-            {loading ? <Skel rows={5} /> : !busiest.length ? <p className="text-sm text-gray-400">No data</p> : (
+            {loading ? <Skel rows={3} /> : !busiest.length ? <p className="text-sm text-gray-400">No data</p> : (
               <div className="space-y-0.5">
-                {busiest.map((z,i) => (
+                {(busiestExpanded ? busiest : busiest.slice(0, 3)).map((z,i) => (
                   <button key={z.zone} onClick={() => handleSelectZone(z)}
                     className={`w-full flex items-center gap-2.5 px-2 py-2.5 rounded-xl text-left transition-all group border ${
                       selectedZone?.zone===z.zone
@@ -922,6 +930,15 @@ export default function PredictionsPage({ onNavigateToMap = () => {} }) {
                     <Badge level={z.warning_level} />
                   </button>
                 ))}
+                {busiest.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setBusiestExpanded(v => !v)}
+                    className="w-full pt-2 text-[11px] font-medium text-brand hover:text-brand-light transition-colors text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 rounded"
+                  >
+                    {busiestExpanded ? 'Show less ↑' : `See all ${busiest.length} →`}
+                  </button>
+                )}
               </div>
             )}
           </Card>

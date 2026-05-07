@@ -44,7 +44,7 @@ export default function SiteGate({ children }) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-surface px-4 dark:bg-surface-dark">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-surface px-4 dark:bg-surface-dark">
       <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <h1 className="text-center text-xl font-semibold text-brand-900 dark:text-brand-100">
           MelOPark

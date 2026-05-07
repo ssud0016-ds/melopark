@@ -1,13 +1,14 @@
 import { useRef, useCallback, useEffect, useState } from 'react'
 import { cn } from '../../utils/cn'
+import { useReducedMotion } from '../../hooks/useReducedMotion'
 
 /**
  * Snap points as fractions of the viewport height (from the bottom).
- * PEEK  – just the header visible (~240px worth)
+ * PEEK  – handle + title row only (~120px)
  * HALF  – comfortably browse ~5-6 bay cards while keeping the map visible
  * FULL  – maximum expansion
  */
-const SNAP_PEEK = 0.28
+const SNAP_PEEK = 0.15
 const SNAP_HALF = 0.50
 const SNAP_FULL = 0.75
 
@@ -40,6 +41,7 @@ export default function BottomSheet({ snap, onSnapChange, title, subtitle, child
   const dragState = useRef(null)
   const [dragging, setDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState(0)
+  const prefersReduced = useReducedMotion()
 
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800
 
@@ -113,7 +115,7 @@ export default function BottomSheet({ snap, onSnapChange, title, subtitle, child
       className={cn(
         'absolute bottom-0 inset-x-0 z-[550] bg-white dark:bg-surface-dark',
         'rounded-t-[20px] shadow-sheet flex flex-col',
-        !dragging && 'transition-[height] duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]',
+        !dragging && !prefersReduced && 'transition-[height] duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]',
       )}
       style={{ height: visualHeight }}
     >

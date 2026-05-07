@@ -1,39 +1,9 @@
 import { useState } from 'react'
 import SearchBar from '../search/SearchBar'
-import { melbourneAwareIsoFromDateTimeLocal, toMelbourneDateTimeInputValue } from '../../utils/plannerTime'
-
-const STATUS_CHIPS = [
-  { id: 'all', label: 'All' },
-  { id: 'available', label: 'Available' },
-  { id: 'accessible', label: 'Accessible' },
-  { id: 'trap', label: 'Caution' },
-]
-
-const DURATION_CHIPS = [
-  { id: '15min', label: '15 min' },
-  { id: '30min', label: '30 min' },
-  { id: '1h', label: '1H' },
-  { id: '2h', label: '2H' },
-  { id: '3h', label: '3H' },
-  { id: '4h', label: '4H' },
-  { id: 'custom', label: 'Custom' },
-]
-
-const chipBase =
-  'rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide transition cursor-pointer'
-const chipActive =
-  'border-brand bg-brand text-white'
-const chipIdle =
-  'border-gray-200/80 bg-white text-gray-500 hover:border-brand-300 dark:border-gray-600 dark:bg-surface-dark dark:text-gray-300'
 
 export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest }) {
   const [step, setStep] = useState('hero')
   const [localDestination, setLocalDestination] = useState(null)
-  const [arriveByLocal, setArriveByLocal] = useState(() => toMelbourneDateTimeInputValue(null))
-  const [statusReq, setStatusReq] = useState('all')
-  const [durationReq, setDurationReq] = useState(null)
-  const [customDurationReq, setCustomDurationReq] = useState(60)
-  const [customDurationUnit, setCustomDurationUnit] = useState('min')
   const isHero = step === 'hero'
 
   const hasPressureData = busyNowManifest != null && (busyNowManifest.total_segments ?? 0) > 0
@@ -52,22 +22,20 @@ export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest }) {
       setStep('pressure')
       return
     }
-    const arrivalIso = arriveByLocal ? melbourneAwareIsoFromDateTimeLocal(arriveByLocal) : null
-    onPick(localDestination, arrivalIso, {
-      statusFilter: statusReq,
-      durationFilter: durationReq,
-      customDuration: customDurationReq,
-      accessible: statusReq === 'accessible',
+    onPick(localDestination, null, {
+      statusFilter: 'all',
+      durationFilter: null,
+      customDuration: null,
+      accessible: false,
     })
   }
 
   const handlePressureDone = () => {
-    const arrivalIso = arriveByLocal ? melbourneAwareIsoFromDateTimeLocal(arriveByLocal) : null
-    onPick(localDestination, arrivalIso, {
-      statusFilter: statusReq,
-      durationFilter: durationReq,
-      customDuration: customDurationReq,
-      accessible: statusReq === 'accessible',
+    onPick(localDestination, null, {
+      statusFilter: 'all',
+      durationFilter: null,
+      customDuration: null,
+      accessible: false,
     })
   }
 
@@ -97,9 +65,12 @@ export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest }) {
               <div className="text-[44px] leading-none font-extrabold tracking-tight text-white">
                 MelO<span className="text-accent">Park</span>
               </div>
-              <div className="text-3xl" aria-hidden>
-                🚗
-              </div>
+              <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="w-9 h-9 text-white/80">
+                <path d="M5 17H3v-5l2-5h14l2 5v5h-2"/>
+                <circle cx="7.5" cy="17" r="1.5"/>
+                <circle cx="16.5" cy="17" r="1.5"/>
+                <path d="M5 12h14"/>
+              </svg>
             </div>
             <div className="mt-4 text-sm leading-relaxed text-white/80">
               This app helps you find nearby parking bays, check availability, and view parking rules before you park.
@@ -117,10 +88,10 @@ export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest }) {
         ) : step === 'destination' ? (
           <>
             <div className="mb-3 text-[34px] font-bold tracking-tight text-brand">
-              Where are you heading?
+              Where are you going?
             </div>
-            <div className="mb-6 text-sm font-semibold text-gray-500 dark:text-gray-400">
-              Pick a destination and we&apos;ll show nearby parking bays.
+            <div className="mb-6 text-sm text-gray-500 dark:text-gray-400">
+              We&apos;ll show you free nearby bays.
             </div>
 
             <SearchBar
@@ -129,84 +100,7 @@ export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest }) {
               onClear={() => setLocalDestination(null)}
             />
 
-            <div className="mt-5">
-              <label className="flex flex-col gap-1">
-                <span className="text-sm font-bold text-gray-500">
-                  Arrive by
-                </span>
-                <input
-                  type="datetime-local"
-                  value={arriveByLocal}
-                  onChange={(e) => setArriveByLocal(e.target.value)}
-                  className="rounded-2xl border border-gray-300/90 bg-white px-5 py-4 text-base font-semibold text-gray-700 shadow-sm dark:border-gray-600 dark:bg-surface-dark dark:text-gray-100"
-                />
-              </label>
-            </div>
-
-            <div className="mt-6">
-              <div className="mb-2 text-sm font-bold text-gray-500">
-                Parking Requirements
-              </div>
-
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Status</div>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {STATUS_CHIPS.map((chip) => (
-                  <button
-                    key={chip.id}
-                    type="button"
-                    onClick={() => setStatusReq(chip.id)}
-                    className={`${chipBase} ${statusReq === chip.id ? chipActive : chipIdle}`}
-                  >
-                    {chip.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">Duration</div>
-              <div className="flex flex-wrap gap-2 items-center">
-                {DURATION_CHIPS.map((chip) => (
-                  <button
-                    key={chip.id}
-                    type="button"
-                    onClick={() => setDurationReq(durationReq === chip.id ? null : chip.id)}
-                    className={`${chipBase} ${durationReq === chip.id ? chipActive : chipIdle}`}
-                  >
-                    {chip.label}
-                  </button>
-                ))}
-                {durationReq === 'custom' && (
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
-                      min="1"
-                      max={customDurationUnit === 'hr' ? 24 : 1440}
-                      step={customDurationUnit === 'hr' ? 0.5 : 1}
-                      value={customDurationUnit === 'hr' ? Math.round(customDurationReq / 60 * 10) / 10 : customDurationReq}
-                      onChange={(e) => {
-                        const val = Number(e.target.value)
-                        setCustomDurationReq(customDurationUnit === 'hr' ? Math.round(val * 60) : val)
-                      }}
-                      placeholder={customDurationUnit === 'hr' ? 'hrs' : 'min'}
-                      className="w-14 rounded-full border border-brand bg-white px-2 py-1.5 text-center text-xs font-semibold text-gray-700 outline-none dark:border-brand dark:bg-surface-dark dark:text-gray-100"
-                    />
-                    <div className="flex overflow-hidden rounded-full border border-gray-300 bg-white dark:border-gray-600 dark:bg-surface-dark">
-                      {['min', 'hr'].map((u) => (
-                        <button
-                          key={u}
-                          type="button"
-                          onClick={() => setCustomDurationUnit(u)}
-                          className={`px-2 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${customDurationUnit === u ? 'bg-brand text-white' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'}${u === 'hr' ? ' border-l border-gray-300 dark:border-gray-600' : ''}`}
-                        >
-                          {u}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-6 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+            <div className="mt-6 text-xs text-gray-400 dark:text-gray-500">
               We use your destination to find nearby bays. Nothing is stored.
             </div>
 
@@ -214,7 +108,7 @@ export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest }) {
               <button
                 type="button"
                 onClick={onSkip}
-                className="min-w-[200px] rounded-full border border-gray-300 bg-white px-6 py-3 text-sm font-bold text-gray-500 shadow-sm transition hover:border-gray-400 cursor-pointer"
+                className="text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors cursor-pointer underline-offset-2 hover:underline"
               >
                 Skip, just show map
               </button>
@@ -223,9 +117,9 @@ export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest }) {
                 type="button"
                 onClick={handleContinue}
                 disabled={!localDestination}
-                className="min-w-[146px] rounded-full border border-brand bg-brand px-6 py-3 text-sm font-bold text-white shadow-card cursor-pointer hover:bg-brand-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-full border border-brand bg-brand px-6 py-3 text-sm font-bold text-white shadow-card cursor-pointer hover:bg-brand-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
               >
-                {hasPressureData ? 'Next' : 'Continue'}
+                {hasPressureData ? 'Next →' : 'Continue →'}
               </button>
             </div>
           </>

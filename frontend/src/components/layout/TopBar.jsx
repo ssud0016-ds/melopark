@@ -48,9 +48,9 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark,
 
   return (
     <nav
-      className="fixed top-0 inset-x-0 z-[1000] h-16 overflow-visible bg-white dark:bg-surface-dark border-b
+      className="fixed top-0 inset-x-0 z-[1000] h-12 sm:h-16 overflow-visible bg-white dark:bg-surface-dark border-b
                  border-gray-200/60 dark:border-gray-700/60 shadow-sm px-2 sm:px-4 md:px-6
-                 flex items-center gap-1.5 sm:gap-3"
+                 flex items-center gap-1 sm:gap-3"
     >
       {/* Logo */}
       <a
@@ -101,7 +101,7 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark,
           onClick={() => onNavigate('about')}
           aria-current={activePage === 'about' ? 'page' : undefined}
           className={cn(
-            'shrink-0 rounded-lg border-0 px-2.5 py-1.5 text-xs transition-colors sm:px-3 sm:text-sm',
+            'hidden sm:block shrink-0 rounded-lg border-0 px-2.5 py-1.5 text-xs transition-colors sm:px-3 sm:text-sm',
             activePage === 'about'
               ? 'bg-brand-50 font-medium text-brand dark:bg-brand dark:font-semibold dark:text-white'
               : 'bg-transparent font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:bg-transparent dark:font-normal dark:text-gray-200 dark:hover:bg-white/5 dark:hover:text-white',
