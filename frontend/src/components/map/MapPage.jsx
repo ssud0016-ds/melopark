@@ -24,6 +24,7 @@ import {
   melbourneWallClockToAwareIso,
   toMelbourneDateTimeInputValue,
   formatAtDateTime,
+  formatRelativeDate,
 } from '../../utils/plannerTime'
 import L from 'leaflet'
 import { getStatusFillColor } from './ParkingMap'
@@ -82,6 +83,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     defaultMapZoom,
     destinationMapZoom,
   } = useMapState()
+
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 900,
+  )
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 900)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   /** Stable reference for map layers so vector redraw does not run on unrelated parent re-renders. */
   const destinationStable = useMemo(
@@ -267,30 +277,20 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
           }, 2000)
         })
     },
-    [colorBlindMode, handleQuietStreetClick, busyNowManifest?.data_version, busyNowManifest?.minute_bucket],
+    [colorBlindMode, handleQuietStreetClick, busyNowManifest?.data_version, busyNowManifest?.minute_bucket, isMobile],
   )
 
   const [showOnboarding, setShowOnboarding] = useState(() => {
     if (typeof window === 'undefined') return false
     return !window.sessionStorage.getItem('melopark.onboarded')
   })
-  const [showPressureCoach, setShowPressureCoach] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return !window.sessionStorage.getItem('melopark.pressureCoachSeen')
-  })
+  const [coachTipOpen, setCoachTipOpen] = useState(false)
 
   const dismissOnboarding = useCallback(() => {
     try {
       window.sessionStorage.setItem('melopark.onboarded', '1')
     } catch (_e) {}
     setShowOnboarding(false)
-  }, [])
-
-  const dismissPressureCoach = useCallback(() => {
-    try {
-      window.sessionStorage.setItem('melopark.pressureCoachSeen', '1')
-    } catch (_e) {}
-    setShowPressureCoach(false)
   }, [])
 
   const handleOnboardingPick = useCallback((lm, arrivalIso = null, opts = null) => {
@@ -320,6 +320,11 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [accessibilityError, setAccessibilityError] = useState(null)
   const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [mobileFilterSheetOpen, setMobileFilterSheetOpen] = useState(false)
+  const [mobileFilterSnap, setMobileFilterSnap] = useState(SNAP_PEEK)
+  const [accessibilityAnnouncement, setAccessibilityAnnouncement] = useState('')
+  const accessibilitySkipFirstAnnounce = useRef(true)
+  const accessibilityPrevOnly = useRef(false)
 
   useEffect(() => {
     if (!filtersOpen) return
@@ -329,6 +334,34 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [filtersOpen])
+
+  useEffect(() => {
+    if (!isMobile) setMobileFilterSheetOpen(false)
+  }, [isMobile])
+
+  useEffect(() => {
+    if (!mobileFilterSheetOpen) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setMobileFilterSheetOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [mobileFilterSheetOpen])
+
+  useEffect(() => {
+    if (accessibilitySkipFirstAnnounce.current) {
+      accessibilitySkipFirstAnnounce.current = false
+      accessibilityPrevOnly.current = accessibilityAvailableOnly
+      return
+    }
+    if (accessibilityPrevOnly.current === accessibilityAvailableOnly) return
+    accessibilityPrevOnly.current = accessibilityAvailableOnly
+    setAccessibilityAnnouncement(
+      accessibilityAvailableOnly
+        ? 'Accessibility filter on. Map shows accessible bays only.'
+        : 'Accessibility filter off. Showing all bays.',
+    )
+  }, [accessibilityAvailableOnly])
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300)
 
@@ -365,16 +398,14 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   }, [plannerArrivalIso])
 
   const parkingChanceSheetTitle = useMemo(() => {
-    if (altPinPos) return 'Less busy pick'
-    if (destination) return 'Near destination'
-    return 'Best nearby parking'
-  }, [altPinPos, destination])
+    if (destination) return `Near ${destination.name}`
+    return 'Parking chance nearby'
+  }, [destination])
 
   const parkingChanceSheetSubtitle = useMemo(() => {
-    if (altPinPos) return altPinPos.name
-    if (destination) return 'Compare parking chance before you drive'
+    if (destination) return `${SEARCH_RADIUS_M} m radius · live now`
     return 'Quiet streets around current map view'
-  }, [altPinPos, destination])
+  }, [destination])
 
   const debouncedPlannerForBulk = useDebouncedPlannerParams(
     mapBaysAtPlannedTime ? plannerParams : null,
@@ -479,8 +510,13 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     if (date) setFilterDate(date)
   }, [plannerArrivalIso, setFilterTime, setFilterDate])
 
-  const visibleBays = getVisibleBays(bays)
-  const proximityBays = getProximityBays(bays)
+  const radiusCenterOverride = useMemo(() => {
+    if (!altPinPos || altPinPos.source !== 'alternative') return null
+    return { lat: altPinPos.lat, lng: altPinPos.lng, name: altPinPos.name || 'Alternative zone' }
+  }, [altPinPos])
+
+  const visibleBays = getVisibleBays(bays, radiusCenterOverride)
+  const proximityBays = getProximityBays(bays, radiusCenterOverride)
   const accessibleBayIds = useMemo(
     () => new Set(accessibilityNearby.map((b) => String(b.bay_id))),
     [accessibilityNearby],
@@ -519,7 +555,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     proxFreeSpots,
     proxFreeBays,
     proxLimitedCount,
-    proxModeLabel,
   } = useMemo(() => {
     // hasRules === parking API has_restriction_data (CoM cache); not evaluate coverage.
     const verified = mapVisibleBays.filter((b) => b.hasRules)
@@ -538,19 +573,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
         : proxLiveAvailable.reduce((a, b) => a + (b.free || 0), 0),
       proxFreeBays: showLimitedBays ? proxVerified.filter((b) => b.type === 'available').length : proxLiveAvailable.length,
       proxLimitedCount: proxLimited.length,
-      proxModeLabel: showLimitedBays ? 'verified bay' : 'live bay',
     }
   }, [mapVisibleBays, mapProximityBays, showLimitedBays])
-
-  const [isMobile, setIsMobile] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth < 900,
-  )
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 900)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
 
   const [legendOpen, setLegendOpen] = useState(false)
   useEffect(() => {
@@ -599,32 +623,57 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
 const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plannerArrivalIso)
 
-  const _scopeDateStr = arriveDate || filterDate
-  const _scopeTimeStr = arriveTime || filterTime
-  const _DAY_ABBRS2 = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const _scopeDateLabel = _scopeDateStr
-    ? (() => { const dt = new Date(_scopeDateStr + 'T00:00:00'); const mm = String(dt.getMonth() + 1).padStart(2, '0'); const dd = String(dt.getDate()).padStart(2, '0'); const yyyy = dt.getFullYear(); return `${_DAY_ABBRS2[dt.getDay()]}, ${mm}/${dd}/${yyyy}` })()
-    : 'Today'
-  const _scopeTimeLabel = _scopeTimeStr
-    ? (() => { const [hh, mm] = _scopeTimeStr.split(':').map(Number); const ampm = hh >= 12 ? 'PM' : 'AM'; const h12 = hh % 12 || 12; return `${h12}:${String(mm).padStart(2, '0')} ${ampm}` })()
-    : ''
+  const _isStatusDefault = !statusFilter || statusFilter === 'all'
+  const _isDurationDefault = !durationFilter
+  const _isTimeDefault = !plannerArrivalIso
+  const _isAccessibleDefault = !accessibilityAvailableOnly
+  const _scopeIsDefault = _isStatusDefault && _isDurationDefault && _isTimeDefault && _isAccessibleDefault
 
-  const _statusLabel = statusFilter === 'available' ? 'Available' : statusFilter === 'trap' ? 'Caution' : 'All bay status'
   const _durLabels = { '15min': '15 min', '30min': '30 min', '1h': '1H', '2h': '2H', '3h': '3H', '4h': '4H' }
+  const _statusLabel = statusFilter === 'available' ? 'Available' : statusFilter === 'trap' ? 'Caution' : null
   const _durationLabel = durationFilter
     ? (durationFilter === 'custom' && customDuration ? `${customDuration} min` : (_durLabels[durationFilter] || durationFilter))
-    : 'Any duration'
+    : null
+  const _timeLabel = plannerArrivalIso ? formatRelativeDate(plannerArrivalIso) : null
+
+  const _activePills = [
+    _statusLabel,
+    _durationLabel,
+    _timeLabel,
+    accessibilityAvailableOnly ? 'Accessible' : null,
+  ].filter(Boolean)
 
   const scopeStrip = (
-    <div className="px-1 text-[10px] font-medium text-gray-600 dark:text-gray-300 truncate">
-      <span>Showing: </span>
-      <span className="font-semibold text-slate-700 dark:text-gray-200">{_statusLabel}</span>
-      <span className="mx-1 text-slate-400">·</span>
-      <span className="font-semibold text-slate-700 dark:text-gray-200">{_durationLabel}</span>
-      <span className="mx-1 text-slate-400">·</span>
-      <span className="font-semibold text-slate-700 dark:text-gray-200">{_scopeDateLabel} {_scopeTimeLabel}</span>
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {_scopeIsDefault ? (
+        <span className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-[11px] font-semibold text-green-700 dark:border-green-800/60 dark:bg-green-950/50 dark:text-green-300">
+          Live now
+        </span>
+      ) : (
+        <>
+          {_activePills.slice(0, 2).map((pill) => (
+            <span key={pill} className="inline-flex items-center rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand dark:border-brand-light/30 dark:bg-brand/20 dark:text-brand-light">
+              {pill}
+            </span>
+          ))}
+          {_activePills.length > 2 && (
+            <span className="inline-flex items-center rounded-full border border-slate-300/70 bg-white/70 px-2 py-0.5 text-[11px] font-medium text-gray-500 dark:border-slate-600/60 dark:bg-surface-dark-secondary/60 dark:text-gray-400">
+              +{_activePills.length - 2}
+            </span>
+          )}
+        </>
+      )}
     </div>
   )
+
+  const mobileFilterSummary = [
+    _statusLabel,
+    _durationLabel,
+    _timeLabel,
+    accessibilityAvailableOnly ? 'Accessible' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ') || 'Live now'
 
   const updateArriveBy = useCallback((nextDate, nextTime) => {
     if (!nextDate || !nextTime) return
@@ -651,52 +700,56 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
   const arriveChip = (
     <div className="flex w-full flex-col gap-1">
       <span className="px-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500 dark:text-gray-400">Arrival time</span>
-      {/* Hidden inputs — off-screen but rendered so showPicker() works */}
-      <input
-        ref={dateInputRef}
-        type="date"
-        value={arriveDate}
-        onChange={(e) => updateArriveBy(e.target.value, arriveTime || '09:00')}
-        style={{ position: 'fixed', opacity: 0, pointerEvents: 'none', width: 1, height: 1, top: 0, left: 0 }}
-        tabIndex={-1}
-      />
-      <input
-        ref={timeInputRef}
-        type="time"
-        value={arriveTime}
-        onChange={(e) => {
-          const today = new Date()
-          const d = arriveDate || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-          updateArriveBy(d, e.target.value)
-        }}
-        style={{ position: 'fixed', opacity: 0, pointerEvents: 'none', width: 1, height: 1, top: 0, left: 0 }}
-        tabIndex={-1}
-      />
       <div className="flex w-full items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <button
-        type="button"
-        onClick={() => dateInputRef.current?.showPicker()}
-        className={`${chipBase} ${plannerArrivalIso ? chipActive : chipIdle} inline-flex items-center gap-1`}
-        aria-label="Set arrival date"
-      >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
-          <rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" strokeWidth="2" />
-          <path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-        {dateLabel}
-      </button>
-      <button
-        type="button"
-        onClick={() => timeInputRef.current?.showPicker()}
-        className={`${chipBase} ${plannerArrivalIso ? chipActive : chipIdle} inline-flex items-center gap-1`}
-        aria-label="Set arrival time"
-      >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
-          <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="2" />
-          <path d="M12 7.5v5l3.5 2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-        {arriveTime || 'Time'}
-      </button>
+      {/* Wrapper positions input over its button so showPicker() anchors picker near the button, not at top-left of viewport */}
+      <div className="relative inline-flex shrink-0">
+        <input
+          ref={dateInputRef}
+          type="date"
+          value={arriveDate}
+          onChange={(e) => updateArriveBy(e.target.value, arriveTime || '09:00')}
+          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', inset: 0, width: '100%', height: '100%' }}
+          tabIndex={-1}
+        />
+        <button
+          type="button"
+          onClick={() => dateInputRef.current?.showPicker()}
+          className={`${chipBase} ${plannerArrivalIso ? chipActive : chipIdle} inline-flex items-center gap-1`}
+          aria-label="Set arrival date"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
+            <rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" strokeWidth="2" />
+            <path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          {dateLabel}
+        </button>
+      </div>
+      <div className="relative inline-flex shrink-0">
+        <input
+          ref={timeInputRef}
+          type="time"
+          value={arriveTime}
+          onChange={(e) => {
+            const today = new Date()
+            const d = arriveDate || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+            updateArriveBy(d, e.target.value)
+          }}
+          style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', inset: 0, width: '100%', height: '100%' }}
+          tabIndex={-1}
+        />
+        <button
+          type="button"
+          onClick={() => timeInputRef.current?.showPicker()}
+          className={`${chipBase} ${plannerArrivalIso ? chipActive : chipIdle} inline-flex items-center gap-1`}
+          aria-label="Set arrival time"
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
+            <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="2" />
+            <path d="M12 7.5v5l3.5 2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          {arriveTime || 'Time'}
+        </button>
+      </div>
       {plannerArrivalIso && (
         <button
           type="button"
@@ -711,13 +764,53 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
     </div>
   )
 
+  const filterFormFields = (
+    <>
+      <FilterChips
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        durationFilter={durationFilter}
+        onDurationFilterChange={setDurationFilter}
+        accessibleOn={accessibilityAvailableOnly}
+        onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)}
+        customDuration={customDuration}
+        onCustomDurationChange={setCustomDuration}
+      />
+      {arriveChip}
+      <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-slate-200/60 bg-white/60 px-2.5 py-1.5 dark:border-slate-600/40 dark:bg-surface-dark/50">
+        <span className="text-[11px] font-semibold text-slate-600 dark:text-gray-300">Color-blind palette</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={colorBlindMode}
+          aria-label={colorBlindMode ? 'Disable color-blind mode' : 'Enable color-blind mode'}
+          onClick={() => setColorBlindMode((v) => !v)}
+          className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-1 ${
+            colorBlindMode
+              ? 'border-sky-400 bg-sky-500 dark:border-sky-500 dark:bg-sky-600'
+              : 'border-gray-300 bg-gray-200 hover:bg-gray-300 dark:border-slate-600 dark:bg-slate-700'
+          }`}
+        >
+          <span
+            aria-hidden
+            className={`pointer-events-none absolute left-0.5 top-0.5 h-4 w-4 rounded-full shadow ring-1 transition-transform duration-200 ease-out ${
+              colorBlindMode
+                ? 'translate-x-5 bg-white ring-sky-300/40'
+                : 'translate-x-0 bg-white ring-black/10 dark:bg-slate-300 dark:ring-white/10'
+            }`}
+          />
+        </button>
+      </div>
+    </>
+  )
+
   const filterInnerContent = (
     <>
       <div className="w-full rounded-xl overflow-hidden bg-white/85 backdrop-blur-md border border-slate-200/70 shadow-sm dark:bg-surface-dark-secondary/85 dark:border-slate-600/50">
         <button
           type="button"
           onClick={() => setFiltersOpen((v) => !v)}
-          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
+          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left cursor-pointer"
           aria-expanded={filtersOpen}
         >
           <span className="text-[11px] font-semibold text-slate-600 dark:text-gray-300">
@@ -736,45 +829,11 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
         </button>
         {filtersOpen && (
           <div className="px-3 pb-3 pt-1 flex flex-col gap-1 border-t border-slate-200/60 dark:border-slate-600/40">
-            <FilterChips
-              statusFilter={statusFilter}
-              onStatusFilterChange={setStatusFilter}
-              durationFilter={durationFilter}
-              onDurationFilterChange={setDurationFilter}
-              accessibleOn={accessibilityAvailableOnly}
-              onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)}
-              customDuration={customDuration}
-              onCustomDurationChange={setCustomDuration}
-            />
-            {arriveChip}
-            <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-slate-200/60 bg-white/60 px-2.5 py-1.5 dark:border-slate-600/40 dark:bg-surface-dark/50">
-              <span className="text-[11px] font-semibold text-slate-600 dark:text-gray-300">Color-blind palette</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={colorBlindMode}
-                aria-label={colorBlindMode ? 'Disable color-blind mode' : 'Enable color-blind mode'}
-                onClick={() => setColorBlindMode((v) => !v)}
-                className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-1 ${
-                  colorBlindMode
-                    ? 'border-sky-400 bg-sky-500 dark:border-sky-500 dark:bg-sky-600'
-                    : 'border-gray-300 bg-gray-200 hover:bg-gray-300 dark:border-slate-600 dark:bg-slate-700'
-                }`}
-              >
-                <span
-                  aria-hidden
-                  className={`pointer-events-none absolute left-0.5 top-0.5 h-4 w-4 rounded-full shadow ring-1 transition-transform duration-200 ease-out ${
-                    colorBlindMode
-                      ? 'translate-x-5 bg-white ring-sky-300/40'
-                      : 'translate-x-0 bg-white ring-black/10 dark:bg-slate-300 dark:ring-white/10'
-                  }`}
-                />
-              </button>
-            </div>
+            {filterFormFields}
             <button
               type="button"
               onClick={() => setFiltersOpen(false)}
-              className="mt-2 w-full rounded-lg bg-brand px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-brand/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:focus-visible:ring-offset-surface-dark-secondary"
+              className="mt-2 w-full rounded-lg bg-brand px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition-colors hover:bg-brand/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:focus-visible:ring-offset-surface-dark-secondary cursor-pointer"
             >
               Done
             </button>
@@ -784,12 +843,14 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
       <div className="rounded-lg bg-white/85 backdrop-blur-md px-2.5 py-1 border border-slate-200/50 shadow-sm dark:bg-surface-dark-secondary/85 dark:border-slate-600/40">
         {scopeStrip}
       </div>
-      {accessibilityAvailableOnly && (
-        <div
-          className="rounded-xl border border-brand bg-white/95 px-3 py-2 text-xs font-semibold text-brand text-center shadow-card dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
-          aria-label="Accessibility mode enabled: showing accessibility overlay bays"
-        >
-          Accessibility mode: accessible bays only
+      {destination && (proxFreeBays > 0 || proxLimitedCount > 0) && (
+        <div className="rounded-lg bg-white/85 backdrop-blur-md px-2.5 py-1.5 border border-slate-200/50 shadow-sm text-[11px] font-medium text-gray-700 dark:bg-surface-dark-secondary/85 dark:border-slate-600/40 dark:text-gray-200">
+          {proxFreeSpots === proxFreeBays
+            ? `${proxFreeBays} free bay${proxFreeBays !== 1 ? 's' : ''} within ${SEARCH_RADIUS_M} m`
+            : `${proxFreeSpots} free spot${proxFreeSpots !== 1 ? 's' : ''} across ${proxFreeBays} bay${proxFreeBays !== 1 ? 's' : ''} within ${SEARCH_RADIUS_M} m`}
+          {!showLimitedBays && proxLimitedCount > 0 && (
+            <span className="ml-1 text-gray-400 dark:text-gray-500">+{proxLimitedCount} without CoM data</span>
+          )}
         </div>
       )}
     </>
@@ -798,6 +859,13 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden">
+      <div
+        className="sr-only"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {accessibilityAnnouncement}
+      </div>
       <div className="relative w-full flex-1 min-h-0 overflow-hidden">
         <ParkingMap
           bays={mapBays}
@@ -838,7 +906,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           <div
             className={`absolute z-[520] max-w-[min(420px,92vw)] bg-trap-50 border border-trap-300 text-orange-800 dark:text-orange-200 rounded-xl shadow-overlay ${
               isMobile
-                ? 'top-[204px] px-2.5 py-1.5 text-xs leading-snug'
+                ? 'top-[120px] px-2.5 py-1.5 text-xs leading-snug'
                 : 'top-[72px] px-3.5 py-2.5 text-sm leading-relaxed'
             }`}
             style={
@@ -885,10 +953,36 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                 </div>
               </div>
 
-              <div className="mt-1 flex w-full flex-col gap-1.5">
-                {filterInnerContent}
-              </div>
-
+              <button
+                type="button"
+                data-testid="map-mobile-filter-trigger"
+                onClick={() => setMobileFilterSheetOpen(true)}
+                aria-label={`Open filters and planner. Current: ${mobileFilterSummary}`}
+                className="mt-1 flex w-full min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-slate-200/70 bg-white/90 px-3 py-2 text-left shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:border-slate-600/50 dark:bg-surface-dark-secondary/90 dark:hover:bg-surface-dark-secondary"
+              >
+                <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-700 dark:text-gray-200">
+                  {mobileFilterSummary}
+                </span>
+                <span className="shrink-0 text-[11px] font-semibold text-brand dark:text-brand-light">
+                  Filters
+                </span>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden
+                  className="shrink-0 text-slate-500 dark:text-slate-400"
+                >
+                  <path
+                    d="M6 9l6 6 6-6"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
             </div>
           </div>
         ) : (
@@ -955,37 +1049,11 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           </>
         )}
 
-        {destination && !isMobile && (
-          <div
-            className="absolute bottom-3.5 z-[500] bg-surface-secondary text-gray-900 rounded-2xl px-5 py-2.5 text-sm font-semibold shadow-overlay flex flex-col items-center gap-0.5 max-w-[calc(100%-120px)] border-2 border-brand"
-            style={selectedBay ? { left: 'calc(50% - 190px)', transform: 'translateX(-50%)' } : { left: '50%', transform: 'translateX(-50%)' }}
-          >
-            <span>
-              {proxFreeSpots === proxFreeBays ? (
-                <>
-                  {proxFreeBays} free {proxModeLabel}
-                  {proxFreeBays !== 1 ? 's' : ''} within {SEARCH_RADIUS_M} m of {destination.name}
-                </>
-              ) : (
-                <>
-                  {proxFreeSpots} free spot{proxFreeSpots !== 1 ? 's' : ''} across {proxFreeBays}{' '}
-                  {proxModeLabel}
-                  {proxFreeBays !== 1 ? 's' : ''} within {SEARCH_RADIUS_M} m of {destination.name}
-                </>
-              )}
-            </span>
-            {!showLimitedBays && proxLimitedCount > 0 && (
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                +{proxLimitedCount} no CoM row nearby
-              </span>
-            )}
-          </div>
-        )}
 
         {accessibilityAvailableOnly && (accessibilityLoading || accessibilityError) && (
           <div
             className={`absolute left-3.5 z-[510] rounded-xl border border-gray-200/80 bg-white/95 px-3 py-2 text-xs shadow-card-lg dark:border-gray-700 dark:bg-surface-dark-secondary/95 ${
-              isMobile ? 'top-[260px]' : 'top-[126px]'
+              isMobile ? 'top-[120px]' : 'top-[126px]'
             }`}
           >
             {accessibilityLoading && (
@@ -1058,23 +1126,6 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               className="absolute bottom-3.5 z-[510] flex flex-col gap-2"
               style={{ right: rightInsetPx }}
             >
-              {parkingChanceActive && showPressureCoach && !showOnboarding && !selectedBay && (
-                <div className="self-end max-w-[260px] rounded-xl border border-emerald-200 bg-white/95 px-3 py-2 text-xs text-gray-700 shadow-card dark:border-emerald-800 dark:bg-surface-dark-secondary/95 dark:text-gray-100">
-                  <div className="font-semibold text-emerald-700 dark:text-emerald-200">
-                    Parking chance is live now
-                  </div>
-                  <div className="mt-0.5 leading-snug">
-                    Green streets are easier. Tap any colored street to see why.
-                  </div>
-                  <button
-                    type="button"
-                    onClick={dismissPressureCoach}
-                    className="mt-1 text-[11px] font-semibold text-brand hover:underline dark:text-brand-light"
-                  >
-                    Got it
-                  </button>
-                </div>
-              )}
             <div
               className="rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
             >
@@ -1143,6 +1194,31 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
+                  {parkingChanceActive && (
+                    <div className="mt-2 border-t border-white/20 pt-2 dark:border-brand-600/30">
+                      <button
+                        type="button"
+                        onClick={() => setCoachTipOpen((v) => !v)}
+                        aria-label="About street parking chance"
+                        className="flex items-center gap-1 text-[10px] text-white/70 hover:text-white/95 dark:text-brand-700 dark:hover:text-brand-900 transition-colors cursor-pointer"
+                      >
+                        <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white/40 text-[9px] font-bold" aria-hidden>?</span>
+                        About parking chance
+                      </button>
+                      {coachTipOpen && (
+                        <div className="mt-1.5 rounded-lg bg-white/10 px-2 py-1.5 text-[10px] text-white/90 leading-snug dark:bg-black/10 dark:text-brand-900">
+                          Green streets are easier to find parking. Tap any coloured street to see live data.
+                          <button
+                            type="button"
+                            onClick={() => setCoachTipOpen(false)}
+                            className="ml-1.5 font-semibold underline cursor-pointer"
+                          >
+                            Got it
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1161,34 +1237,28 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               <div className="px-3 pb-4">
                 {altPinPos && (
                   <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50/95 p-3 dark:border-emerald-800/60 dark:bg-emerald-950/80">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
-                      Less busy pick
-                    </div>
-                    <div className="truncate text-sm font-semibold text-emerald-950 dark:text-emerald-50">
-                      {altPinPos.name}
-                    </div>
-                    {altPinPos.subtitle && (
-                      <div className="mt-0.5 text-[11px] text-emerald-800 dark:text-emerald-100">
-                        {altPinPos.subtitle}
-                      </div>
-                    )}
-                    {destination && altPinPos.source === 'alternative' && (
-                      <div className="mt-2 rounded-lg bg-white/65 px-2 py-1.5 text-[11px] text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100">
-                        <div>
-                          <span className="font-semibold">Destination:</span> {destination.name}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
+                          Your pick
                         </div>
-                        <div>
-                          <span className="font-semibold">Selected:</span> {altPinPos.subtitle || 'Less busy option'}
+                        <div className="truncate text-base font-semibold text-emerald-950 dark:text-emerald-50">
+                          {altPinPos.name}
                         </div>
+                        {altPinPos.subtitle && (
+                          <div className="mt-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-100">
+                            {altPinPos.subtitle}
+                          </div>
+                        )}
                       </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={clearSelectedSuggestion}
-                      className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-bold text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-surface-dark dark:text-emerald-100"
-                    >
-                      Clear pick
-                    </button>
+                      <button
+                        type="button"
+                        onClick={clearSelectedSuggestion}
+                        className="shrink-0 rounded-lg border border-emerald-300 bg-white px-2 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:border-emerald-700 dark:bg-surface-dark dark:text-emerald-100 cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </div>
                 )}
                 <BusyNowPanel
@@ -1201,6 +1271,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                   onStreetClick={handleQuietStreetClick}
                   selectedSuggestion={altPinPos}
                   pressureModeNote={pressureModeNote}
+                  isPlanning={!!plannerArrivalIso}
                   mobileSheet
                 />
 
@@ -1212,32 +1283,22 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/95 p-2.5 shadow-card backdrop-blur-sm dark:border-emerald-800/60 dark:bg-emerald-950/80">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
-                        Less busy pick
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-200">
+                        Your pick
                       </div>
-                      <div className="truncate text-[12px] font-semibold text-emerald-950 dark:text-emerald-50">
+                      <div className="truncate text-sm font-semibold text-emerald-950 dark:text-emerald-50">
                         {altPinPos.name}
                       </div>
                       {altPinPos.subtitle && (
-                        <div className="mt-0.5 text-[10px] text-emerald-800 dark:text-emerald-100">
+                        <div className="mt-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-100">
                           {altPinPos.subtitle}
-                        </div>
-                      )}
-                      {destination && altPinPos.source === 'alternative' && (
-                        <div className="mt-1 rounded-lg bg-white/65 px-2 py-1 text-[10px] text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-100">
-                          <div>
-                            <span className="font-semibold">Destination:</span> {destination.name}
-                          </div>
-                          <div>
-                            <span className="font-semibold">Selected:</span> {altPinPos.subtitle || 'Less busy option'}
-                          </div>
                         </div>
                       )}
                     </div>
                     <button
                       type="button"
                       onClick={clearSelectedSuggestion}
-                      className="shrink-0 rounded-lg border border-emerald-300 bg-white px-2 py-1 text-[10px] font-bold text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-surface-dark dark:text-emerald-100"
+                      className="shrink-0 rounded-lg border border-emerald-300 bg-white px-2 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:border-emerald-700 dark:bg-surface-dark dark:text-emerald-100 cursor-pointer"
                     >
                       Clear
                     </button>
@@ -1254,10 +1315,41 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                 onStreetClick={handleQuietStreetClick}
                 selectedSuggestion={altPinPos}
                 pressureModeNote={pressureModeNote}
+                isPlanning={!!plannerArrivalIso}
               />
 
             </div>
           )
+        )}
+
+        {isMobile && mobileFilterSheetOpen && (
+          <>
+            <button
+              type="button"
+              aria-label="Close filters"
+              className="absolute inset-0 z-[560] cursor-pointer border-0 bg-black/40 p-0"
+              onClick={() => setMobileFilterSheetOpen(false)}
+            />
+            <div className="absolute bottom-0 left-0 right-0 z-[570]">
+              <BottomSheet
+                snap={mobileFilterSnap}
+                onSnapChange={setMobileFilterSnap}
+                title="Filters"
+                subtitle={mobileFilterSummary}
+              >
+                <div className="flex flex-col gap-1 px-3 pb-6">
+                  {filterFormFields}
+                  <button
+                    type="button"
+                    onClick={() => setMobileFilterSheetOpen(false)}
+                    className="mt-3 w-full cursor-pointer rounded-lg bg-brand px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:focus-visible:ring-offset-surface-dark-secondary"
+                  >
+                    Done
+                  </button>
+                </div>
+              </BottomSheet>
+            </div>
+          </>
         )}
 
         {showOnboarding && (
