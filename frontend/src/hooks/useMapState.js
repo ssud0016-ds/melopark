@@ -190,11 +190,12 @@ export function useMapState() {
      * @param {MapBay[]} bays
      * @returns {MapBay[]}
      */
-    (bays) => {
-      const pool = destination
+    (bays, centerOverride = null) => {
+      const center = centerOverride || destination
+      const pool = center
         ? bays.filter((b) => {
             const bl = bayLatLng(b)
-            const dl = destinationLatLng(destination)
+            const dl = destinationLatLng(center)
             return haversineMeters(bl.lat, bl.lng, dl.lat, dl.lng) < SEARCH_RADIUS_M
           })
         : bays
@@ -221,11 +222,12 @@ export function useMapState() {
      * @param {MapBay[]} bays
      * @returns {MapBay[]}
      */
-    (bays) => {
-      if (!destination) return accessibilityMode ? bays.filter(isAccessibilityBay) : bays
+    (bays, centerOverride = null) => {
+      const center = centerOverride || destination
+      if (!center) return accessibilityMode ? bays.filter(isAccessibilityBay) : bays
       const inRadius = bays.filter((b) => {
         const bl = bayLatLng(b)
-        const dl = destinationLatLng(destination)
+        const dl = destinationLatLng(center)
         return haversineMeters(bl.lat, bl.lng, dl.lat, dl.lng) < SEARCH_RADIUS_M
       })
       return accessibilityMode ? inRadius.filter(isAccessibilityBay) : inRadius
