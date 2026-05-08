@@ -36,6 +36,10 @@ const CHANCE_TEXT = {
   unknown: 'No live estimate',
 }
 
+// Ignore tiny viewport jitter to avoid unnecessary evaluate-bulk requests.
+const BOUNDS_EDGE_EPS_DEG = 0.00035
+const BOUNDS_AREA_EPS_RATIO = 0.015
+
 function splitMelbourneDateTimeParts(iso) {
   const dt = toMelbourneDateTimeInputValue(iso)
   if (!dt) return { date: '', time: '' }
@@ -43,8 +47,30 @@ function splitMelbourneDateTimeParts(iso) {
   return { date: date || '', time: time || '' }
 }
 
+function boundsArea(b) {
+  const h = Math.max(0, (b?.north ?? 0) - (b?.south ?? 0))
+  const w = Math.max(0, (b?.east ?? 0) - (b?.west ?? 0))
+  return h * w
+}
+
+function isSignificantBoundsChange(prev, next) {
+  if (!prev) return true
+  const maxEdgeDelta = Math.max(
+    Math.abs((next?.north ?? 0) - (prev?.north ?? 0)),
+    Math.abs((next?.south ?? 0) - (prev?.south ?? 0)),
+    Math.abs((next?.east ?? 0) - (prev?.east ?? 0)),
+    Math.abs((next?.west ?? 0) - (prev?.west ?? 0)),
+  )
+  if (maxEdgeDelta >= BOUNDS_EDGE_EPS_DEG) return true
+  const prevArea = boundsArea(prev)
+  const nextArea = boundsArea(next)
+  const denom = Math.max(prevArea, 1e-9)
+  return Math.abs(nextArea - prevArea) / denom >= BOUNDS_AREA_EPS_RATIO
+}
+
 export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry, flyTarget }) {
   const mapRef = useRef(null)
+  const lastReportedBoundsRef = useRef(null)
 
   // Navigate from Predictions page: fly to selected zone
   useEffect(() => {
@@ -413,6 +439,8 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   )
 
   const handleMapBounds = useCallback((b) => {
+    if (!isSignificantBoundsChange(lastReportedBoundsRef.current, b)) return
+    lastReportedBoundsRef.current = b
     setMapBounds(b)
   }, [])
 
