@@ -18,6 +18,9 @@ import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   DESTINATION_MAP_ZOOM,
+  MELBOURNE_MAX_BOUNDS,
+  MELBOURNE_MIN_ZOOM,
+  MELBOURNE_MAX_ZOOM,
 } from '../../utils/mapGeo'
 import { bayHeading } from '../../utils/bayLabels'
 import BusyNowVectorLayer from '../busyNow/BusyNowVectorLayer'
@@ -450,6 +453,10 @@ export default function ParkingMap({
         style={{ width: '100%', height: '100%' }}
         scrollWheelZoom
         zoomControl={false}
+        minZoom={MELBOURNE_MIN_ZOOM}
+        maxZoom={MELBOURNE_MAX_ZOOM}
+        maxBounds={MELBOURNE_MAX_BOUNDS}
+        maxBoundsViscosity={1.0}
       >
         {/* No key by theme: remounting TileLayer breaks Leaflet canvas tile renderer
             used by BusyNowVectorGrid — segments go blank until full map remount. */}
@@ -461,7 +468,7 @@ export default function ParkingMap({
               : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
           }
           subdomains="abcd"
-          maxZoom={20}
+          maxZoom={MELBOURNE_MAX_ZOOM}
         />
 
         <FlyToController

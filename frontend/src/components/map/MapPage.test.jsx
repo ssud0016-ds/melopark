@@ -5,8 +5,15 @@ import MapPage from './MapPage'
 import { getStatusFillColor } from './ParkingMap'
 import { SEARCH_RADIUS_M } from '../../utils/mapGeo'
 import * as useBusyNowModule from '../../hooks/useBusyNow'
+import { fetchEvaluateBulk } from '../../services/apiBays'
 
 const mockMapState = vi.hoisted(() => ({ destination: null }))
+const mockDebouncedPlanner = vi.hoisted(() => ({
+  value: {
+    arrivalIso: '2026-01-01T12:00:00+11:00',
+    durationMins: 60,
+  },
+}))
 
 vi.mock('../../hooks/useMapState', () => ({
   useMapState: () => ({
@@ -47,6 +54,15 @@ vi.mock('../../services/apiBays', () => ({
   fetchEvaluateBulk: vi.fn().mockResolvedValue([]),
 }))
 
+vi.mock('../../hooks/useDebouncedPlannerParams', () => ({
+  // Keep evaluate-bulk pipeline active in tests without touching UI flows.
+  useDebouncedPlannerParams: vi.fn(() => mockDebouncedPlanner.value),
+}))
+
+vi.mock('../../hooks/useDebouncedValue', () => ({
+  // Keep bounds assertions deterministic in unit tests.
+  useDebouncedValue: vi.fn((value) => value),
+}))
 const mockParkingMap = vi.fn(() => <div data-testid="mock-parking-map" />)
 
 vi.mock('./ParkingMap', () => ({
@@ -374,7 +390,7 @@ describe('MapPage parking chance main-map integration', () => {
     setViewportWidth(414)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
 
-    expect(screen.getByText('Best nearby parking')).toBeInTheDocument()
+    expect(screen.getByText('Parking chance nearby')).toBeInTheDocument()
     expect(screen.getByText(/Quiet streets around current map view/i)).toBeInTheDocument()
     expect(mockBusyNowPanel.mock.calls.at(-1)?.[0]?.mobileSheet).toBe(true)
     expect(screen.queryByLabelText('Total parking bays on the live feed')).not.toBeInTheDocument()
@@ -408,13 +424,13 @@ describe('MapPage parking chance main-map integration', () => {
       })
     })
 
-    expect(screen.getAllByText('Less busy pick').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Your pick').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Lygon St').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Clear pick' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
     expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).not.toBeNull()
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Clear pick' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     })
 
     expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).toBeNull()
@@ -473,5 +489,40 @@ describe('MapPage parking chance main-map integration', () => {
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
     const mapProps = mockParkingMap.mock.calls.at(-1)?.[0]
     expect(mapProps?.busyNow).toBe(false)
+  })
+})
+
+describe('MapPage bounds threshold', () => {
+  beforeEach(() => {
+    cleanup()
+    mockParkingMap.mockClear()
+    vi.mocked(fetchEvaluateBulk).mockClear()
+    setViewportWidth(1200)
+  })
+
+  it('ignores tiny bounds jitter and avoids extra evaluate-bulk updates', async () => {
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    const onBoundsChange = mockParkingMap.mock.calls.at(-1)?.[0]?.onBoundsChange
+    expect(typeof onBoundsChange).toBe('function')
+
+    await act(async () => {
+      onBoundsChange({
+        south: -37.83,
+        west: 144.94,
+        north: -37.80,
+        east: 144.98,
+      })
+    })
+    expect(fetchEvaluateBulk).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      onBoundsChange({
+        south: -37.8299,
+        west: 144.9401,
+        north: -37.7999,
+        east: 144.9801,
+      })
+    })
+    expect(fetchEvaluateBulk).toHaveBeenCalledTimes(1)
   })
 })
