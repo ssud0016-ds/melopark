@@ -31,7 +31,8 @@ describe('BusyNowPanel', () => {
     }
     render(<BusyNowPanel manifest={manifest} status="ready" />)
     expect(screen.getByText(/Pick a destination/i)).toBeInTheDocument()
-    expect(screen.getByText(/Live bays/i)).toBeInTheDocument()
+    expect(screen.getByText(/Parking chance/i)).toBeInTheDocument()
+    expect(screen.getByText(/^Live$/)).toBeInTheDocument()
   })
 
   it('renders destination mode header when destination present', async () => {
@@ -59,8 +60,9 @@ describe('BusyNowPanel', () => {
       />
     )
     expect(screen.getByText(/Around your destination/i)).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText('Test Zone')).toBeInTheDocument())
-    expect(screen.getByText(/Target area/i)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByText(/Destination: Test Zone · Getting busy · 3\/9 bays free/)).toBeInTheDocument(),
+    )
     expect(screen.getByText(/Getting busy/i)).toBeInTheDocument()
   })
 
@@ -73,6 +75,7 @@ describe('BusyNowPanel', () => {
       },
     }
     render(<BusyNowPanel manifest={manifest} status="ready" />)
+    fireEvent.click(screen.getByRole('button', { name: /Data sources/i }))
     expect(screen.getAllByText(/Live bays/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/SCATS/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Events/i).length).toBeGreaterThan(0)
@@ -95,7 +98,7 @@ describe('BusyNowPanel', () => {
     )
 
     // Heading
-    expect(screen.getByText(/Quietest nearby/i)).toBeInTheDocument()
+    expect(screen.getByText(/Other quiet streets/i)).toBeInTheDocument()
 
     // 3 chip buttons present in ascending pressure order
     const buttons = screen.getAllByRole('button')
@@ -134,7 +137,7 @@ describe('BusyNowPanel', () => {
       />
     )
 
-    expect(screen.getByText(/Parking chance: live now/i)).toBeInTheDocument()
+    expect(screen.getByText(/^Live$/)).toBeInTheDocument()
     const firstChip = screen.getByRole('button', { name: /Lygon St/i })
     expect(firstChip.className).toContain('min-h-[52px]')
   })
@@ -228,7 +231,7 @@ describe('BusyNowPanel', () => {
     )
 
     await waitFor(() => expect(screen.getByText(/Better nearby options/i)).toBeInTheDocument())
-    expect(screen.getByText(/Try Queensberry St/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Queensberry St/i })).toBeInTheDocument()
     expect(screen.getByText(/320 m away/i)).toBeInTheDocument()
     expect(screen.queryByText(/4 min walk/i)).not.toBeInTheDocument()
     expect(screen.getByText(/Good chance · 8 bays free/i)).toBeInTheDocument()
@@ -263,7 +266,9 @@ describe('BusyNowPanel', () => {
       />
     )
 
-    await waitFor(() => expect(screen.getByText(/Target Zone/i)).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText(/Destination: Target Zone · Good chance/)).toBeInTheDocument(),
+    )
     expect(screen.queryByText(/Better nearby options/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Try Queensberry St/i)).not.toBeInTheDocument()
     expect(screen.getByText(/Destination area looks okay/i)).toBeInTheDocument()
@@ -325,7 +330,9 @@ describe('BusyNowPanel', () => {
         destination={{ lat: -37.81, lng: 144.96 }}
       />
     )
-    await waitFor(() => expect(screen.getByText(/live street model fallback/i)).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText(/Alternatives using live street model fallback/i)).toBeInTheDocument(),
+    )
   })
 })
 
@@ -343,6 +350,10 @@ describe('BusyNowPanel A18 — live pills', () => {
     vi.useRealTimers()
   })
 
+  function expandSources() {
+    fireEvent.click(screen.getByRole('button', { name: /Data sources/i }))
+  }
+
   it('pill 1 shows age in seconds from generated_at (approx 47s)', () => {
     const generatedAt = new Date(Date.now() - 47000).toISOString()
     const manifest = {
@@ -355,7 +366,7 @@ describe('BusyNowPanel A18 — live pills', () => {
       },
     }
     render(<BusyNowPanel manifest={manifest} status="ready" />)
-    // Allow for slight timing variation — match /\d+s ago/
+    expandSources()
     const pills = screen.getAllByText(/s ago/)
     expect(pills.length).toBeGreaterThan(0)
     expect(pills[0].textContent).toMatch(/\d+s ago/)
@@ -373,6 +384,7 @@ describe('BusyNowPanel A18 — live pills', () => {
       },
     }
     render(<BusyNowPanel manifest={manifest} status="ready" />)
+    expandSources()
     const matches = screen.getAllByText(/Live bays · \d+s ago/)
     expect(matches.length).toBeGreaterThan(0)
   })
@@ -388,6 +400,7 @@ describe('BusyNowPanel A18 — live pills', () => {
       },
     }
     render(<BusyNowPanel manifest={manifest} status="ready" />)
+    expandSources()
     const matches = screen.getAllByText('SCATS · historical')
     expect(matches.length).toBeGreaterThan(0)
   })
@@ -403,6 +416,7 @@ describe('BusyNowPanel A18 — live pills', () => {
       },
     }
     render(<BusyNowPanel manifest={manifest} status="ready" />)
+    expandSources()
     const matches = screen.getAllByText('Events · 7 active')
     expect(matches.length).toBeGreaterThan(0)
   })
@@ -417,14 +431,16 @@ describe('BusyNowPanel A18 — live pills', () => {
       },
     }
     render(<BusyNowPanel manifest={manifest} status="ready" />)
+    expandSources()
     const matches = screen.getAllByText('Events · 0 active')
     expect(matches.length).toBeGreaterThan(0)
   })
 
-  it('live age increments each second via interval', () => {
-    const generatedAt = new Date(Date.now() - 10000).toISOString()
+  it('live age refreshes on interval (10s) when wall clock advances', () => {
+    const t0 = new Date('2026-05-10T12:00:00.000Z').getTime()
+    vi.setSystemTime(t0)
     const manifest = {
-      generated_at: generatedAt,
+      generated_at: new Date(t0 - 10000).toISOString(),
       events: { active_count: 0 },
       data_sources: {
         sensors: { status: 'live' },
@@ -433,25 +449,22 @@ describe('BusyNowPanel A18 — live pills', () => {
       },
     }
     render(<BusyNowPanel manifest={manifest} status="ready" />)
-    // Capture initial age
+    expandSources()
     const initialPills = screen.getAllByText(/\d+s ago/)
     expect(initialPills.length).toBeGreaterThan(0)
-    const initialText = initialPills[0].textContent
-    const initialMatch = initialText.match(/(\d+)s ago/)
+    const initialMatch = initialPills[0].textContent.match(/(\d+)s ago/)
     expect(initialMatch).not.toBeNull()
     const initialAge = Number(initialMatch[1])
 
-    // Advance 2 seconds — interval should fire and update the age
-    act(() => vi.advanceTimersByTime(2000))
+    vi.setSystemTime(t0 + 25_000)
+    act(() => vi.advanceTimersByTime(10_000))
 
     const updatedPills = screen.getAllByText(/\d+s ago/)
     expect(updatedPills.length).toBeGreaterThan(0)
-    const updatedText = updatedPills[0].textContent
-    const updatedMatch = updatedText.match(/(\d+)s ago/)
+    const updatedMatch = updatedPills[0].textContent.match(/(\d+)s ago/)
     expect(updatedMatch).not.toBeNull()
     const updatedAge = Number(updatedMatch[1])
 
-    // After advancing 2s the age must be >= initial (timer fired)
-    expect(updatedAge).toBeGreaterThanOrEqual(initialAge)
+    expect(updatedAge).toBeGreaterThan(initialAge)
   })
 })
