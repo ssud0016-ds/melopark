@@ -6,21 +6,9 @@ import { fetchBayEvaluation } from '../../services/apiBays'
 import ParkingVerdictPanel from './ParkingVerdictPanel'
 import BayStatusAndLimits from './BayStatusAndLimits'
 import ParkingSignTranslator from './ParkingSignTranslator'
+import BayDetailNavActions from './BayDetailNavActions'
 
-const FOCUSABLE_SELECTOR =
-  'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-
-function listFocusable(root) {
-  if (typeof document === 'undefined' || !root) return []
-  return Array.from(root.querySelectorAll(FOCUSABLE_SELECTOR)).filter((el) => {
-    if (!(el instanceof HTMLElement)) return false
-    const r = el.getBoundingClientRect()
-    if (r.width === 0 && r.height === 0) return false
-    const st = window.getComputedStyle(el)
-    if (st.visibility === 'hidden' || st.display === 'none') return false
-    return true
-  })
-}
+import { listFocusable } from '../../utils/focusTrap'
 
 export default function BayDetailSheet({
   bay,
@@ -319,6 +307,9 @@ export default function BayDetailSheet({
 
       {/* 6. Parking sign translator */}
       <ParkingSignTranslator evaluation={renderEvaluation} />
+
+      {/* 7. Navigate / Walk CTAs (Epic 7) */}
+      <BayDetailNavActions bay={bay} destination={destination} isMobile={isMobile} />
     </div>
   )
 }

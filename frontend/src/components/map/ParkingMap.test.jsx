@@ -69,7 +69,7 @@ describe('ParkingMap color-blind palette', () => {
       isDark: false,
       colorBlindMode: true,
     })
-    expect(normal.bg).toBe('#a3ec48')
+    expect(normal.bg).toBe('#16a34a')
     expect(cb.bg).toBe('#3b82f6')
   })
 })
