@@ -285,13 +285,13 @@ def translate_sign(typedesc: str) -> str:
 
     if "NO STOPPING" in td or "CLEARWAY" in td:
         return (
-            "No stopping — you cannot stop here at all during these hours. "
+            "No stopping. You cannot stop here at all during these hours. "
             "Tow-away zone. Vehicles will be removed at the owner's expense."
         )
 
     if "NO PARKING" in td:
         return (
-            "No parking — you may stop only briefly to drop off or pick up a passenger. "
+            "No parking. You may stop only briefly to drop off or pick up a passenger. "
             "You cannot leave your vehicle unattended here during these hours."
         )
 
@@ -306,15 +306,15 @@ def translate_sign(typedesc: str) -> str:
 
     if "LOADING" in td:
         return (
-            "Loading zone — for commercial vehicles loading or unloading goods only. "
+            "Loading zone for commercial vehicles loading or unloading goods only. "
             "Passenger vehicles may not use this space during these hours."
         )
 
     if "BUS" in td:
-        return "Bus zone — buses only during these hours. All other vehicles must not stop here."
+        return "Bus zone. Buses only during these hours. All other vehicles must not stop here."
 
     if re.search(r"\bTAXI\b", td):
-        return "Taxi zone — taxis only during these hours. Passenger vehicles must not stop here."
+        return "Taxi zone. Taxis only during these hours. Passenger vehicles must not stop here."
 
     if "PERMIT" in td:
         return (
@@ -541,6 +541,84 @@ def _get_database_url() -> str:
     return _resolve_database_url(url)
 
 
+_LZ_PLAIN_ENGLISH = (
+    "Loading zone for commercial vehicles loading or unloading goods only. "
+    "Passenger vehicles may not use this space during these hours."
+)
+
+
+def infer_loading_zones(df: pd.DataFrame) -> pd.DataFrame:
+    """Infer missing Loading Zone rows from 2P MTR pattern.
+
+    Any bay that has a 2P MTR slot starting at 16:00 Mon-Fri (fromday=1,
+    today=5) physically has a Loading Zone 30min from 07:00-16:00 Mon-Fri on
+    the same sign panel. The CoM dataset omits these loading zone rows. This
+    function synthesises them so the app shows the correct rules.
+
+    Only adds rows for bays that have no existing Loading Zone restriction.
+    """
+    mtr = df[
+        df["typedesc"].str.contains("2P MTR", case=False, na=False) &
+        (df["fromday"].astype("Int64") == 1) &
+        (df["today"].astype("Int64") == 5) &
+        (df["starttime"].astype(str).str.startswith("16:00"))
+    ]
+    affected_bay_ids = set(mtr["bay_id"].unique())
+
+    has_lz = set(
+        df[df["typedesc"].str.contains(r"LOADING|LZ\b|L/ZONE", case=False, na=False, regex=True)]["bay_id"].unique()
+    )
+    missing_lz = affected_bay_ids - has_lz
+
+    if not missing_lz:
+        log.info("infer_loading_zones: no missing loading zone rows to add")
+        return df
+
+    # Drop the broad Mon-Fri 2P MTR rows that start at 07:00 and end after 16:00
+    # for these bays. The physical sign replaced them with LZ (7AM-4PM) + meter
+    # (4PM-onward). Keeping them produces a ghost "Mon-Fri 7AM-7PM" row in the UI.
+    broad_mask = (
+        df["bay_id"].isin(missing_lz) &
+        df["typedesc"].str.contains("2P MTR", case=False, na=False) &
+        (df["fromday"].astype("Int64") == 1) &
+        (df["today"].astype("Int64") == 5) &
+        (df["starttime"].astype(str).str.startswith("07:00")) &
+        ~(df["endtime"].astype(str).str.startswith("07:00"))  # exclude zero-length
+    )
+    dropped = broad_mask.sum()
+    df = df[~broad_mask].copy()
+    log.info("infer_loading_zones: dropped %d broad Mon-Fri 07:00 2P MTR rows superseded by LZ", dropped)
+
+    # Assign slot_num = max existing slot for each bay + 1 so no NULL hits the DB.
+    max_slot_by_bay = df.groupby("bay_id")["slot_num"].max().to_dict()
+
+    new_rows = []
+    for bay_id in missing_lz:
+        raw = max_slot_by_bay.get(str(bay_id))
+        next_slot = int((raw if raw is not None and raw == raw else 0) + 1)
+        new_rows.append({
+            "bay_id": str(bay_id),
+            "slot_num": next_slot,
+            "typedesc": "LOADING ZONE 30M",
+            "fromday": 1,
+            "today": 5,
+            "starttime": "07:00:00",
+            "endtime": "16:00:00",
+            "duration_mins": 30,
+            "disabilityext_mins": None,
+            "plain_english": _LZ_PLAIN_ENGLISH,
+            "is_strict": True,
+            "rule_category": "loading",
+        })
+
+    inferred = pd.DataFrame(new_rows)
+    log.info(
+        "infer_loading_zones: added %d Loading Zone rows for %d bays",
+        len(inferred), len(missing_lz),
+    )
+    return pd.concat([df, inferred], ignore_index=True)
+
+
 def dedup_restrictions_for_db(df: pd.DataFrame) -> pd.DataFrame:
     """Drop only exact restriction-window duplicates for DB loads.
 
@@ -699,6 +777,9 @@ def write_to_postgres(gold: pd.DataFrame) -> None:
         # Manual overrides are additive; let dedup_restrictions_for_db handle any overlaps.
         all_rest = pd.concat([all_rest, manual_df], ignore_index=True)
         log.info("After manual overrides: %d rows across %d bays", len(all_rest), all_rest["bay_id"].nunique())
+
+    # ── Infer missing Loading Zone rows from 2P MTR 16:00 pattern ────────
+    all_rest = infer_loading_zones(all_rest)
 
     # ── Track A: load signage gap flags ──────────────────────────────────
     gap_path = SILVER_DIR / "signage_gap_flags.parquet"

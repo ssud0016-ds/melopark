@@ -88,7 +88,7 @@ def _evaluate_from_bay_type(bay_id: str, bay_type: str) -> dict:
             **base,
             "verdict": "no",
             "reason": (
-                "Loading zone — passenger vehicles cannot stop here during posted hours. "
+                "Loading zone. Passenger vehicles cannot stop here during posted hours. "
                 "Check on-site signage for exact times."
             ),
             "active_restriction": {
@@ -105,7 +105,7 @@ def _evaluate_from_bay_type(bay_id: str, bay_type: str) -> dict:
             **base,
             "verdict": "no",
             "reason": (
-                "No standing — vehicles may not stop or wait here during posted hours. "
+                "No standing. Vehicles may not stop or wait here during posted hours. "
                 "Check on-site signage for exact times."
             ),
             "active_restriction": {
@@ -121,7 +121,7 @@ def _evaluate_from_bay_type(bay_id: str, bay_type: str) -> dict:
         return {
             **base,
             "verdict": "no",
-            "reason": "Disability permit required — this bay is reserved for vehicles displaying a valid permit.",
+            "reason": "Disability permit required. This bay is reserved for vehicles displaying a valid permit.",
             "active_restriction": {
                 "typedesc": "Disabled Parking",
                 "rule_category": "disabled",
@@ -208,7 +208,7 @@ def _build_translator_rules(
     # Sort stable by slot_num (pipeline semantics) then time.
     sorted_rows = sorted(
         restrictions,
-        key=lambda r: (getattr(r, "slot_num", 0), _time_to_minutes(r.starttime), _time_to_minutes(r.endtime)),
+        key=lambda r: (getattr(r, "slot_num", None) or 0, _time_to_minutes(r.starttime), _time_to_minutes(r.endtime)),
     )
 
     warning_id = None
@@ -411,7 +411,7 @@ def _verdict_for_restriction(
     if cat == "loading":
         return (
             "no",
-            f"Loading zone only — passenger vehicles cannot park here. {r.plain_english}",
+            f"Loading zone. Passenger vehicles cannot park here. {r.plain_english}",
             None,
             None,
         )
