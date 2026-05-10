@@ -6,6 +6,7 @@ import OnboardingOverlay from './OnboardingOverlay'
 import SearchBar from '../search/SearchBar'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import FilterChips from '../feedback/FilterChips'
+import MapsProviderSettingRow from '../settings/MapsProviderSettingRow'
 import BusyNowPanel from '../busyNow/BusyNowPanel'
 import SegmentPopup from '../busyNow/SegmentPopup'
 import BottomSheet, { SNAP_PEEK, SNAP_HALF } from '../layout/BottomSheet'
@@ -829,6 +830,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           />
         </button>
       </div>
+      <MapsProviderSettingRow />
     </>
   )
 
