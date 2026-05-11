@@ -45,5 +45,15 @@ export function useDarkMode() {
 
   const toggle = useCallback(() => setDark((d) => !d), [])
 
-  return [dark, toggle]
+  // Set theme explicitly: 'light' | 'dark' | 'system'
+  const setTheme = useCallback((mode) => {
+    if (mode === 'system') {
+      localStorage.removeItem(STORAGE_KEY)
+      setDark(window.matchMedia('(prefers-color-scheme: dark)').matches)
+    } else {
+      setDark(mode === 'dark')
+    }
+  }, [])
+
+  return [dark, toggle, setTheme]
 }

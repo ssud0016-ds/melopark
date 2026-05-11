@@ -84,12 +84,27 @@ export default {
       },
       animation: {
         'pulse-dot': 'pulse-dot 2s ease-in-out infinite',
+        'pulse-ring': 'pulse-ring 1.6s ease-out infinite',
       },
       keyframes: {
         'pulse-dot': {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.35' },
         },
+        // Onboarding search bar attention pulse (Polish 1). Stops on first tap.
+        'pulse-ring': {
+          '0%':   { boxShadow: '0 0 0 0 rgba(53, 51, 140, 0.45)' },
+          '70%':  { boxShadow: '0 0 0 8px rgba(53, 51, 140, 0)' },
+          '100%': { boxShadow: '0 0 0 0 rgba(53, 51, 140, 0)' },
+        },
+      },
+      zIndex: {
+        'tab-bar':       '490',
+        'pill':          '495',
+        'scope-strip':   '500',
+        'sheet':         '550',
+        'settings':      '570',
+        'search-bar':    '1000',
       },
     },
   },
