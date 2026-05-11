@@ -84,8 +84,14 @@ vi.mock('./ParkingMap', () => ({
 }))
 
 vi.mock('../search/SearchBar', () => ({
-  default: function MockSearchBar() {
-    return <div data-testid="mock-search-bar" />
+  default: function MockSearchBar({ onSettingsOpen }) {
+    return (
+      <div data-testid="mock-search-bar">
+        <button type="button" onClick={onSettingsOpen} aria-label="Open settings">
+          Settings
+        </button>
+      </div>
+    )
   },
 }))
 
@@ -322,28 +328,31 @@ describe('MapPage verified bays legend', () => {
   })
 
   it('toggles color-blind mode and passes mode to ParkingMap', () => {
-    setViewportWidth(1200)
+    setViewportWidth(414)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /^filters$/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open settings' }))
 
-    expect(screen.getByRole('switch', { name: 'Enable color-blind mode' })).toBeInTheDocument()
+    const toggle = screen.getByRole('switch', { name: 'Color-blind palette' })
+    expect(toggle).toBeInTheDocument()
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
     expect(mockParkingMap).toHaveBeenCalled()
     const initialProps = mockParkingMap.mock.calls.at(-1)?.[0]
     expect(initialProps?.colorBlindMode).toBe(false)
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Enable color-blind mode' }))
+    fireEvent.click(toggle)
 
-    expect(screen.getByRole('switch', { name: 'Disable color-blind mode' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Color-blind palette' })).toHaveAttribute('aria-checked', 'true')
     const toggledProps = mockParkingMap.mock.calls.at(-1)?.[0]
     expect(toggledProps?.colorBlindMode).toBe(true)
   })
 
   it('keeps legend labels and switches legend palette in color-blind mode', () => {
-    setViewportWidth(1200)
+    setViewportWidth(414)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /^filters$/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show legend' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open settings' }))
 
     const available = document.querySelector('.legend-symbol-available')
     expect(available).toBeTruthy()
@@ -352,7 +361,7 @@ describe('MapPage verified bays legend', () => {
     expect(screen.getByText('Caution: Tow Away / Loading Zone')).toBeInTheDocument()
     expect(screen.getByText('Parking spots occupied')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Enable color-blind mode' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Color-blind palette' }))
 
     const availableCb = document.querySelector('.legend-symbol-available')
     expect(availableCb).toBeTruthy()
