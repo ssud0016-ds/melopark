@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import BottomTabBar from '../nav/BottomTabBar'
 
 // ─── SVG icons ─────────────────────────────────────────────────────────────────
 const I = {
@@ -401,7 +402,7 @@ function Skel({ rows=5 }) {
 }
 
 // ─── Main ──────────────────────────────────────────────────────────────────────
-export default function PredictionsPage({ onNavigateToMap = () => {} }) {
+export default function PredictionsPage({ onNavigateToMap = () => {}, onNavigate, darkMode, onToggleDark, onSetTheme }) {
   const [warnings, setWarnings]         = useState([])
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState(null)
@@ -425,6 +426,15 @@ export default function PredictionsPage({ onNavigateToMap = () => {} }) {
   const [zonesHour, setZonesHour]           = useState(0)
   const [forecastExpanded, setForecastExpanded] = useState(false)
   const [busiestExpanded, setBusiestExpanded]   = useState(false)
+
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 900,
+  )
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 900)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchWarnings = useCallback(async () => {
@@ -550,7 +560,10 @@ export default function PredictionsPage({ onNavigateToMap = () => {} }) {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-[100dvh] bg-slate-100 dark:bg-surface-dark">
+    <div
+      className={`min-h-[100dvh] bg-slate-100 dark:bg-surface-dark ${isMobile ? 'pb-[56px]' : ''}`}
+      style={isMobile ? { paddingBottom: 'calc(56px + env(safe-area-inset-bottom))' } : undefined}
+    >
 
       {/* ── Hero search bar ── */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 shadow-sm">
@@ -1049,6 +1062,9 @@ export default function PredictionsPage({ onNavigateToMap = () => {} }) {
         @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
         .card-enter { animation: fadeUp 0.4s ease forwards; }
       `}</style>
+
+      {/* Mobile chrome — bottom tab bar only; no top search bar (page has its own search input) */}
+      {isMobile && <BottomTabBar activePage="predictions" onNavigate={onNavigate} />}
     </div>
   )
 }

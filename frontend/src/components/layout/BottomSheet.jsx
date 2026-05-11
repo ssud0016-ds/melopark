@@ -36,7 +36,7 @@ function nextSnapInDirection(current, direction) {
   return SNAPS[idx]
 }
 
-export default function BottomSheet({ snap, onSnapChange, title, subtitle, children }) {
+export default function BottomSheet({ snap, onSnapChange, title, subtitle, children, bottomOffset = 0 }) {
   const sheetRef = useRef(null)
   const dragState = useRef(null)
   const [dragging, setDragging] = useState(false)
@@ -107,17 +107,21 @@ export default function BottomSheet({ snap, onSnapChange, title, subtitle, child
   const translateY = dragging ? Math.max(-dragOffset, 0 - (SNAP_FULL * vh - heightPx)) : 0
   const visualHeight = Math.min(SNAP_FULL * vh, Math.max(120, heightPx + (dragging ? -dragOffset : 0)))
 
+  // At SNAP_FULL, sheet slides down to bottom:0 to cover tab bar (reveals extra space).
+  // At other snaps, sheet stays above the tab bar (bottomOffset = tab bar height).
+  const computedBottom = snap === SNAP_FULL ? 0 : bottomOffset
+
   const isExpanded = snap === SNAP_FULL
 
   return (
     <div
       ref={sheetRef}
       className={cn(
-        'absolute bottom-0 inset-x-0 z-[550] bg-white dark:bg-surface-dark',
+        'absolute inset-x-0 z-[550] bg-white dark:bg-surface-dark',
         'rounded-t-[20px] shadow-sheet flex flex-col',
-        !dragging && !prefersReduced && 'transition-[height] duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]',
+        !dragging && !prefersReduced && 'transition-[height,bottom] duration-400 ease-[cubic-bezier(0.32,0.72,0,1)]',
       )}
-      style={{ height: visualHeight }}
+      style={{ height: visualHeight, bottom: computedBottom }}
     >
       {/* Drag handle – real interactive zone */}
       <div
