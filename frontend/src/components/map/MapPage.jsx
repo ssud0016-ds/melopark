@@ -2,8 +2,11 @@
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
 import ParkingMap from './ParkingMap'
-import OnboardingOverlay from './OnboardingOverlay'
+import OnboardingOverlay, { setOnboardingDestination } from './OnboardingOverlay'
 import SearchBar from '../search/SearchBar'
+import ChromeSearchBar from '../search/ChromeSearchBar'
+import BottomTabBar, { TAB_BAR_HEIGHT } from '../nav/BottomTabBar'
+import SettingsSheet from '../settings/SettingsSheet'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import FilterChips from '../feedback/FilterChips'
 import BusyNowPanel from '../busyNow/BusyNowPanel'
@@ -68,7 +71,7 @@ function isSignificantBoundsChange(prev, next) {
   return Math.abs(nextArea - prevArea) / denom >= BOUNDS_AREA_EPS_RATIO
 }
 
-export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry, flyTarget }) {
+export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry, flyTarget, onNavigate, darkMode, onToggleDark, onSetTheme }) {
   const mapRef = useRef(null)
   const lastReportedBoundsRef = useRef(null)
 
@@ -604,6 +607,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     }
   }, [mapVisibleBays, mapProximityBays, showLimitedBays])
 
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [legendOpen, setLegendOpen] = useState(false)
   useEffect(() => {
     if (!isMobile) setLegendOpen(true)
@@ -624,7 +628,10 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [altPinPos, clearSelectedSuggestion, isMobile])
 
-  const handlePickLandmark = useCallback((lm) => pickDestination(lm), [pickDestination])
+  const handlePickLandmark = useCallback((lm) => {
+    if (showOnboarding) setOnboardingDestination(lm)
+    pickDestination(lm)
+  }, [pickDestination, showOnboarding])
 
   const handleMapReady = useCallback((map) => {
     mapRef.current = map
@@ -792,6 +799,8 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
     </div>
   )
 
+  // filterFormFields: status, duration, arrive-by only.
+  // Color-blind palette, maps provider, accessibility → SettingsSheet (Settings ⚙)
   const filterFormFields = (
     <>
       <FilterChips
@@ -799,36 +808,10 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
         onStatusFilterChange={setStatusFilter}
         durationFilter={durationFilter}
         onDurationFilterChange={setDurationFilter}
-        accessibleOn={accessibilityAvailableOnly}
-        onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)}
         customDuration={customDuration}
         onCustomDurationChange={setCustomDuration}
       />
       {arriveChip}
-      <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-slate-200/60 bg-white/60 px-2.5 py-1.5 dark:border-slate-600/40 dark:bg-surface-dark/50">
-        <span className="text-[11px] font-semibold text-slate-600 dark:text-gray-300">Color-blind palette</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={colorBlindMode}
-          aria-label={colorBlindMode ? 'Disable color-blind mode' : 'Enable color-blind mode'}
-          onClick={() => setColorBlindMode((v) => !v)}
-          className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-1 ${
-            colorBlindMode
-              ? 'border-sky-400 bg-sky-500 dark:border-sky-500 dark:bg-sky-600'
-              : 'border-gray-300 bg-gray-200 hover:bg-gray-300 dark:border-slate-600 dark:bg-slate-700'
-          }`}
-        >
-          <span
-            aria-hidden
-            className={`pointer-events-none absolute left-0.5 top-0.5 h-4 w-4 rounded-full shadow ring-1 transition-transform duration-200 ease-out ${
-              colorBlindMode
-                ? 'translate-x-5 bg-white ring-sky-300/40'
-                : 'translate-x-0 bg-white ring-black/10 dark:bg-slate-300 dark:ring-white/10'
-            }`}
-          />
-        </button>
-      </div>
     </>
   )
 
@@ -885,8 +868,9 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
   )
 
 
+
   return (
-    <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden">
+    <div className={`flex ${isMobile ? 'h-[100dvh]' : 'h-[calc(100dvh-3rem)] sm:h-[calc(100dvh-4rem)]'} min-h-0 flex-col overflow-hidden`}>
       <div
         className="sr-only"
         aria-live="polite"
@@ -957,62 +941,59 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
         )}
 
         {isMobile ? (
-          <div
-            data-testid="map-toolbar-mobile-stack"
-            className="absolute top-3.5 left-3.5 right-3.5 z-[500] flex flex-col gap-2 pointer-events-none"
-          >
-            <div className="flex flex-col gap-2.5 w-full pointer-events-auto">
-              <div className="flex items-center gap-2 w-full">
-                <div className="min-w-0 flex-1">
-                  <SearchBar destination={destination} onPick={handlePickLandmark} onClear={clearDestination} />
-                </div>
-                <div className="flex flex-row gap-1 shrink-0">
-                  {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => zoomBy(delta)}
-                      aria-label={delta > 0 ? 'Zoom in' : 'Zoom out'}
-                      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white font-sans text-base font-semibold text-gray-700 shadow-map-float transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          <>
+            {/* Chrome search bar — fixed top, z-[1000] */}
+            <ChromeSearchBar
+              destination={destination}
+              onPick={handlePickLandmark}
+              onClear={clearDestination}
+              onSettingsOpen={() => setSettingsOpen(true)}
+              onboardingActive={showOnboarding}
+            />
 
-              <button
-                type="button"
-                data-testid="map-mobile-filter-trigger"
-                onClick={() => setMobileFilterSheetOpen(true)}
-                aria-label={`Open filters and planner. Current: ${mobileFilterSummary}`}
-                className="mt-1 flex w-full min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-slate-200/70 bg-white/90 px-3 py-2 text-left shadow-sm backdrop-blur-md transition-colors hover:bg-white dark:border-slate-600/50 dark:bg-surface-dark-secondary/90 dark:hover:bg-surface-dark-secondary"
-              >
-                <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-700 dark:text-gray-200">
-                  {mobileFilterSummary}
-                </span>
-                <span className="shrink-0 text-[11px] font-semibold text-brand dark:text-brand-light">
-                  Filters
-                </span>
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden
-                  className="shrink-0 text-slate-500 dark:text-slate-400"
+            {/* Tab bar — fixed bottom, z-490; sheet slides over it at SNAP_FULL */}
+            <BottomTabBar activePage="map" onNavigate={onNavigate} />
+
+            <div
+              data-testid="map-toolbar-mobile-stack"
+              className="absolute left-3.5 right-3.5 z-scope-strip flex flex-col gap-2 pointer-events-none"
+              style={{ bottom: `calc(${TAB_BAR_HEIGHT}px + ${SNAP_PEEK * 100}dvh + 12px)` }}
+            >
+            {/* Scope chip + Filters button (left) · Zoom controls (right) */}
+            <div className="flex items-center justify-between gap-2 pointer-events-auto">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="rounded-full border border-slate-200/60 bg-white/85 px-2 py-0.5 shadow-sm backdrop-blur-md dark:border-slate-600/40 dark:bg-surface-dark-secondary/85">
+                  {scopeStrip}
+                </div>
+                <button
+                  type="button"
+                  data-testid="map-mobile-filter-trigger"
+                  onClick={() => setMobileFilterSheetOpen(true)}
+                  aria-label={`Open filters and planner. Current: ${mobileFilterSummary}`}
+                  className={`${chipBase} ${chipIdle} flex items-center gap-1 shadow-sm`}
                 >
-                  <path
-                    d="M6 9l6 6 6-6"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
+                  Filters
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
+                    <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex flex-row gap-1 shrink-0">
+                {[{ delta: 1, label: '+' }, { delta: -1, label: '−' }].map(({ delta, label }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => zoomBy(delta)}
+                    aria-label={delta > 0 ? 'Zoom in' : 'Zoom out'}
+                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white font-sans text-base font-semibold text-gray-700 shadow-map-float transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:text-gray-100 dark:hover:bg-surface-dark-secondary"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
+          </>
         ) : (
           <>
             <div
@@ -1151,8 +1132,13 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           ]
           return (
             <div
-              className="absolute bottom-3.5 z-[510] flex flex-col gap-2"
-              style={{ right: rightInsetPx }}
+              className="absolute z-[510] flex flex-col gap-2"
+              style={{
+                right: rightInsetPx,
+                bottom: isMobile
+                  ? `calc(${TAB_BAR_HEIGHT}px + ${SNAP_PEEK * 100}dvh + 60px)`
+                  : '14px',
+              }}
             >
             <div
               className="rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
@@ -1261,6 +1247,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               onSnapChange={setParkingChanceSnap}
               title={parkingChanceSheetTitle}
               subtitle={parkingChanceSheetSubtitle}
+              bottomOffset={TAB_BAR_HEIGHT}
             >
               <div className="px-3 pb-4">
                 {altPinPos && (
@@ -1412,6 +1399,21 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
             plannerResetNonce={plannerResetNonce}
             durationFilter={durationFilter}
             customDuration={customDuration}
+          />
+        )}
+
+        {isMobile && (
+          <SettingsSheet
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            darkMode={darkMode}
+            onSetTheme={onSetTheme}
+            colorBlindMode={colorBlindMode}
+            onToggleColorBlind={() => setColorBlindMode((v) => !v)}
+            accessibleOnly={accessibilityAvailableOnly}
+            onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)}
+            onNavigate={onNavigate}
+            onHelpOpen={() => { setShowOnboarding(true) }}
           />
         )}
       </div>
