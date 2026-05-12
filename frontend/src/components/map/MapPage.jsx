@@ -1143,7 +1143,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
             <div
               className="rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
             >
-              {isMobile && !legendOpen ? (
+              {!legendOpen ? (
                 <button
                   type="button"
                   onClick={() => setLegendOpen(true)}
@@ -1167,16 +1167,14 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
                       Verified bays
                     </span>
-                    {isMobile && (
-                      <button
-                        type="button"
-                        onClick={() => setLegendOpen(false)}
-                        aria-label="Hide legend"
-                        className="text-white/80 hover:text-white dark:text-brand-800/90 dark:hover:text-brand-900 cursor-pointer text-base leading-none"
-                      >
-                        ×
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setLegendOpen(false)}
+                      aria-label="Hide legend"
+                      className="text-white/80 hover:text-white dark:text-brand-800/90 dark:hover:text-brand-900 cursor-pointer text-base leading-none"
+                    >
+                      ×
+                    </button>
                   </div>
                   {rows.map(({ dotClass, label, symbolClass, color }) => (
                     <div key={label} className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
