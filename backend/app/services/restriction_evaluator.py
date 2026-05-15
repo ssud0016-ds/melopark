@@ -639,6 +639,10 @@ def evaluate_bays_bulk(
     for r in restrictions:
         rest_by_bay.setdefault(r.bay_id, []).append(r)
 
+    # Bulk response is intentionally slim: frontend only consumes
+    # {bay_id, verdict} (see verdictByBayId map in ParkingMap.jsx). lat/lon and
+    # street_name come from /api/parking, which is already CDN-cached. Dropping
+    # them here + response_model_exclude_none cuts the bulk payload ~60%.
     results = []
     for bid in bay_ids:
         bay = bay_map.get(bid)
@@ -651,32 +655,21 @@ def evaluate_bays_bulk(
             active = [r for r in bay_rest if is_restriction_active_at(r, arrival)]
             governing = _pick_governing_restriction(active)
 
-            sn = getattr(bay, "street_name", None)
-
             if governing is None:
-                results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "yes", "street_name": sn})
+                results.append({"bay_id": bid, "verdict": "yes"})
                 continue
 
             verdict, _, _, _ = _verdict_for_restriction(governing, arrival, duration_mins)
-            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": verdict, "street_name": sn})
+            results.append({"bay_id": bid, "verdict": verdict})
             continue
 
         # Same fallback as evaluate_bay_at when DB has no restriction rows.
-        sn = getattr(bay, "street_name", None)
         bay_type = get_cached_bay_type(bid)
         if bay_type and bay_type != "Other":
             ev = _evaluate_from_bay_type(bid, bay_type)
-            results.append(
-                {
-                    "bay_id": bid,
-                    "lat": bay.lat,
-                    "lon": bay.lon,
-                    "verdict": ev["verdict"],
-                    "street_name": sn,
-                }
-            )
+            results.append({"bay_id": bid, "verdict": ev["verdict"]})
         else:
-            results.append({"bay_id": bid, "lat": bay.lat, "lon": bay.lon, "verdict": "unknown", "street_name": sn})
+            results.append({"bay_id": bid, "verdict": "unknown"})
 
     return results
 

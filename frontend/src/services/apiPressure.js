@@ -12,7 +12,10 @@
  * when the manifest version changes.
  */
 
-const MANIFEST_TTL_MS = 60_000
+// Manifest data_version buckets at ~5 min on the server. Polling more often
+// than that only causes tile URLs to thrash (?v= flips) and forces fresh
+// MVT builds. 3 min keeps the UI fresh without amplifying server load.
+const MANIFEST_TTL_MS = 180_000
 const SEGMENT_DETAIL_TTL_MS = 60_000
 
 let _manifestCache = null

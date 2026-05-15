@@ -275,7 +275,9 @@ def test_router_manifest_counts_active_events_from_events_nearby(monkeypatch):
             1,
         ),
     )
-    data = pressure_router.get_tile_manifest()
+    from fastapi import Response
+
+    data = pressure_router.get_tile_manifest(Response())
     assert data["events"]["active_count"] == 1
 
 
@@ -284,7 +286,8 @@ def test_router_tile_endpoint_returns_mvt():
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/vnd.mapbox-vector-tile"
     assert "ETag" in r.headers
-    assert "max-age=60" in r.headers["cache-control"]
+    assert "max-age=300" in r.headers["cache-control"]
+    assert "stale-while-revalidate" in r.headers["cache-control"]
     assert r.headers["x-tile-cache"] in {"hit", "miss"}
     assert "x-tile-build-ms" in r.headers
     assert "x-pressure-version" in r.headers
