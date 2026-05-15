@@ -90,11 +90,14 @@ export default function BayDetailNavActions({ bay, destination }) {
     <div className="px-5 py-4 flex flex-col gap-2">
       <button
         type="button"
-        onClick={() => start('drive')}
+        onClick={() => {
+          start('drive')
+        }
+        }
         className="min-h-[44px] w-full rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 cursor-pointer"
       >
         Navigate to bay
-      </button>
+      </button>       
 
       {validDest ? (
         <button

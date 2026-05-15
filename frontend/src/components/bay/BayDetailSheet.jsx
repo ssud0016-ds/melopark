@@ -7,6 +7,7 @@ import ParkingVerdictPanel from './ParkingVerdictPanel'
 import BayStatusAndLimits from './BayStatusAndLimits'
 import ParkingSignTranslator from './ParkingSignTranslator'
 import BayDetailNavActions from './BayDetailNavActions'
+import SustainabilityBadge from '../SustainabilityBadge'
 
 import { listFocusable } from '../../utils/focusTrap'
 
@@ -29,6 +30,16 @@ export default function BayDetailSheet({
   customDuration = 60,
 }) {
   const [evaluation, setEvaluation] = useState(null)
+  const [carbonData, setCarbonData] = useState(null)
+  useEffect(() => {
+    if (!bay?.id) { setCarbonData(null); return }
+    let cancelled = false
+    fetch(`/api/bays/${bay.id}/carbon`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setCarbonData(d) })
+      .catch(() => { if (!cancelled) setCarbonData(null) })
+    return () => { cancelled = true }
+  }, [bay?.id])
   const [evalLoading, setEvalLoading] = useState(false)
   const durationMins = savedPlannerDurationMins ?? DEFAULT_PLANNER_DURATION_MINS
 
@@ -122,6 +133,7 @@ export default function BayDetailSheet({
     setEvalLoading(true)
     setEvaluation(null)
     fetchBayEvaluation(bay.id, fetchOpts).then((data) => {
+      fetch(`/api/bays/${bay.id}/carbon`).then(r=>r.json()).then(d => { if (!cancelled) setCarbonData(d) }).catch(() => setCarbonData(null))
       if (!cancelled) {
         setEvaluation(data)
         setEvalLoading(false)
@@ -310,6 +322,11 @@ export default function BayDetailSheet({
 
       {/* 7. Navigate / Walk CTAs (Epic 7) */}
       <BayDetailNavActions bay={bay} destination={destination} isMobile={isMobile} />
+
+      {/* 8. Sustainability — Epic 8 */}
+      <div className="px-5 pb-5">
+        <SustainabilityBadge carbonData={carbonData} />
+      </div>
     </div>
   )
 }
