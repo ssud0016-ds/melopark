@@ -303,7 +303,7 @@ export default function BusyNowPanel({
       {isReady && !inDestMode && quietStreets.length > 0 && (
         <div>
           <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-            Other quiet streets
+            Better parking options
           </div>
           <ul className="flex flex-col gap-1.5">
             {quietStreets.map((seg, index) => (

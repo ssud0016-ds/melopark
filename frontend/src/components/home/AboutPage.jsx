@@ -103,43 +103,50 @@ export default function AboutPage({ onNavigate }) {
           </div>
         </section>
 
-        <section id="about-problem" className="bg-white px-5 py-12 sm:px-8">
+        <section id="about-problem" className="bg-white dark:bg-surface-dark px-5 py-12 sm:px-8">
           <div className="mx-auto max-w-5xl">
             <h2 className="text-center text-[30px] font-extrabold tracking-tight text-brand-dark dark:text-white sm:text-[38px]">
               Parking in Melbourne is painful
             </h2>
             <div className="mt-8 grid gap-4 md:grid-cols-3">
               {PAIN_POINTS.map((point) => (
-                <article key={point.value} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-                  <p className="text-[32px] font-extrabold tracking-tight text-brand-dark">{point.value}</p>
-                  <p className="mt-1 text-sm text-gray-500">{point.desc}</p>
+                <article key={point.value} className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-surface-dark-secondary p-6 shadow-sm">
+                  <p className="text-[32px] font-extrabold tracking-tight text-brand-dark dark:text-white">{point.value}</p>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{point.desc}</p>
                 </article>
               ))}
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               {FRICTION_CARDS.map((item) => (
-                <article key={item.title} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-                  <h3 className="text-2xl font-bold tracking-tight text-brand-dark">{item.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-gray-500">{item.desc}</p>
+                <article key={item.title} className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-surface-dark-secondary p-6 shadow-sm">
+                  <h3 className="text-2xl font-bold tracking-tight text-brand-dark dark:text-white">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-gray-500 dark:text-gray-400">{item.desc}</p>
                 </article>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="bg-white px-5 py-12 sm:px-8">
+        <section className="bg-white dark:bg-surface-dark px-5 py-12 sm:px-8">
           <div className="mx-auto max-w-5xl">
             <h2 className="text-center text-[30px] font-extrabold tracking-tight text-brand-dark dark:text-white sm:text-[38px]">
               MeloPark fixes this
             </h2>
             <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {FIX_CARDS.map((card) => (
-                <article key={card.title} className="rounded-2xl border border-gray-200 bg-brand-50/40 p-5 text-center shadow-sm">
-                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-white text-brand">
+                <article
+                  key={card.title}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onNavigate?.('map')}
+                  onKeyDown={(e) => e.key === 'Enter' && onNavigate?.('map')}
+                  className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-brand-50/40 dark:bg-surface-dark-secondary p-5 text-center shadow-sm cursor-pointer hover:border-brand hover:shadow-md transition-all"
+                >
+                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-white dark:bg-surface-dark-tertiary text-brand dark:text-gray-400">
                     <FeatureIcon type={card.icon} />
                   </div>
-                  <h3 className="mt-4 text-base font-bold text-brand-dark">{card.title}</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-500">{card.desc}</p>
+                  <h3 className="mt-4 text-base font-bold text-brand-dark dark:text-white">{card.title}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{card.desc}</p>
                 </article>
               ))}
             </div>
