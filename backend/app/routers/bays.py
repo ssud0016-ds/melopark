@@ -144,9 +144,13 @@ def evaluate_bulk(
     # the single-bay live evaluate. Frontend re-fetches on map pan anyway.
     response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=60"
     return evaluate_bays_in_bbox(south, west, north, east, arrival, duration_mins, db)
+
+
 @router.get("/{bay_id}/carbon", summary="Carbon saving score for a bay")
 @limiter.limit("30/minute")
-def get_carbon(request: Request, bay_id: str):
+def get_carbon(request: Request, response: Response, bay_id: str):
+    # Carbon score is hour-of-day + occupancy based; safe to cache briefly.
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
     try:
         import duckdb
         from datetime import datetime

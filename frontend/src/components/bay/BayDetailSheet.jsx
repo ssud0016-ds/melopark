@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
 import { DEFAULT_PLANNER_DURATION_MINS } from '../../utils/plannerTime'
 import { bayHeading, bayMissingStreetNote, streetShort } from '../../utils/bayLabels'
 import { cn } from '../../utils/cn'
-import { fetchBayEvaluation } from '../../services/apiBays'
+import { fetchBayEvaluation, fetchBayCarbon } from '../../services/apiBays'
 import ParkingVerdictPanel from './ParkingVerdictPanel'
 import BayStatusAndLimits from './BayStatusAndLimits'
 import ParkingSignTranslator from './ParkingSignTranslator'
@@ -34,10 +34,7 @@ export default function BayDetailSheet({
   useEffect(() => {
     if (!bay?.id) { setCarbonData(null); return }
     let cancelled = false
-    fetch(`/api/bays/${bay.id}/carbon`)
-      .then(r => r.json())
-      .then(d => { if (!cancelled) setCarbonData(d) })
-      .catch(() => { if (!cancelled) setCarbonData(null) })
+    fetchBayCarbon(bay.id).then((d) => { if (!cancelled) setCarbonData(d) })
     return () => { cancelled = true }
   }, [bay?.id])
   const [evalLoading, setEvalLoading] = useState(false)
@@ -133,7 +130,7 @@ export default function BayDetailSheet({
     setEvalLoading(true)
     setEvaluation(null)
     fetchBayEvaluation(bay.id, fetchOpts).then((data) => {
-      fetch(`/api/bays/${bay.id}/carbon`).then(r=>r.json()).then(d => { if (!cancelled) setCarbonData(d) }).catch(() => setCarbonData(null))
+      fetchBayCarbon(bay.id).then((d) => { if (!cancelled) setCarbonData(d) })
       if (!cancelled) {
         setEvaluation(data)
         setEvalLoading(false)

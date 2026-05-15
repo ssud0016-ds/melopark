@@ -6,11 +6,14 @@ import BayDetailSheet from './BayDetailSheet'
 
 vi.mock('../../services/apiBays', () => ({
   fetchBayEvaluation: vi.fn(),
+  fetchBayCarbon: vi.fn(),
 }))
 
-const { fetchBayEvaluation } = await import('../../services/apiBays')
+const { fetchBayEvaluation, fetchBayCarbon } = await import('../../services/apiBays')
+fetchBayCarbon.mockResolvedValue(null)
 
 function renderSheetWithEvaluation(evaluation, props = {}) {
+  fetchBayCarbon.mockResolvedValue(null)
   fetchBayEvaluation.mockResolvedValue({
     bay_id: '1000',
     verdict: 'yes',
@@ -47,6 +50,8 @@ describe('BayDetailSheet parking tab UI', () => {
   beforeEach(() => {
     cleanup()
     fetchBayEvaluation.mockClear()
+    fetchBayCarbon.mockClear()
+    fetchBayCarbon.mockResolvedValue(null)
   })
 
   it('renders the key sections from the parking-tab design', async () => {
@@ -273,6 +278,8 @@ describe('BayDetailSheet responsive layout', () => {
   beforeEach(() => {
     cleanup()
     fetchBayEvaluation.mockClear()
+    fetchBayCarbon.mockClear()
+    fetchBayCarbon.mockResolvedValue(null)
   })
 
   it('uses full-width classes on mobile', async () => {
@@ -351,6 +358,8 @@ describe('BayDetailSheet focus and keyboard', () => {
   beforeEach(() => {
     cleanup()
     fetchBayEvaluation.mockClear()
+    fetchBayCarbon.mockClear()
+    fetchBayCarbon.mockResolvedValue(null)
   })
 
   it('sets aria-modal and moves initial focus to the close control', async () => {
