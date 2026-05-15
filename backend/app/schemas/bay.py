@@ -57,7 +57,10 @@ class BayEvaluation(BaseModel):
 
 class BayVerdictBrief(BaseModel):
     bay_id: str
-    lat: Optional[float]
-    lon: Optional[float]
     verdict: str
+    # Optional legacy fields. Bulk responses no longer populate these (frontend
+    # reads lat/lon/street_name from /api/parking instead) — kept on the schema
+    # so older clients still parse the payload.
+    lat: Optional[float] = None
+    lon: Optional[float] = None
     street_name: Optional[str] = None
