@@ -178,6 +178,26 @@ export async function fetchEvaluateBulk(bbox, options) {
 }
 
 /**
+ * Fetch carbon saving score for a single bay from `GET /api/bays/{bayId}/carbon`.
+ *
+ * Returns `{ saved_g, pct_avoided, score }` or null if the request fails.
+ * MUST use VITE_API_URL — relative `/api/...` 404s in prod because Vercel does
+ * not host the API path.
+ */
+export async function fetchBayCarbon(bayId) {
+  if (!bayId) return null
+  const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+  const url = `${base}/api/bays/${encodeURIComponent(bayId)}/carbon`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+/**
  * Fetch nearby disability-only bays around a destination point.
  * Backend: GET /api/accessibility/nearby
  */
