@@ -134,7 +134,7 @@ describe('BusyNowPanel', () => {
       />
     )
 
-    expect(screen.getByText(/Best nearby parking/i)).toBeInTheDocument()
+    expect(screen.getByText(/Parking chance: live now/i)).toBeInTheDocument()
     const firstChip = screen.getByRole('button', { name: /Lygon St/i })
     expect(firstChip.className).toContain('min-h-[52px]')
   })

@@ -50,6 +50,7 @@ def _parse_at(at: Optional[str]) -> Optional[datetime]:
 )
 def get_pressure(
     request: Request,
+    response: Response,
     at: Optional[str] = Query(None, description="ISO-8601 datetime (default: now Melbourne time)"),
     horizon: str = Query("now", description="Time horizon label", pattern="^(now|1h|3h|6h)$"),
 ):
@@ -58,6 +59,7 @@ def get_pressure(
 
     query_time = _parse_at(at) or datetime.now(MELB_TZ)
     zones = compute_pressure(at=query_time, horizon=horizon)
+    response.headers["Cache-Control"] = "public, max-age=20, stale-while-revalidate=40"
 
     return {
         "generated_at": datetime.now(MELB_TZ).isoformat(),
@@ -79,12 +81,14 @@ def get_pressure(
 )
 def get_alternatives(
     request: Request,
+    response: Response,
     lat: float = Query(..., ge=-90.0, le=90.0, description="Destination latitude"),
     lon: float = Query(..., ge=-180.0, le=180.0, description="Destination longitude"),
     at: Optional[str] = Query(None, description="ISO-8601 datetime (default: now)"),
     radius: int = Query(800, ge=100, le=2000, description="Search radius in metres"),
     limit: int = Query(3, ge=1, le=10, description="Max alternatives to return"),
 ):
+    response.headers["Cache-Control"] = "public, max-age=20, stale-while-revalidate=40"
     if not is_gold_loaded():
         if not sps.is_loaded():
             raise HTTPException(status_code=503, detail="Pressure data not loaded yet")

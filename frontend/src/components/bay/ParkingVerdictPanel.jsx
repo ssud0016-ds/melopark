@@ -38,7 +38,14 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
     (warning?.type || '').toLowerCase() === 'disabled' ||
     (restriction?.rule_category || '').toLowerCase() === 'disabled'
 
-  const paymentRequired = evaluation ? 'Yes' : null
+  const translatorRules = evaluation?.translator_rules ?? []
+  const currentRule = translatorRules.find((r) => r.state === 'current') ?? null
+  const outsideRule = translatorRules.find((r) => r.state === 'outside') ?? null
+  const noPayment =
+    restriction?.rule_category === 'free' ||
+    (!currentRule && !!outsideRule) ||
+    /(no\s+payment|no\s+limit\s+and\s+no\s+payment)/i.test(currentRule?.body || '')
+  const paymentRequired = !evaluation ? null : noPayment ? 'No' : 'Yes'
 
   const stayLimit =
     restriction?.max_stay_mins != null
@@ -124,19 +131,30 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
 
   return (
     <div className={cn('mx-5 mt-3 rounded-2xl p-5', panelTone)}>
-      <div className="flex items-baseline gap-3">
-        <div className="text-5xl font-extrabold tracking-tight text-[#263089]">
-          {word}
+      {permitOnly ? (
+        <>
+          <div className="text-5xl font-extrabold tracking-tight text-[#263089]">
+            {word}
+          </div>
+          <div className="mt-1 text-sm font-semibold text-[#263089]">{sentence}</div>
+        </>
+      ) : (
+        <div className="flex items-baseline gap-3">
+          <div className="text-5xl font-extrabold tracking-tight text-[#263089]">
+            {word}
+          </div>
+          <div className="text-sm font-semibold text-[#263089]">{sentence}</div>
         </div>
-        <div className="text-sm font-semibold text-[#263089]">{sentence}</div>
-      </div>
+      )}
       {trustNote && (
         <div className="mt-2 rounded-lg bg-white/35 px-3 py-2 text-[11px] font-semibold text-[#263089]">
           {trustNote}
         </div>
       )}
 
-      <div className="mt-4 space-y-2.5 text-sm text-[#263089]">
+      <hr className="mt-3 border-t border-[#263089]/20" />
+
+      <div className="mt-3 space-y-2.5 text-sm text-[#263089]">
         {showRestrictionRow && (
           <div className="flex items-center justify-between gap-3">
             <div className="font-semibold">Parking Restriction:</div>

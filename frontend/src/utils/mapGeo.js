@@ -3,9 +3,24 @@ const NORTH_LAT = -37.8055
 const SOUTH_LAT = -37.8225
 const WEST_LNG = 144.9475
 const EAST_LNG = 144.9745
+const CITY_PAD = 0.02
 
 /** Walking / search radius used for filters and Leaflet Circle (metres). */
-export const SEARCH_RADIUS_M = 600
+export const SEARCH_RADIUS_M = 400
+
+/**
+ * Supported interactive map area (City of Melbourne with light padding).
+ * Used to keep demo interactions within the area our parking dataset supports.
+ * Format for Leaflet maxBounds: [[south, west], [north, east]].
+ */
+export const MELBOURNE_MAX_BOUNDS = [
+  [SOUTH_LAT - CITY_PAD, WEST_LNG - CITY_PAD],
+  [NORTH_LAT + CITY_PAD, EAST_LNG + CITY_PAD],
+]
+
+/** MapContainer zoom guardrails for stable demo behaviour. */
+export const MELBOURNE_MIN_ZOOM = 13
+export const MELBOURNE_MAX_ZOOM = 19
 
 export function normToLatLng(x, y) {
   const lat = NORTH_LAT + y * (SOUTH_LAT - NORTH_LAT)

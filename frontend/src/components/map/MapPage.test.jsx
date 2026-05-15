@@ -3,9 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import MapPage from './MapPage'
 import { getStatusFillColor } from './ParkingMap'
+import { SEARCH_RADIUS_M } from '../../utils/mapGeo'
 import * as useBusyNowModule from '../../hooks/useBusyNow'
+import { fetchEvaluateBulk } from '../../services/apiBays'
 
 const mockMapState = vi.hoisted(() => ({ destination: null }))
+const mockDebouncedPlanner = vi.hoisted(() => ({
+  value: {
+    arrivalIso: '2026-01-01T12:00:00+11:00',
+    durationMins: 60,
+  },
+}))
 
 vi.mock('../../hooks/useMapState', () => ({
   useMapState: () => ({
@@ -13,6 +21,16 @@ vi.mock('../../hooks/useMapState', () => ({
     setSelectedBayId: vi.fn(),
     activeFilter: 'all',
     setActiveFilter: vi.fn(),
+    statusFilter: 'all',
+    setStatusFilter: vi.fn(),
+    durationFilter: null,
+    setDurationFilter: vi.fn(),
+    customDuration: 60,
+    setCustomDuration: vi.fn(),
+    filterTime: '12:00',
+    setFilterTime: vi.fn(),
+    filterDate: '2026-01-01',
+    setFilterDate: vi.fn(),
     destination: mockMapState.destination,
     pickDestination: vi.fn(),
     clearDestination: vi.fn(),
@@ -34,6 +52,16 @@ vi.mock('../../hooks/useMapState', () => ({
 vi.mock('../../services/apiBays', () => ({
   fetchAccessibilityNearby: vi.fn().mockResolvedValue({ bays: [] }),
   fetchEvaluateBulk: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('../../hooks/useDebouncedPlannerParams', () => ({
+  // Keep evaluate-bulk pipeline active in tests without touching UI flows.
+  useDebouncedPlannerParams: vi.fn(() => mockDebouncedPlanner.value),
+}))
+
+vi.mock('../../hooks/useDebouncedValue', () => ({
+  // Keep bounds assertions deterministic in unit tests.
+  useDebouncedValue: vi.fn((value) => value),
 }))
 
 const mockParkingMap = vi.fn(() => <div data-testid="mock-parking-map" />)
@@ -123,6 +151,17 @@ describe('MapPage toolbar layout', () => {
     expect(screen.queryByRole('button', { name: /accessibility mode/i })).not.toBeInTheDocument()
   })
 
+  it('uses a single filter summary on mobile and opens filters in a bottom sheet', () => {
+    setViewportWidth(414)
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    expect(screen.queryByText(/^Showing:/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('map-mobile-filter-trigger')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('map-mobile-filter-trigger'))
+    expect(screen.getByTestId('mock-filter-chips')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^done$/i }))
+    expect(screen.queryByTestId('mock-filter-chips')).not.toBeInTheDocument()
+  })
+
   it('uses desktop-centered toolbar and separate right control column on wide viewports', () => {
     setViewportWidth(1200)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
@@ -139,11 +178,11 @@ describe('MapPage alt-pin (Phase 2 — A11)', () => {
     mockBusyNowPanel.mockClear()
   })
 
-  it('passes dimRadiusM=600 to ParkingMap', () => {
+  it('passes SEARCH_RADIUS_M as dimRadiusM to ParkingMap', () => {
     setViewportWidth(1200)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
     const props = mockParkingMap.mock.calls.at(-1)?.[0]
-    expect(props?.dimRadiusM).toBe(600)
+    expect(props?.dimRadiusM).toBe(SEARCH_RADIUS_M)
     expect(props?.altPinPos).toBeNull()
   })
 
@@ -286,14 +325,16 @@ describe('MapPage verified bays legend', () => {
     setViewportWidth(1200)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
 
-    expect(screen.getByRole('button', { name: 'Enable color-blind mode' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^filters$/i }))
+
+    expect(screen.getByRole('switch', { name: 'Enable color-blind mode' })).toBeInTheDocument()
     expect(mockParkingMap).toHaveBeenCalled()
     const initialProps = mockParkingMap.mock.calls.at(-1)?.[0]
     expect(initialProps?.colorBlindMode).toBe(false)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enable color-blind mode' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable color-blind mode' }))
 
-    expect(screen.getByRole('button', { name: 'Disable color-blind mode' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Disable color-blind mode' })).toBeInTheDocument()
     const toggledProps = mockParkingMap.mock.calls.at(-1)?.[0]
     expect(toggledProps?.colorBlindMode).toBe(true)
   })
@@ -302,6 +343,8 @@ describe('MapPage verified bays legend', () => {
     setViewportWidth(1200)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
 
+    fireEvent.click(screen.getByRole('button', { name: /^filters$/i }))
+
     const available = document.querySelector('.legend-symbol-available')
     expect(available).toBeTruthy()
     expect(available?.getAttribute('style') || '').toContain('rgb(163, 236, 72)')
@@ -309,7 +352,7 @@ describe('MapPage verified bays legend', () => {
     expect(screen.getByText('Caution: Tow Away / Loading Zone')).toBeInTheDocument()
     expect(screen.getByText('Parking spots occupied')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enable color-blind mode' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable color-blind mode' }))
 
     const availableCb = document.querySelector('.legend-symbol-available')
     expect(availableCb).toBeTruthy()
@@ -348,7 +391,7 @@ describe('MapPage parking chance main-map integration', () => {
     setViewportWidth(414)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
 
-    expect(screen.getByText('Best nearby parking')).toBeInTheDocument()
+    expect(screen.getByText('Parking chance nearby')).toBeInTheDocument()
     expect(screen.getByText(/Quiet streets around current map view/i)).toBeInTheDocument()
     expect(mockBusyNowPanel.mock.calls.at(-1)?.[0]?.mobileSheet).toBe(true)
     expect(screen.queryByLabelText('Total parking bays on the live feed')).not.toBeInTheDocument()
@@ -382,13 +425,13 @@ describe('MapPage parking chance main-map integration', () => {
       })
     })
 
-    expect(screen.getAllByText('Less busy pick').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Your pick').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Lygon St').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Clear pick' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
     expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).not.toBeNull()
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Clear pick' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     })
 
     expect(mockParkingMap.mock.calls.at(-1)?.[0]?.altPinPos).toBeNull()
@@ -447,5 +490,40 @@ describe('MapPage parking chance main-map integration', () => {
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
     const mapProps = mockParkingMap.mock.calls.at(-1)?.[0]
     expect(mapProps?.busyNow).toBe(false)
+  })
+})
+
+describe('MapPage bounds threshold', () => {
+  beforeEach(() => {
+    cleanup()
+    mockParkingMap.mockClear()
+    vi.mocked(fetchEvaluateBulk).mockClear()
+    setViewportWidth(1200)
+  })
+
+  it('ignores tiny bounds jitter and avoids extra evaluate-bulk updates', async () => {
+    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    const onBoundsChange = mockParkingMap.mock.calls.at(-1)?.[0]?.onBoundsChange
+    expect(typeof onBoundsChange).toBe('function')
+
+    await act(async () => {
+      onBoundsChange({
+        south: -37.83,
+        west: 144.94,
+        north: -37.80,
+        east: 144.98,
+      })
+    })
+    expect(fetchEvaluateBulk).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      onBoundsChange({
+        south: -37.8299,
+        west: 144.9401,
+        north: -37.7999,
+        east: 144.9801,
+      })
+    })
+    expect(fetchEvaluateBulk).toHaveBeenCalledTimes(1)
   })
 })

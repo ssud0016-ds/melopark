@@ -5,7 +5,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from app.services.parking_service import (
     SensorCacheEmptyError,
@@ -27,10 +27,12 @@ _HHMM_RE = re.compile(r"^\d{2}:\d{2}$")
 
 @router.get("", summary="Cleaned parking bays for frontend use")
 @limiter.limit("30/minute")
-async def get_parking_bays(request: Request):
+async def get_parking_bays(request: Request, response: Response):
     """Return simplified, frontend-ready parking bay records."""
     try:
-        return await fetch_parking_bays()
+        data = await fetch_parking_bays()
+        response.headers["Cache-Control"] = "public, max-age=10, stale-while-revalidate=20"
+        return data
     except SensorCacheEmptyError as exc:
         raise HTTPException(
             status_code=503,
