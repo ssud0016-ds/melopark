@@ -98,7 +98,7 @@ describe('BusyNowPanel', () => {
     )
 
     // Heading
-    expect(screen.getByText(/Other quiet streets/i)).toBeInTheDocument()
+    expect(screen.getByText(/Better parking options/i)).toBeInTheDocument()
 
     // 3 chip buttons present in ascending pressure order
     const buttons = screen.getAllByRole('button')
