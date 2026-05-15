@@ -397,7 +397,13 @@ _pressure_cache_max = 8
 
 
 def _sensor_source_signature() -> str:
-    """Stable signature for live bay source data, avoiding wall-clock tile churn."""
+    """Stable signature for live bay source data, avoiding wall-clock tile churn.
+
+    The raw `lastupdated` timestamp shifts on every individual sensor refresh,
+    which busts the tile LRU cache far more often than pressure actually
+    changes. Bucket to 5-minute intervals so the signature only flips when the
+    bucket rolls over — same cadence as the event bucket above.
+    """
     from app.services.parking_service import _sensor_cache
 
     if not _sensor_cache:
@@ -408,7 +414,16 @@ def _sensor_source_signature() -> str:
         raw = rec.get("lastupdated") or rec.get("last_updated") or ""
         if raw and str(raw) > latest:
             latest = str(raw)
-    return f"sensors-{len(_sensor_cache)}-{latest or 'unknown'}"
+
+    bucket = "unknown"
+    if latest:
+        try:
+            dt = datetime.fromisoformat(latest.replace("Z", "+00:00"))
+            dt = dt.replace(minute=(dt.minute // 5) * 5, second=0, microsecond=0)
+            bucket = dt.isoformat()
+        except (ValueError, TypeError):
+            bucket = latest
+    return f"sensors-{len(_sensor_cache)}-{bucket}"
 
 
 def get_pressure_data_version(at: Optional[datetime] = None) -> str:

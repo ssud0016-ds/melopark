@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -56,6 +56,7 @@ def _parse_query_arrival_iso(arrival_iso: str) -> datetime:
 @limiter.limit("30/minute")
 def evaluate_bay(
     request: Request,
+    response: Response,
     bay_id: str,
     arrival_iso: Optional[str] = Query(
         default=None,
@@ -79,6 +80,10 @@ def evaluate_bay(
     arrival = datetime.now(_MELBOURNE_TZ)
     if arrival_iso is not None:
         arrival = _parse_query_arrival_iso(arrival_iso)
+    else:
+        # Live (no future arrival) → CDN can hold briefly. SWR lets Cloudflare
+        # serve stale instantly while revalidating in background.
+        response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=60"
 
     return evaluate_bay_at(bay_id, arrival, duration_mins, db)
 
@@ -86,11 +91,13 @@ def evaluate_bay(
 @router.get(
     "/evaluate-bulk",
     response_model=list[BayVerdictBrief],
+    response_model_exclude_none=True,
     summary="Bulk-evaluate all bays within a bounding box",
 )
 @limiter.limit("15/minute")
 def evaluate_bulk(
     request: Request,
+    response: Response,
     bbox: str = Query(
         ...,
         description="Bounding box as south,west,north,east (e.g. -37.82,144.95,-37.80,144.97).",
@@ -133,6 +140,9 @@ def evaluate_bulk(
     if arrival_iso is not None:
         arrival = _parse_query_arrival_iso(arrival_iso)
 
+    # Bulk verdicts are derived from current sensor + rules: same SWR window as
+    # the single-bay live evaluate. Frontend re-fetches on map pan anyway.
+    response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=60"
     return evaluate_bays_in_bbox(south, west, north, east, arrival, duration_mins, db)
 @router.get("/{bay_id}/carbon", summary="Carbon saving score for a bay")
 @limiter.limit("30/minute")

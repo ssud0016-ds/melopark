@@ -21,4 +21,8 @@ COPY data/sensor_to_segment_lookup.csv /data/sensor_to_segment_lookup.csv
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8080
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+# Single worker on Basic (512MB / 1 vCPU): the parquet dataset + pressure
+# cache fit once; a second worker doubles RAM and splits the in-process tile
+# LRU + pressure cache, causing first-request misses on whichever worker the
+# request lands on. Scale by adding instances/plans, not workers per instance.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1"]
