@@ -183,7 +183,7 @@ export function MapSpikeScreen() {
             <ClusteredMapView
               key={mapKey}
               ref={mapRef}
-              className="flex-1"
+              style={{ flex: 1 }}
               clusterColor={colors.brand}
               initialRegion={MELBOURNE_CBD_REGION}
               onMapReady={onMapReady}
@@ -196,7 +196,7 @@ export function MapSpikeScreen() {
             <MapView
               key={mapKey}
               ref={mapRef}
-              className="flex-1"
+              style={{ flex: 1 }}
               initialRegion={MELBOURNE_CBD_REGION}
               onMapReady={onMapReady}
               provider={PROVIDER_GOOGLE}

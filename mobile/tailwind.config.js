@@ -2,13 +2,16 @@
 module.exports = {
   content: ['./App.tsx', './src/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
+  // NativeWind v4 supports `class` strategy paired with useColorScheme() from nativewind.
+  // System scheme followed automatically unless toggleColorScheme() overrides.
   darkMode: 'class',
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter'],
+        sans: ['Inter_400Regular'],
       },
       colors: {
+        // Brand ramp documented for Phase 2 (chip/badge variants).
         brand: {
           50: '#dce8ff',
           100: '#e9ecff',
@@ -33,15 +36,7 @@ module.exports = {
           500: '#a3ec48',
           DEFAULT: '#a3ec48',
         },
-        danger: {
-          50: '#ffecec',
-          100: '#ffdede',
-          200: '#f8bcbc',
-          400: '#ed6868',
-          500: '#ed6868',
-          600: '#d85b5b',
-          DEFAULT: '#ed6868',
-        },
+        // Status palette — MASTER.md §Semantic Color Palette 1:1.
         status: {
           good: '#15803d',
           'good-bg': '#f0fdf4',
@@ -60,6 +55,7 @@ module.exports = {
           'dark-secondary': '#1f2937',
           'dark-tertiary': '#374151',
         },
+        // Extended gray ramp pinned to MASTER.md text/border tokens.
         gray: {
           300: '#bcbcbc',
           400: '#9a9a9a',
@@ -68,11 +64,21 @@ module.exports = {
           700: '#474646',
           900: '#393838',
         },
+        danger: {
+          50: '#ffecec',
+          100: '#ffdede',
+          200: '#f8bcbc',
+          400: '#ed6868',
+          500: '#ed6868',
+          600: '#d85b5b',
+          DEFAULT: '#ed6868',
+        },
       },
       borderRadius: {
         '2xl': '1rem',
-        '3xl': '1.25rem',
-        '4xl': '1.5rem',
+        // Plan §3.4: sheet top corners 24px (Material 3 sheet spec). Fixed from 20px.
+        '3xl': '1.5rem',
+        '4xl': '2rem',
       },
       zIndex: {
         'tab-bar': 490,
@@ -81,6 +87,10 @@ module.exports = {
         sheet: 550,
         settings: 570,
         'search-bar': 1000,
+      },
+      spacing: {
+        // Native-only: tab bar height per round 4 spec (OQ-A5).
+        'tab-bar': '56px',
       },
     },
   },

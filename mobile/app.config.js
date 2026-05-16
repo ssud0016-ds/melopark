@@ -1,6 +1,7 @@
 const googleMapsApiKey = process.env.GOOGLE_MAPS_ANDROID_API_KEY;
 
 const plugins = [
+  'expo-font',
   [
     'expo-splash-screen',
     {
@@ -32,6 +33,18 @@ module.exports = {
     icon: './assets/images/icon.png',
     scheme: 'melopark',
     userInterfaceStyle: 'automatic',
+    // Edge-to-edge: transparent system bars, content draws under them.
+    // Plan §3.9 + §12.8. Apps use useSafeAreaInsets() for content padding.
+    androidStatusBar: {
+      translucent: true,
+      backgroundColor: '#00000000',
+      barStyle: 'light-content',
+    },
+    androidNavigationBar: {
+      visible: 'sticky-immersive',
+      barStyle: 'light-content',
+      backgroundColor: '#00000000',
+    },
     android: {
       package: 'app.melopark',
       minSdkVersion: 26,
