@@ -18,6 +18,12 @@ export const MAP_SPIKE_BOUNDS = {
 
 export const CLUSTER_RADIUS = 40;
 
+// Phase 2.A day-2 polyline test (§6 protocol).
+// ~221 BusyNow vector segments at Melbourne CBD scale.
+export const MAP_SPIKE_POLYLINE_COUNT = 221;
+export const MAP_SPIKE_POLYLINE_NODES = 5;
+export const MAP_SPIKE_POLYLINE_SPAN = 0.0035;
+
 export const AUTO_STAGE_RUN = false;
 
 export const AUTO_STAGE_DURATION_MS = 12000;

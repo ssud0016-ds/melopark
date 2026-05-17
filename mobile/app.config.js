@@ -1,4 +1,6 @@
 const googleMapsApiKey = process.env.GOOGLE_MAPS_ANDROID_API_KEY;
+const mapboxDownloadToken = process.env.MAPBOX_DOWNLOAD_TOKEN;
+const mapboxPublicToken = process.env.MAPBOX_PUBLIC_TOKEN;
 
 const plugins = [
   'expo-font',
@@ -12,6 +14,20 @@ const plugins = [
       },
     },
   ],
+  [
+    '@rnmapbox/maps',
+    {
+      RNMapboxMapsDownloadToken: mapboxDownloadToken,
+    },
+  ],
+  [
+    'expo-location',
+    {
+      locationAlwaysAndWhenInUsePermission:
+        'Allow MelOPark to use your location to find parking bays near you.',
+    },
+  ],
+  'expo-navigation-bar',
 ];
 
 if (googleMapsApiKey) {
@@ -33,8 +49,9 @@ module.exports = {
     icon: './assets/images/icon.png',
     scheme: 'melopark',
     userInterfaceStyle: 'automatic',
-    // Edge-to-edge: transparent system bars, content draws under them.
-    // Plan §3.9 + §12.8. Apps use useSafeAreaInsets() for content padding.
+    extra: {
+      mapboxPublicToken,
+    },
     androidStatusBar: {
       translucent: true,
       backgroundColor: '#00000000',
@@ -48,13 +65,28 @@ module.exports = {
     android: {
       package: 'app.melopark',
       minSdkVersion: 26,
-      permissions: [],
+      // Plan §Phase 3 review gate: exactly [FINE, COARSE]. No notifications.
+      permissions: ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'],
       adaptiveIcon: {
         backgroundColor: '#35338c',
         foregroundImage: './assets/images/android-icon-foreground.png',
         monochromeImage: './assets/images/android-icon-monochrome.png',
       },
       predictiveBackGestureEnabled: false,
+      // App Links autoVerify — needs /.well-known/assetlinks.json hosted at melopark.app.
+      intentFilters: [
+        {
+          action: 'VIEW',
+          autoVerify: true,
+          data: [{ scheme: 'https', host: 'melopark.app', pathPrefix: '/' }],
+          category: ['BROWSABLE', 'DEFAULT'],
+        },
+        {
+          action: 'VIEW',
+          data: [{ scheme: 'melopark' }],
+          category: ['BROWSABLE', 'DEFAULT'],
+        },
+      ],
     },
     plugins,
   },
