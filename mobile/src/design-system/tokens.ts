@@ -12,3 +12,8 @@ export { useFocusRing } from './focus';
 export { rootStyle } from './layout';
 
 export const nativeTabBarHeight = 56;
+export const nativeSearchBarHeight = 48;
+export const sheetSnapPoints = ['15%', '50%', '75%'] as const;
+export const SNAP_PEEK = 0;
+export const SNAP_HALF = 1;
+export const SNAP_FULL = 2;

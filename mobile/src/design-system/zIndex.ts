@@ -3,6 +3,8 @@ export const zIndex = {
   pill: 495,
   scopeStrip: 500,
   sheet: 550,
-  settings: 570,
+  settingsSheet: 570,
+  onboarding: 800,
   searchBar: 1000,
+  toast: 1200,
 } as const;

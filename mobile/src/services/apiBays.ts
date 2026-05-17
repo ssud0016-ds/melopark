@@ -67,9 +67,17 @@ export async function fetchParkingBays(): Promise<Bay[]> {
   return records.map(mapApiRecordToBay);
 }
 
+export type TranslatorRule = {
+  heading: string;
+  body: string;
+  state: 'current' | 'upcoming' | 'outside' | string;
+  banner?: string | null;
+};
+
 export type BayEvaluation = {
   verdict: 'yes' | 'no' | 'unknown';
   reason: string;
+  street_name?: string | null;
   active_restriction: {
     typedesc: string;
     rule_category: string;
@@ -77,7 +85,14 @@ export type BayEvaluation = {
     max_stay_mins: number | null;
     expires_at: string | null;
   } | null;
-  warning: { description: string } | null;
+  warning: {
+    description: string;
+    type?: string | null;
+    typedesc?: string | null;
+    starts_at?: string | null;
+    minutes_into_stay?: number | null;
+  } | null;
+  translator_rules?: TranslatorRule[];
   data_source: 'db' | 'api_fallback' | 'unknown';
 };
 

@@ -5,6 +5,7 @@ export const colors = {
   brand: '#35338c',
   brandLight: '#8388c6',
   brandDark: '#2f2d7a',
+  brand900: '#1f1d5e',
   accent: '#a3ec48',
   surface: '#ffffff',
   surfaceSecondary: '#dce8ff',

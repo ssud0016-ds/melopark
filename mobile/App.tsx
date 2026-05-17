@@ -8,13 +8,14 @@ import { useColorScheme } from 'nativewind';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import Mapbox from '@rnmapbox/maps';
 
 import { LocationPermissionBanner } from './src/components/common/LocationPermissionBanner';
 import { OfflineBanner } from './src/components/common/OfflineBanner';
 import { ToastProvider } from './src/components/common/Toast';
 import { colors, interFontMap, rootStyle } from './src/design-system';
+import { DestinationProvider } from './src/hooks/useDestination';
+import { FiltersProvider } from './src/hooks/useFilters';
 import { RootNavigator } from './src/navigation/RootNavigator';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -59,13 +60,15 @@ export default function App() {
   return (
     <GestureHandlerRootView style={rootStyle}>
       <SafeAreaProvider>
-        <BottomSheetModalProvider>
-          <ToastProvider>
-            <RootNavigator />
-            <OfflineBanner />
-            <LocationPermissionBanner />
-          </ToastProvider>
-        </BottomSheetModalProvider>
+        <ToastProvider>
+          <FiltersProvider>
+            <DestinationProvider>
+              <RootNavigator />
+              <OfflineBanner />
+              <LocationPermissionBanner />
+            </DestinationProvider>
+          </FiltersProvider>
+        </ToastProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

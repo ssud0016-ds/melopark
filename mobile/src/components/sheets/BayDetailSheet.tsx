@@ -1,42 +1,75 @@
-import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { BottomSheetModal, BottomSheetScrollView, BottomSheetView } from '@gorhom/bottom-sheet';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
-import { colors, haptics } from '../../design-system';
+import { colors, sheetSnapPoints, SNAP_HALF, SNAP_FULL } from '../../design-system';
 import {
   fetchBayCarbon,
   fetchBayEvaluation,
+  type Bay,
   type BayCarbon,
   type BayEvaluation,
 } from '../../services/apiBays';
+import type { Landmark } from '../../data/landmarks';
+import { bayMissingStreetNote, streetShort } from '../../utils/bayLabels';
+import {
+  DEFAULT_PLANNER_DURATION_MINS,
+  durationFilterLabel,
+  formatMelbourneDate,
+  formatMelbourneTime,
+} from '../../utils/plannerTime';
 
-const SNAP_POINTS = ['50%', '90%'];
-const SNAP_FULL_INDEX = 1;
+import { BayDetailNavActions } from '../bay/BayDetailNavActions';
+import { BayStatusAndLimits } from '../bay/BayStatusAndLimits';
+import { ParkingSignTranslator } from '../bay/ParkingSignTranslator';
+import { ParkingVerdictPanel, type VerdictVariant } from '../bay/ParkingVerdictPanel';
+import { SustainabilityBadge } from '../bay/SustainabilityBadge';
+
+const SNAP_FULL_INDEX = SNAP_FULL;
 
 export type BayDetailSheetRef = {
-  present: (bayId: string) => void;
+  present: (bay: Bay) => void;
   dismiss: () => void;
   snapTo: (index: number) => void;
   getIndex: () => number;
 };
 
 type Props = {
-  onNavigateCta?: (bayId: string) => void;
+  destination?: Landmark | null;
+  durationFilter?: string | null;
+  customDuration?: number | null;
+  plannerArrivalIso?: string | null;
+  plannerDurationMins?: number | null;
   onSheetIndexChange?: (index: number) => void;
+  onTrapDetected?: (msg: string) => void;
 };
 
 export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
-  ({ onNavigateCta, onSheetIndexChange }, ref) => {
+  (
+    {
+      destination = null,
+      durationFilter = null,
+      customDuration = null,
+      plannerArrivalIso = null,
+      plannerDurationMins = null,
+      onSheetIndexChange,
+      onTrapDetected,
+    },
+    ref,
+  ) => {
     const sheetRef = useRef<BottomSheetModal>(null);
     const indexRef = useRef(-1);
-    const [bayId, setBayId] = useState<string | null>(null);
+    const [bay, setBay] = useState<Bay | null>(null);
     const [evaluation, setEvaluation] = useState<BayEvaluation | null>(null);
     const [carbon, setCarbon] = useState<BayCarbon | null>(null);
     const [loading, setLoading] = useState(false);
+    const snaps = useMemo(() => [...sheetSnapPoints], []);
+    const trapNotifiedRef = useRef<string | null>(null);
 
     useImperativeHandle(ref, () => ({
-      present: (id: string) => {
-        setBayId(id);
+      present: (b: Bay) => {
+        setBay(b);
+        trapNotifiedRef.current = null;
         sheetRef.current?.present();
       },
       dismiss: () => sheetRef.current?.dismiss(),
@@ -44,17 +77,30 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
       getIndex: () => indexRef.current,
     }));
 
+    const fetchOpts = useMemo(() => {
+      if (!plannerArrivalIso || plannerDurationMins == null) return null;
+      return { arrivalIso: plannerArrivalIso, durationMins: plannerDurationMins };
+    }, [plannerArrivalIso, plannerDurationMins]);
+
     useEffect(() => {
-      if (!bayId) return;
+      if (!bay?.id) {
+        setEvaluation(null);
+        setCarbon(null);
+        return;
+      }
       let cancelled = false;
       setLoading(true);
       setEvaluation(null);
       setCarbon(null);
-      Promise.all([fetchBayEvaluation(bayId), fetchBayCarbon(bayId)])
+      Promise.all([fetchBayEvaluation(bay.id, fetchOpts), fetchBayCarbon(bay.id)])
         .then(([ev, cb]) => {
           if (cancelled) return;
           setEvaluation(ev);
           setCarbon(cb);
+          if (ev?.warning && onTrapDetected && trapNotifiedRef.current !== bay.id) {
+            trapNotifiedRef.current = bay.id;
+            onTrapDetected(ev.warning.description);
+          }
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -62,22 +108,54 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
       return () => {
         cancelled = true;
       };
-    }, [bayId]);
+    }, [bay?.id, fetchOpts, onTrapDetected]);
 
-    const verdictColor =
-      evaluation?.verdict === 'yes'
-        ? colors.statusGood
-        : evaluation?.verdict === 'no'
-          ? colors.statusAvoid
-          : colors.statusUnknown;
+    const isFuturePlanningMode = ((): boolean => {
+      if (!plannerArrivalIso) return false;
+      const planned = new Date(plannerArrivalIso);
+      if (Number.isNaN(planned.getTime())) return false;
+      return planned.getTime() > Date.now() + 60_000;
+    })();
+
+    const isTowAwayOrLoading = ((): boolean => {
+      const cat = (evaluation?.warning?.type || evaluation?.active_restriction?.rule_category || '').toLowerCase();
+      return cat === 'clearway' || cat === 'loading' || cat === 'no_standing';
+    })();
+
+    const verdictVariant: VerdictVariant | null = ((): VerdictVariant | null => {
+      if (!isFuturePlanningMode && bay?.free === 0) return 'no';
+      if (!evaluation || loading) return null;
+      if (evaluation.verdict === 'no') return 'no';
+      if (evaluation.verdict === 'yes' && evaluation.warning && isTowAwayOrLoading) return 'caution';
+      if (evaluation.verdict === 'yes') return 'yes';
+      return 'no';
+    })();
+
+    const permitOnly =
+      (evaluation?.warning?.type || '').toLowerCase() === 'disabled' ||
+      (evaluation?.active_restriction?.rule_category || '').toLowerCase() === 'disabled';
+
+    const resolvedName = bay?.name?.trim() || evaluation?.street_name || null;
+    const missingStreetNote = resolvedName ? null : bayMissingStreetNote(bay);
+    const streetLine = resolvedName ? streetShort(resolvedName) : null;
+
+    const occupancyBadge = bay?.free === 1 ? 'FREE NOW' : bay?.free === 0 ? 'OCCUPIED NOW' : 'STATUS UNKNOWN';
+    const occupancyDot =
+      bay?.free === 1 ? colors.statusGood : bay?.free === 0 ? colors.statusAvoid : colors.statusUnknown;
+
+    const showingDate = formatMelbourneDate(plannerArrivalIso || new Date().toISOString());
+    const showingTime = formatMelbourneTime(plannerArrivalIso || new Date().toISOString());
+    const durationLabel = durationFilterLabel(durationFilter ?? null, customDuration ?? null);
+    const durationMins = plannerDurationMins ?? DEFAULT_PLANNER_DURATION_MINS;
 
     return (
       <BottomSheetModal
         ref={sheetRef}
-        snapPoints={SNAP_POINTS}
+        snapPoints={snaps}
+        index={SNAP_HALF}
         enableDynamicSizing={false}
         backgroundStyle={{ backgroundColor: colors.surface }}
-        handleIndicatorStyle={{ backgroundColor: colors.surfaceDarkTertiary }}
+        handleIndicatorStyle={{ backgroundColor: colors.surfaceDarkTertiary, width: 32, height: 4 }}
         onChange={(i) => {
           indexRef.current = i;
           onSheetIndexChange?.(i);
@@ -86,93 +164,108 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
           indexRef.current = -1;
           onSheetIndexChange?.(-1);
         }}
+        accessibilityLabel={bay ? `Bay ${bay.id} details` : 'Bay details'}
       >
-        <BottomSheetScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
-          <View style={{ gap: 4 }}>
-            <Text
-              style={{
-                fontSize: 11,
-                fontWeight: '500',
-                color: colors.brand,
-                textTransform: 'uppercase',
-              }}
-            >
-              Bay
+        {/* Header strip — rendered above scroll so the close + ID stay glanceable */}
+        <BottomSheetView style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.08)' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.surfaceDarkTertiary, letterSpacing: 1 }}>
+              {bay ? `BAY #${bay.id}` : 'BAY'}
             </Text>
-            <Text style={{ fontSize: 20, fontWeight: '700', color: colors.surfaceDark }}>
-              {bayId ? `Bay ${bayId}` : 'Loading…'}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: occupancyDot }} />
+                <Text style={{ fontSize: 10, fontWeight: '700', color: colors.surfaceDarkTertiary, letterSpacing: 0.8 }}>
+                  {occupancyBadge}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close bay details"
+                onPress={() => sheetRef.current?.dismiss()}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: colors.surfaceTertiary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                hitSlop={6}
+              >
+                <Text style={{ fontSize: 18, color: colors.surfaceDark, lineHeight: 20 }}>×</Text>
+              </Pressable>
+            </View>
+          </View>
+          {streetLine ? (
+            <Text numberOfLines={2} style={{ marginTop: 2, fontSize: 14, fontWeight: '600', color: colors.surfaceDark }}>
+              {streetLine}
+            </Text>
+          ) : missingStreetNote ? (
+            <Text style={{ marginTop: 2, fontSize: 14, fontWeight: '500', color: colors.surfaceDarkTertiary }}>
+              {missingStreetNote}
+            </Text>
+          ) : null}
+        </BottomSheetView>
+
+        <BottomSheetScrollView contentContainerStyle={{ paddingBottom: 24 }}>
+          {/* "Showing" planner-context strip */}
+          <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
+            <Text numberOfLines={1} style={{ fontSize: 12, color: colors.surfaceDarkTertiary }}>
+              <Text style={{ fontWeight: '600' }}>Showing: </Text>
+              <Text style={{ fontWeight: '600', color: '#2E2A8A' }}>{durationLabel}</Text>
+              <Text> · </Text>
+              <Text style={{ fontWeight: '600', color: '#2E2A8A' }}>
+                {showingDate} {showingTime}
+              </Text>
             </Text>
           </View>
 
-          {loading ? (
-            <ActivityIndicator color={colors.brand} />
-          ) : evaluation ? (
-            <>
-              <VerdictCard
-                verdict={evaluation.verdict}
-                reason={evaluation.reason}
-                color={verdictColor}
-              />
+          {/* Disability permit banner */}
+          {permitOnly ? (
+            <View
+              style={{
+                marginHorizontal: 20,
+                marginTop: 12,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: '#bfdbfe',
+                backgroundColor: '#eff6ff',
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <Text style={{ fontSize: 14 }}>♿</Text>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#1d4ed8', letterSpacing: 1 }}>
+                DISABILITY PERMIT HOLDERS ONLY
+              </Text>
+            </View>
+          ) : null}
 
-              {evaluation.active_restriction ? (
-                <Card title="Active restriction">
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: colors.surfaceDark }}>
-                    {evaluation.active_restriction.typedesc}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary }}>
-                    {evaluation.active_restriction.plain_english}
-                  </Text>
-                  {evaluation.active_restriction.max_stay_mins != null ? (
-                    <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary }}>
-                      Max stay: {evaluation.active_restriction.max_stay_mins} min
-                    </Text>
-                  ) : null}
-                </Card>
-              ) : null}
-
-              {evaluation.warning ? (
-                <Card title="Warning" tint={colors.statusCautionBg}>
-                  <Text style={{ fontSize: 13, color: colors.surfaceDark }}>
-                    {evaluation.warning.description}
-                  </Text>
-                </Card>
-              ) : null}
-
-              {carbon ? (
-                <Card title="Carbon savings">
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: colors.surfaceDark }}>
-                    Score: {carbon.score}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary }}>
-                    ~{Math.round(carbon.saved_g)} g CO₂ saved ·{' '}
-                    {Math.round(carbon.pct_avoided * 100)}% avoided
-                  </Text>
-                </Card>
-              ) : null}
-            </>
+          {loading && !evaluation ? (
+            <View style={{ paddingHorizontal: 20, paddingVertical: 24 }}>
+              <ActivityIndicator color={colors.brand} />
+            </View>
           ) : (
-            <Text style={{ color: colors.surfaceDarkTertiary }}>Bay evaluation unavailable.</Text>
-          )}
+            <>
+              {verdictVariant ? (
+                <ParkingVerdictPanel variant={verdictVariant} durationMins={durationMins} evaluation={evaluation} />
+              ) : null}
 
-          <Pressable
-            accessibilityRole="button"
-            disabled={!bayId}
-            onPress={() => {
-              if (!bayId) return;
-              haptics.medium();
-              onNavigateCta?.(bayId);
-            }}
-            style={{
-              minHeight: 48,
-              borderRadius: 12,
-              backgroundColor: colors.brand,
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginTop: 8,
-            }}
-          >
-            <Text style={{ color: colors.surface, fontWeight: '600' }}>Navigate</Text>
-          </Pressable>
+              <BayStatusAndLimits bay={bay} evaluation={evaluation} />
+
+              <ParkingSignTranslator evaluation={evaluation} />
+
+              <BayDetailNavActions bay={bay} destination={destination} />
+
+              <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
+                <SustainabilityBadge carbonData={carbon} />
+              </View>
+            </>
+          )}
         </BottomSheetScrollView>
       </BottomSheetModal>
     );
@@ -181,63 +274,3 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
 BayDetailSheet.displayName = 'BayDetailSheet';
 
 export { SNAP_FULL_INDEX };
-
-function VerdictCard({
-  verdict,
-  reason,
-  color,
-}: {
-  verdict: 'yes' | 'no' | 'unknown';
-  reason: string;
-  color: string;
-}) {
-  const label = verdict === 'yes' ? 'OK to park' : verdict === 'no' ? 'Avoid' : 'Unknown';
-  return (
-    <View
-      style={{
-        gap: 6,
-        padding: 16,
-        borderRadius: 16,
-        backgroundColor: colors.surfaceTertiary,
-        borderLeftWidth: 4,
-        borderLeftColor: color,
-      }}
-    >
-      <Text style={{ fontSize: 16, fontWeight: '700', color }}>{label}</Text>
-      <Text style={{ fontSize: 13, color: colors.surfaceDark }}>{reason}</Text>
-    </View>
-  );
-}
-
-function Card({
-  title,
-  children,
-  tint,
-}: {
-  title: string;
-  children: React.ReactNode;
-  tint?: string;
-}) {
-  return (
-    <View
-      style={{
-        gap: 6,
-        padding: 14,
-        borderRadius: 14,
-        backgroundColor: tint ?? colors.surfaceTertiary,
-      }}
-    >
-      <Text
-        style={{
-          fontSize: 10,
-          fontWeight: '500',
-          color: colors.surfaceDarkTertiary,
-          textTransform: 'uppercase',
-        }}
-      >
-        {title}
-      </Text>
-      {children}
-    </View>
-  );
-}

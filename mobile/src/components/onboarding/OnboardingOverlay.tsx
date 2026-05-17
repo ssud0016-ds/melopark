@@ -2,153 +2,244 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, haptics } from '../../design-system';
-import type { PulseRingState } from '../../design-system/motion';
-import { PulseRing } from './PulseRing';
+import { colors, fontFamily, haptics, zIndex } from '../../design-system';
+import type { Landmark } from '../../data/landmarks';
 
-type Step = {
-  title: string;
-  body: string;
-  ringState: PulseRingState;
-  ringPosition: 'top' | 'center' | 'bottom';
-  cta: string;
-};
-
-const STEPS: Step[] = [
-  {
-    title: 'Welcome to MelOPark',
-    body: 'Find a parking bay near your destination. Tap a colored dot to see live availability and rules.',
-    ringState: 'load',
-    ringPosition: 'center',
-    cta: 'Got it',
-  },
-  {
-    title: 'BusyNow pressure',
-    body: 'Tap the BusyNow pill (top-right) to see which streets are busy right now. Lines color by demand.',
-    ringState: 'first-tap',
-    ringPosition: 'top',
-    cta: 'Next',
-  },
-  {
-    title: 'Search by street',
-    body: 'Use the Search tab to find a bay by street name or bay ID. Tap a result to jump straight to it.',
-    ringState: 'destination-selected',
-    ringPosition: 'bottom',
-    cta: 'Start',
-  },
-];
+type Step = 'hero' | 'destination' | 'legend';
 
 type Props = {
-  onDone: () => void;
+  hasPressureData: boolean;
+  destination: Landmark | null;
+  onActiveChange?: (active: boolean) => void;
+  onDone: (destination: Landmark | null) => void;
 };
 
-export function OnboardingOverlay({ onDone }: Props) {
+export function OnboardingOverlay({ hasPressureData, destination, onActiveChange, onDone }: Props) {
   const insets = useSafeAreaInsets();
-  const [index, setIndex] = useState(0);
-  const step = STEPS[index];
-  const isLast = index === STEPS.length - 1;
+  const [step, setStep] = useState<Step>('hero');
 
   const advance = () => {
     haptics.light();
-    if (isLast) onDone();
-    else setIndex((i) => i + 1);
+    if (step === 'hero') {
+      setStep('destination');
+      onActiveChange?.(true);
+      return;
+    }
+    if (step === 'destination') {
+      if (hasPressureData) {
+        setStep('legend');
+        onActiveChange?.(false);
+        return;
+      }
+      onActiveChange?.(false);
+      onDone(destination);
+      return;
+    }
+    onDone(destination);
   };
 
   const skip = () => {
     haptics.selection();
-    onDone();
+    onActiveChange?.(false);
+    onDone(null);
   };
 
-  const ringVerticalAlign =
-    step.ringPosition === 'top'
-      ? 'flex-start'
-      : step.ringPosition === 'bottom'
-        ? 'flex-end'
-        : 'center';
+  if (step === 'hero') {
+    return (
+      <View
+        accessibilityViewIsModal
+        accessibilityRole="alert"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: colors.brand900,
+          zIndex: zIndex.onboarding,
+          paddingTop: insets.top + 60,
+          paddingBottom: insets.bottom + 32,
+          paddingHorizontal: 28,
+          gap: 24,
+          justifyContent: 'center',
+        }}
+      >
+        <Text style={{ fontSize: 18, color: 'rgba(255,255,255,0.8)' }}>Welcome to</Text>
+        <Text style={{ fontFamily: fontFamily.sansExtraBold, fontSize: 44, color: colors.surface }}>
+          MelO
+          <Text style={{ color: colors.accent }}>Park</Text>
+        </Text>
+        <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 20 }}>
+          This app helps you find nearby parking bays, check availability, and view parking rules before you park.
+        </Text>
+        <Text style={{ fontSize: 14, color: colors.accent, fontWeight: '700' }}>
+          Stop Circling — Start Parking.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={advance}
+          style={{
+            marginTop: 16,
+            minHeight: 52,
+            borderRadius: 999,
+            backgroundColor: colors.accent,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: colors.brandDark, fontWeight: '800', fontSize: 16 }}>Let's get started</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
+  if (step === 'destination') {
+    return (
+      <View
+        accessibilityViewIsModal
+        accessibilityRole="alert"
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: zIndex.onboarding,
+        }}
+      >
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 14, 60, 0.55)',
+          }}
+        />
+        <View
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            paddingTop: 24,
+            paddingHorizontal: 24,
+            paddingBottom: insets.bottom + 24,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            backgroundColor: colors.surface,
+            gap: 12,
+          }}
+        >
+          <Text style={{ fontFamily: fontFamily.sansExtraBold, fontSize: 28, color: colors.brand }}>
+            Where are you going?
+          </Text>
+          <Text style={{ fontSize: 14, color: colors.surfaceDarkTertiary, lineHeight: 20 }}>
+            Search for your destination above to find free nearby parking bays.
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={skip}
+              style={{ flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Text style={{ color: colors.surfaceDarkTertiary, fontWeight: '600' }}>Skip, just show map</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!destination}
+              onPress={advance}
+              style={{
+                flex: 1,
+                minHeight: 48,
+                borderRadius: 999,
+                backgroundColor: destination ? colors.brand : colors.surfaceTertiary,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text
+                style={{
+                  color: destination ? colors.surface : colors.surfaceDarkTertiary,
+                  fontWeight: '700',
+                }}
+              >
+                {hasPressureData ? 'Next →' : 'Continue →'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // legend
   return (
     <View
       accessibilityViewIsModal
       accessibilityRole="alert"
-      accessibilityLabel="MelOPark onboarding"
       style={{
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
-        zIndex: 600,
-        backgroundColor: 'rgba(53, 51, 140, 0.85)',
+        backgroundColor: 'rgba(15, 14, 60, 0.96)',
+        zIndex: zIndex.onboarding,
+        paddingTop: insets.top + 60,
+        paddingBottom: insets.bottom + 32,
+        paddingHorizontal: 28,
+        gap: 16,
       }}
     >
-      <View
-        style={{
-          flex: 1,
-          paddingTop: insets.top + 60,
-          paddingBottom: insets.bottom + 24,
-          paddingHorizontal: 24,
-          justifyContent: ringVerticalAlign,
-        }}
-      >
-        <View style={{ alignItems: 'center', marginVertical: 32 }}>
-          <PulseRing state={step.ringState} />
-        </View>
+      <Text style={{ fontFamily: fontFamily.sansExtraBold, fontSize: 28, color: colors.surface }}>
+        What you'll see on the map
+      </Text>
+      <View style={{ gap: 10, marginTop: 8 }}>
+        <LegendRow color={colors.statusGood} label="Good chance — bays likely free" />
+        <LegendRow color={colors.statusCaution} label="Getting busy — some pressure" />
+        <LegendRow color={colors.statusAvoid} label="Hard to park now" />
+        <LegendRow color={colors.statusUnknown} label="No live data" />
       </View>
-
-      <View
-        style={{
-          position: 'absolute',
-          left: 16,
-          right: 16,
-          bottom: insets.bottom + 16,
-          padding: 20,
-          borderRadius: 24,
-          backgroundColor: colors.surface,
-          gap: 12,
-        }}
-      >
-        <Text style={{ fontSize: 12, fontWeight: '500', color: colors.brand, textTransform: 'uppercase' }}>
-          Step {index + 1} of {STEPS.length}
-        </Text>
-        <Text style={{ fontSize: 22, fontWeight: '700', color: colors.surfaceDark }}>{step.title}</Text>
-        <Text style={{ fontSize: 14, color: colors.surfaceDarkTertiary, lineHeight: 20 }}>
-          {step.body}
-        </Text>
-
-        <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-          {!isLast ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={skip}
-              style={{
-                minHeight: 44,
-                flex: 1,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: colors.surfaceTertiary,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{ color: colors.surfaceDarkTertiary, fontWeight: '600' }}>Skip</Text>
-            </Pressable>
-          ) : null}
-          <Pressable
-            accessibilityRole="button"
-            onPress={advance}
-            style={{
-              minHeight: 44,
-              flex: 2,
-              borderRadius: 12,
-              backgroundColor: colors.brand,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Text style={{ color: colors.surface, fontWeight: '600' }}>{step.cta}</Text>
-          </Pressable>
-        </View>
+      <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 20, marginTop: 8 }}>
+        Streets are colored by live demand. Tap a street to see how busy it is right now.
+      </Text>
+      <View style={{ flex: 1 }} />
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={skip}
+          style={{ flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text style={{ color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>Skip</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={advance}
+          style={{
+            flex: 1,
+            minHeight: 48,
+            borderRadius: 999,
+            backgroundColor: colors.accent,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: colors.brandDark, fontWeight: '800' }}>Got it</Text>
+        </Pressable>
       </View>
+    </View>
+  );
+}
+
+function LegendRow({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+      <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: color }} />
+      <Text style={{ fontSize: 14, color: colors.surface }}>{label}</Text>
     </View>
   );
 }

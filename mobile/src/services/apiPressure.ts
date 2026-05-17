@@ -7,6 +7,7 @@ export type PressureManifest = {
   data_version?: string;
   minute_bucket?: string;
   tile_url_template: string;
+  total_segments?: number;
 };
 
 let _manifestCache: PressureManifest | null = null;

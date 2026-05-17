@@ -23,7 +23,7 @@ export function BusyNowLayer({ manifest, onSegmentPress }: Props) {
 
   return (
     <VectorSource
-      id="busynow"
+      id="melopark-busynow-src"
       tileUrlTemplates={[tileUrl]}
       minZoomLevel={13}
       maxZoomLevel={19}
@@ -36,7 +36,7 @@ export function BusyNowLayer({ manifest, onSegmentPress }: Props) {
       }}
     >
       <LineLayer
-        id="busynow-line"
+        id="melopark-busynow-line"
         sourceLayerID="pressure"
         style={{
           lineColor: [

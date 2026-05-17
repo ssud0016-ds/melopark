@@ -1,31 +1,19 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 
+import { LiveMapIcon } from '../components/nav/icons/LiveMapIcon';
+import { PredictionsIcon } from '../components/nav/icons/PredictionsIcon';
 import { colors, nativeTabBarHeight, zIndex } from '../design-system';
 import { MapScreen } from '../screens/MapScreen';
 import { PredictionsScreen } from '../screens/PredictionsScreen';
-import { SearchScreen } from '../screens/SearchScreen';
-import { SettingsScreen } from '../screens/SettingsScreen';
 import type { TabParamList } from './types';
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
-type TabIconProps = { focused: boolean; label: string };
-
-// Placeholder text-icon. Phase 2.D replaces with vector glyphs (icon font choice still open).
-function TabIcon({ focused, label }: TabIconProps) {
+function IconWrap({ children }: { children: React.ReactNode }) {
   return (
     <View style={{ alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44 }}>
-      <Text
-        style={{
-          fontSize: 11,
-          fontWeight: focused ? '700' : '500',
-          color: focused ? colors.brand : colors.surfaceDarkTertiary,
-        }}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
+      {children}
     </View>
   );
 }
@@ -35,9 +23,8 @@ export function BottomTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
-        // Plan §7: tab bar absolute + zIndex 490 so sheet at zIndex 550 can overlay it.
-        // MapScreen toggles tabBarStyle.display via setOptions when sheet snaps to top.
+        tabBarShowLabel: true,
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         tabBarStyle: {
           position: 'absolute',
           height: nativeTabBarHeight,
@@ -53,22 +40,26 @@ export function BottomTabs() {
       <Tab.Screen
         name="MapTab"
         component={MapScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon focused={focused} label="Map" /> }}
+        options={{
+          tabBarLabel: 'Live Map',
+          tabBarIcon: ({ focused, color }) => (
+            <IconWrap>
+              <LiveMapIcon focused={focused} color={color} />
+            </IconWrap>
+          ),
+        }}
       />
       <Tab.Screen
         name="PredictionsTab"
         component={PredictionsScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon focused={focused} label="Predict" /> }}
-      />
-      <Tab.Screen
-        name="SearchTab"
-        component={SearchScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon focused={focused} label="Search" /> }}
-      />
-      <Tab.Screen
-        name="SettingsTab"
-        component={SettingsScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon focused={focused} label="Settings" /> }}
+        options={{
+          tabBarLabel: 'Predictions',
+          tabBarIcon: ({ focused, color }) => (
+            <IconWrap>
+              <PredictionsIcon focused={focused} color={color} />
+            </IconWrap>
+          ),
+        }}
       />
     </Tab.Navigator>
   );
