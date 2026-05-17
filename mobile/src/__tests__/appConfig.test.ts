@@ -33,7 +33,13 @@ describe('app.config.js', () => {
   test('App Links autoVerify on melopark.app', () => {
     const filters = appConfig.expo.android.intentFilters ?? [];
     const appLink = filters.find((f) =>
-      f.data?.some?.((d) => d.host === 'melopark.app'),
+      f.data?.some?.(
+        (d) =>
+          typeof d === 'object' &&
+          d !== null &&
+          'host' in d &&
+          d.host === 'melopark.app',
+      ),
     );
     expect(appLink?.autoVerify).toBe(true);
   });
@@ -41,7 +47,13 @@ describe('app.config.js', () => {
   test('melopark:// scheme intent filter present', () => {
     const filters = appConfig.expo.android.intentFilters ?? [];
     const schemeFilter = filters.find((f) =>
-      f.data?.some?.((d) => d.scheme === 'melopark'),
+      f.data?.some?.(
+        (d) =>
+          typeof d === 'object' &&
+          d !== null &&
+          'scheme' in d &&
+          d.scheme === 'melopark',
+      ),
     );
     expect(schemeFilter).toBeDefined();
   });
