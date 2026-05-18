@@ -31,7 +31,7 @@ function durationLabel(durationMins) {
  * - durationMins: number
  * - evaluation: BayEvaluation | null
  */
-export default function ParkingVerdictPanel({ variant, durationMins, evaluation }) {
+export default function ParkingVerdictPanel({ variant, durationMins, evaluation, isOccupiedNow = false }) {
   const restriction = evaluation?.active_restriction ?? null
   const warning = evaluation?.warning ?? null
   const permitOnly =
@@ -149,7 +149,9 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
           <div className="mt-1 text-[11px] font-medium text-[#263089]/70">
             {variant === 'yes'
               ? 'Parking rules allow you to park here.'
-              : 'Parking rules do not allow you to park here at this time.'}
+              : isOccupiedNow
+                ? 'This bay is currently occupied. Please find another parking spot nearby.'
+                : 'Parking rules do not allow you to park here at this time.'}
           </div>
         </div>
       )}

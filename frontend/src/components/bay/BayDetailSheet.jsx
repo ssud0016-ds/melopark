@@ -323,7 +323,8 @@ export default function BayDetailSheet({
         <ParkingVerdictPanel
           variant={verdictVariant}
           durationMins={durationMins}
-            evaluation={renderEvaluation}
+          evaluation={renderEvaluation}
+          isOccupiedNow={!isFuturePlanningMode && bay?.free === 0}
         />
       )}
 
