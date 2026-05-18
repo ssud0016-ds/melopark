@@ -670,7 +670,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
       ) : (
         <>
           {_activePills.slice(0, 2).map((pill) => (
-            <span key={pill} className="inline-flex items-center rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-[11px] font-semibold dark:border-brand-light/30 dark:bg-brand/20 dark:text-white" style={{ color: '#35338c' }}>
+            <span key={pill} className="inline-flex items-center rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-[11px] font-semibold dark:border-brand-light/30 dark:bg-brand/20 dark:!text-white" style={{ color: '#35338c' }}>
               {pill}
             </span>
           ))}

@@ -256,7 +256,7 @@ function destinationDivIcon(name) {
 
 /** Distinct alt-zone marker (Phase 2 — A11). Diamond glyph + amber chip so it's
  *  visually separable from the primary destination pin above. */
-function altPinDivIcon(pin) {
+function altPinDivIcon(pin, isDark = false) {
   const name = pin?.name || 'Less busy option'
   const subtitle = pin?.subtitle || 'Selected less busy parking option'
   const esc = String(name || 'Alternative zone')
@@ -270,10 +270,10 @@ function altPinDivIcon(pin) {
   return L.divIcon({
     className: 'mp-alt-marker',
     html: `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none;transform:translate(-50%,-100%);padding-bottom:4px;" aria-label="${esc}">
-      <div style="width:36px;height:36px;background:#047857;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(4,120,87,0.45),0 0 0 3px #fff;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.18));">
+      <div style="width:36px;height:36px;background:${isDark?'#10b981':'#047857'};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px ${isDark?'rgba(16,185,129,0.6)':'rgba(4,120,87,0.45)'},0 0 0 3px ${isDark?'#a7f3d0':'#fff'};filter:drop-shadow(0 1px 3px rgba(0,0,0,0.18));">
         <span style="font-size:15px;line-height:1;color:#fff;">◆</span>
       </div>
-      <div style="width:1px;height:8px;background:#047857;opacity:0.6;"></div>
+      <div style="width:1px;height:8px;background:${isDark?'#10b981':'#047857'};opacity:${isDark?'0.8':'0.6'};"></div>
     </div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
@@ -326,8 +326,8 @@ export default function ParkingMap({
   )
 
   const altIcon = useMemo(
-    () => (altPinPos ? altPinDivIcon(altPinPos) : null),
-    [altPinPos],
+    () => (altPinPos ? altPinDivIcon(altPinPos, isDark) : null),
+    [altPinPos, isDark],
   )
 
   const destLatLng = destination ? destinationLatLng(destination) : null
@@ -486,10 +486,10 @@ export default function ParkingMap({
             radius={SEARCH_RADIUS_M}
             interactive={false}
             pathOptions={{
-              color: 'rgba(53,51,140,0.75)',
-              fillColor: '#35338c',
-              fillOpacity: 0.07,
-              weight: 2,
+              color: isDark ? 'rgba(160,150,255,0.9)' : 'rgba(53,51,140,0.75)',
+              fillColor: isDark ? '#a096ff' : '#35338c',
+              fillOpacity: isDark ? 0.12 : 0.07,
+              weight: isDark ? 2.5 : 2,
               dashArray: '8 6',
             }}
           />
@@ -668,9 +668,9 @@ export default function ParkingMap({
             ]}
             interactive={false}
             pathOptions={{
-              color: '#047857',
-              opacity: 0.75,
-              weight: 3,
+              color: isDark ? '#34d399' : '#047857',
+              opacity: isDark ? 0.9 : 0.75,
+              weight: isDark ? 3.5 : 3,
               dashArray: '8 8',
             }}
           />
@@ -683,11 +683,11 @@ export default function ParkingMap({
               radius={140}
               interactive={false}
               pathOptions={{
-                color: '#047857',
-                fillColor: '#10b981',
-                fillOpacity: 0.07,
-                weight: 1.5,
-                opacity: 0.35,
+                color: isDark ? '#34d399' : '#047857',
+                fillColor: isDark ? '#34d399' : '#10b981',
+                fillOpacity: isDark ? 0.15 : 0.07,
+                weight: isDark ? 2 : 1.5,
+                opacity: isDark ? 0.7 : 0.35,
                 dashArray: '5 6',
               }}
             />
