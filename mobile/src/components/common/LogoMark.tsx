@@ -1,39 +1,36 @@
-import { Text, View } from 'react-native';
+import { Image, type ImageStyle } from 'react-native';
 
-import { colors, fontFamily } from '../../design-system';
+import { useDarkMode } from '../../hooks/useDarkMode';
+
+const logoLight = require('../../../assets/logo/mobile-light.png');
+const logoDark = require('../../../assets/logo/mobile-dark.png');
 
 type LogoMarkProps = {
   size?: number;
+  /** When set, overrides system theme (light basemap → light asset). */
   variant?: 'light' | 'dark';
 };
 
-// Brand mark. Plan §3.1 LogoMark.tsx — temporary text mark pending designer SVG (OQ §41).
-export function LogoMark({ size = 48, variant = 'light' }: LogoMarkProps) {
-  const bg = variant === 'light' ? colors.brand : colors.surface;
-  const fg = variant === 'light' ? colors.accent : colors.brand;
+/**
+ * Search-bar brand mark (car + magnifier). Matches web LogoMark.jsx assets.
+ */
+export function LogoMark({ size = 24, variant }: LogoMarkProps) {
+  const { dark } = useDarkMode();
+  const useDark = variant != null ? variant === 'dark' : dark;
+  const source = useDark ? logoDark : logoLight;
+
+  const style: ImageStyle = {
+    width: size,
+    height: size,
+  };
 
   return (
-    <View
+    <Image
+      source={source}
+      style={style}
       accessibilityRole="image"
       accessibilityLabel="MelOPark"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 4,
-        backgroundColor: bg,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Text
-        style={{
-          color: fg,
-          fontFamily: fontFamily.sansExtraBold,
-          fontSize: size * 0.55,
-        }}
-      >
-        M
-      </Text>
-    </View>
+      resizeMode="contain"
+    />
   );
 }

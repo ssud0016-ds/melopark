@@ -1,4 +1,4 @@
-import { buildUrl, fetchJson } from './api';
+import { apiBase, buildUrl, fetchJson } from './api';
 
 const MANIFEST_TTL_MS = 180_000;
 const SEGMENT_DETAIL_TTL_MS = 60_000;
@@ -8,7 +8,19 @@ export type PressureManifest = {
   minute_bucket?: string;
   tile_url_template: string;
   total_segments?: number;
+  min_zoom?: number;
+  max_zoom?: number;
+  attribution?: string;
 };
+
+export function buildTileUrlTemplate(manifest: PressureManifest | null | undefined): string | null {
+  if (!manifest) return null;
+  const base = apiBase();
+  const v = encodeURIComponent(manifest.data_version || manifest.minute_bucket || 'now');
+  const template = manifest.tile_url_template;
+  const url = template.startsWith('http') ? template : `${base}${template}`;
+  return `${url}?v=${v}`;
+}
 
 let _manifestCache: PressureManifest | null = null;
 let _manifestCacheTs = 0;

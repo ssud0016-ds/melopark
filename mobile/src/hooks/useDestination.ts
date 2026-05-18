@@ -5,9 +5,12 @@ import type { Landmark } from '../data/landmarks';
 export type AltPin = {
   segmentId?: string | null;
   bayId?: string | null;
+  zoneId?: string | number | null;
+  source?: 'alternative' | 'quiet-street';
   lat: number;
   lng: number;
   label: string;
+  subtitle?: string;
 };
 
 type DestinationApi = {

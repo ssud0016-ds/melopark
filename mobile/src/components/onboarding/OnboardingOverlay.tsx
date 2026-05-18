@@ -3,6 +3,10 @@ import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, fontFamily, haptics, zIndex } from '../../design-system';
+import {
+  getStatusFillColor,
+  PRESSURE_UNKNOWN_COLOR,
+} from '../../utils/pressureSegmentStyle';
 import type { Landmark } from '../../data/landmarks';
 
 type Step = 'hero' | 'destination' | 'legend';
@@ -199,10 +203,10 @@ export function OnboardingOverlay({ hasPressureData, destination, onActiveChange
         What you'll see on the map
       </Text>
       <View style={{ gap: 10, marginTop: 8 }}>
-        <LegendRow color={colors.statusGood} label="Good chance — bays likely free" />
-        <LegendRow color={colors.statusCaution} label="Getting busy — some pressure" />
-        <LegendRow color={colors.statusAvoid} label="Hard to park now" />
-        <LegendRow color={colors.statusUnknown} label="No live data" />
+        <LegendRow color={getStatusFillColor('available', false)} label="Good chance — bays likely free" />
+        <LegendRow color={getStatusFillColor('caution', false)} label="Getting busy — some pressure" />
+        <LegendRow color={getStatusFillColor('occupied', false)} label="Hard to park now" />
+        <LegendRow color={PRESSURE_UNKNOWN_COLOR} label="No live data" />
       </View>
       <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 20, marginTop: 8 }}>
         Streets are colored by live demand. Tap a street to see how busy it is right now.

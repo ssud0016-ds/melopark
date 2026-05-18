@@ -1,32 +1,53 @@
+import { useMemo } from 'react';
 import { LineLayer, VectorSource } from '@rnmapbox/maps';
 
-import { colors } from '../../design-system';
-import { apiBase } from '../../services/api';
-import type { PressureManifest } from '../../services/apiPressure';
+import { buildTileUrlTemplate, type PressureManifest } from '../../services/apiPressure';
+import {
+  buildBusyNowLineLayerStyle,
+  BUSYNOW_HIGH_LEVEL_FILTER,
+  COLOR_BLIND_HIGH_LINE_DASH,
+} from '../../utils/busyNowLayerExpressions';
+import { SEARCH_RADIUS_M } from '../../utils/mapGeo';
 
 type Props = {
-  manifest: PressureManifest | null;
+  manifest: PressureManifest;
+  /** Remount vector tiles when basemap style changes (avoids stale source after styleURL swap). */
+  mapStyleKey?: string;
+  colorBlindMode?: boolean;
+  destination?: { lat: number; lng: number } | null;
+  dimRadiusM?: number;
   onSegmentPress?: (segmentId: string, props: Record<string, unknown>) => void;
 };
 
-// Phase 2.E BusyNow polyline layer.
-// Backend serves MVT tiles at /api/pressure/tiles/{z}/{x}/{y}.mvt; source-layer = "pressure"
-// (matches frontend Leaflet config). Mapbox renders MVT natively — no client
-// decode, no GeoJSON conversion. Library-swap dividend.
-export function BusyNowLayer({ manifest, onSegmentPress }: Props) {
-  if (!manifest) return null;
+// Phase 2.E BusyNow polyline layer — MVT source-layer "pressure" (web parity).
+export function BusyNowLayer({
+  manifest,
+  mapStyleKey = 'default',
+  colorBlindMode = false,
+  destination = null,
+  dimRadiusM = SEARCH_RADIUS_M,
+  onSegmentPress,
+}: Props) {
+  const tileUrl = buildTileUrlTemplate(manifest);
+  const lineStyle = useMemo(
+    () =>
+      buildBusyNowLineLayerStyle({
+        colorBlindMode,
+        destination,
+        dimRadiusM,
+      }),
+    [colorBlindMode, destination, dimRadiusM],
+  );
 
-  const v = encodeURIComponent(manifest.data_version || manifest.minute_bucket || 'now');
-  const template = manifest.tile_url_template;
-  const absolute = template.startsWith('http') ? template : `${apiBase()}${template}`;
-  const tileUrl = `${absolute}?v=${v}`;
+  if (!tileUrl) return null;
 
   return (
     <VectorSource
+      key={`busynow-${mapStyleKey}-${manifest.minute_bucket ?? manifest.data_version ?? 'v'}`}
       id="melopark-busynow-src"
       tileUrlTemplates={[tileUrl]}
-      minZoomLevel={13}
-      maxZoomLevel={19}
+      minZoomLevel={manifest.min_zoom ?? 13}
+      maxZoomLevel={manifest.max_zoom ?? 19}
       onPress={(e) => {
         const f = e.features?.[0];
         if (!f || !onSegmentPress) return;
@@ -38,25 +59,23 @@ export function BusyNowLayer({ manifest, onSegmentPress }: Props) {
       <LineLayer
         id="melopark-busynow-line"
         sourceLayerID="pressure"
-        style={{
-          lineColor: [
-            'match',
-            ['get', 'level'],
-            'low',
-            colors.statusGood,
-            'medium',
-            colors.statusCaution,
-            'high',
-            colors.statusAvoid,
-            'critical',
-            colors.statusAvoid,
-            colors.statusUnknown,
-          ],
-          lineWidth: ['interpolate', ['linear'], ['zoom'], 13, 1.5, 16, 3, 19, 6],
-          lineCap: 'round',
-          lineJoin: 'round',
-          lineOpacity: 0.85,
-        }}
+        belowLayerID="melopark-bay-clusters"
+        style={lineStyle}
+      />
+      <LineLayer
+        id="melopark-busynow-line-high-cb"
+        sourceLayerID="pressure"
+        belowLayerID="melopark-bay-clusters"
+        filter={
+          colorBlindMode
+            ? BUSYNOW_HIGH_LEVEL_FILTER
+            : (['==', ['get', 'level'], '__never__'] as typeof BUSYNOW_HIGH_LEVEL_FILTER)
+        }
+        style={
+          colorBlindMode
+            ? { ...lineStyle, lineDasharray: COLOR_BLIND_HIGH_LINE_DASH }
+            : { lineOpacity: 0, lineWidth: 0 }
+        }
       />
     </VectorSource>
   );

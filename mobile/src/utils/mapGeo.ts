@@ -8,6 +8,18 @@ const EAST_LNG = 144.9745;
 export const DEFAULT_MAP_CENTER: [number, number] = [144.9631, -37.8136];
 export const DEFAULT_MAP_ZOOM = 13;
 export const DESTINATION_MAP_ZOOM = 16;
+/** Web MapPage handleQuietStreetClick flyTo zoom. */
+export const QUIET_STREET_MAP_ZOOM = 18;
+/** Web MapPage handleQuietStreetClick flyTo duration (seconds → ms). */
+export const QUIET_STREET_FLY_MS = 800;
+
+/** Default Melbourne CBD bbox for quiet-segment fetch before Mapbox reports viewport. */
+export const DEFAULT_CBD_BOUNDS = {
+  west: WEST_LNG,
+  south: SOUTH_LAT,
+  east: EAST_LNG,
+  north: NORTH_LAT,
+} as const;
 
 export function haversineMeters(
   lat1: number,
@@ -36,6 +48,41 @@ export function isApproxCbd(lat: number, lng: number, pad = 0.015): boolean {
 
 export function walkingMinutesFromMeters(m: number): number {
   return Math.max(1, Math.ceil(m / 80));
+}
+
+export type LatLng = { lat: number; lng: number };
+
+export type MapLatLngBounds = {
+  ne: [number, number];
+  sw: [number, number];
+};
+
+const BOUNDS_MIN_SPAN_DEG = 0.001;
+
+/** NE/SW corners for Mapbox Camera.fitBounds ([lng, lat] positions). */
+export function boundsFromLatLngs(points: LatLng[]): MapLatLngBounds | null {
+  if (points.length === 0) return null;
+  let minLat = points[0].lat;
+  let maxLat = points[0].lat;
+  let minLng = points[0].lng;
+  let maxLng = points[0].lng;
+  for (const p of points) {
+    minLat = Math.min(minLat, p.lat);
+    maxLat = Math.max(maxLat, p.lat);
+    minLng = Math.min(minLng, p.lng);
+    maxLng = Math.max(maxLng, p.lng);
+  }
+  if (maxLat - minLat < BOUNDS_MIN_SPAN_DEG) {
+    const mid = (maxLat + minLat) / 2;
+    minLat = mid - BOUNDS_MIN_SPAN_DEG / 2;
+    maxLat = mid + BOUNDS_MIN_SPAN_DEG / 2;
+  }
+  if (maxLng - minLng < BOUNDS_MIN_SPAN_DEG) {
+    const mid = (maxLng + minLng) / 2;
+    minLng = mid - BOUNDS_MIN_SPAN_DEG / 2;
+    maxLng = mid + BOUNDS_MIN_SPAN_DEG / 2;
+  }
+  return { ne: [maxLng, maxLat], sw: [minLng, minLat] };
 }
 
 /**

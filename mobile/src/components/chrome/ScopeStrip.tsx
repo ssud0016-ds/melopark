@@ -1,16 +1,14 @@
 import { Pressable, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, zIndex } from '../../design-system';
+import { colors } from '../../design-system';
 import { useFilters } from '../../hooks/useFilters';
 
 type Props = {
   onOpenFilters: () => void;
-  bottomOffset?: number;
 };
 
-export function ScopeStrip({ onOpenFilters, bottomOffset = 0 }: Props) {
-  const insets = useSafeAreaInsets();
+/** Live / filter pills — position via parent anchored to parking chance sheet top. */
+export function ScopeStrip({ onOpenFilters }: Props) {
   const { isDefault, modifiedPills } = useFilters();
   const visiblePills = modifiedPills.slice(0, 2);
   const overflow = Math.max(0, modifiedPills.length - 2);
@@ -19,11 +17,6 @@ export function ScopeStrip({ onOpenFilters, bottomOffset = 0 }: Props) {
     <View
       pointerEvents="box-none"
       style={{
-        position: 'absolute',
-        left: 14,
-        right: 14,
-        bottom: insets.bottom + 56 + bottomOffset + 12,
-        zIndex: zIndex.scopeStrip,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,

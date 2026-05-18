@@ -2,107 +2,167 @@ import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 
+import { EventBadge } from '../busyNow/EventBadge';
 import { colors } from '../../design-system';
-import { fetchSegmentDetail } from '../../services/apiPressure';
+import { fetchSegmentDetail, type PressureManifest } from '../../services/apiPressure';
+import { segmentDetailFromApi, type SegmentPopupDetail } from '../../utils/segmentDetailFromApi';
+import {
+  coverageText,
+  formatChanceLine,
+  formatWhyLine,
+  pressureSignalPct,
+  statusDotColor,
+} from '../../utils/segmentPopup';
 
-const SNAP_POINTS = ['35%'];
+const SNAP_POINTS = ['40%'];
 
 export type SegmentDetailSheetRef = {
   present: (segmentId: string) => void;
   dismiss: () => void;
 };
 
-type SegmentDetail = {
-  segment_id: string;
-  street_name?: string;
-  seg_descr?: string;
-  occ_pct?: number;
-  free?: number;
-  total?: number;
-  level?: 'low' | 'medium' | 'high' | 'critical';
-  pressure?: number;
-  trend?: string;
+type Props = {
+  manifest?: PressureManifest | null;
+  colorBlindMode?: boolean;
 };
 
-export const SegmentDetailSheet = forwardRef<SegmentDetailSheetRef>((_props, ref) => {
-  const sheetRef = useRef<BottomSheetModal>(null);
-  const [segmentId, setSegmentId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<SegmentDetail | null>(null);
-  const [loading, setLoading] = useState(false);
+export const SegmentDetailSheet = forwardRef<SegmentDetailSheetRef, Props>(
+  ({ manifest = null, colorBlindMode = false }, ref) => {
+    const sheetRef = useRef<BottomSheetModal>(null);
+    const [segmentId, setSegmentId] = useState<string | null>(null);
+    const [detail, setDetail] = useState<SegmentPopupDetail | null>(null);
+    const [loading, setLoading] = useState(false);
 
-  useImperativeHandle(ref, () => ({
-    present: (id: string) => {
-      setSegmentId(id);
-      sheetRef.current?.present();
-    },
-    dismiss: () => sheetRef.current?.dismiss(),
-  }));
+    const dataVersion = manifest?.data_version ?? manifest?.minute_bucket ?? null;
 
-  useEffect(() => {
-    if (!segmentId) return;
-    let cancelled = false;
-    setLoading(true);
-    setDetail(null);
-    fetchSegmentDetail(segmentId)
-      .then((d) => {
-        if (!cancelled) setDetail(d as SegmentDetail);
-      })
-      .catch(() => {
-        if (!cancelled) setDetail(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [segmentId]);
+    useImperativeHandle(ref, () => ({
+      present: (id: string) => {
+        setSegmentId(id);
+        sheetRef.current?.present();
+      },
+      dismiss: () => sheetRef.current?.dismiss(),
+    }));
 
-  return (
-    <BottomSheetModal
-      ref={sheetRef}
-      snapPoints={SNAP_POINTS}
-      enableDynamicSizing={false}
-      backgroundStyle={{ backgroundColor: colors.surface }}
-      handleIndicatorStyle={{ backgroundColor: colors.surfaceDarkTertiary }}
-    >
-      <BottomSheetView style={{ flex: 1, padding: 20 }}>
-        {loading ? (
-          <ActivityIndicator color={colors.brand} />
-        ) : detail ? (
-          <View style={{ gap: 8 }}>
-            <Text style={{ fontSize: 11, fontWeight: '500', color: colors.brand, textTransform: 'uppercase' }}>
-              Busy now
-            </Text>
-            <Text style={{ fontSize: 20, fontWeight: '700', color: colors.surfaceDark }}>
-              {detail.street_name ?? `Segment ${detail.segment_id}`}
-            </Text>
-            {detail.seg_descr ? (
-              <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary }}>{detail.seg_descr}</Text>
-            ) : null}
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-              <Stat label="Level" value={detail.level ?? '—'} />
-              <Stat label="Free" value={`${detail.free ?? 0}/${detail.total ?? 0}`} />
-              <Stat label="Pressure" value={detail.pressure != null ? `${Math.round(detail.pressure * 100)}%` : '—'} />
-              <Stat label="Trend" value={detail.trend ?? '—'} />
-            </View>
-          </View>
-        ) : (
-          <Text style={{ color: colors.surfaceDarkTertiary }}>Segment detail unavailable.</Text>
-        )}
-      </BottomSheetView>
-    </BottomSheetModal>
-  );
-});
+    useEffect(() => {
+      if (!segmentId) return;
+      let cancelled = false;
+      setLoading(true);
+      setDetail(null);
+      fetchSegmentDetail(segmentId, { dataVersion })
+        .then((api) => {
+          if (!cancelled) setDetail(segmentDetailFromApi(api));
+        })
+        .catch(() => {
+          if (!cancelled) setDetail(null);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [segmentId, dataVersion]);
+
+    return (
+      <BottomSheetModal
+        ref={sheetRef}
+        snapPoints={SNAP_POINTS}
+        enableDynamicSizing={false}
+        backgroundStyle={{ backgroundColor: colors.surface }}
+        handleIndicatorStyle={{ backgroundColor: colors.surfaceDarkTertiary }}
+      >
+        <BottomSheetView style={{ flex: 1, padding: 20, paddingBottom: 32 }}>
+          {loading ? (
+            <ActivityIndicator color={colors.brand} />
+          ) : detail ? (
+            <SegmentPopupContent detail={detail} colorBlindMode={colorBlindMode} />
+          ) : (
+            <Text style={{ color: colors.surfaceDarkTertiary }}>Segment detail unavailable.</Text>
+          )}
+        </BottomSheetView>
+      </BottomSheetModal>
+    );
+  },
+);
 SegmentDetailSheet.displayName = 'SegmentDetailSheet';
 
-function Stat({ label, value }: { label: string; value: string }) {
+function SegmentPopupContent({
+  detail,
+  colorBlindMode,
+}: {
+  detail: SegmentPopupDetail;
+  colorBlindMode: boolean;
+}) {
+  const dot = statusDotColor(detail.level, colorBlindMode);
+  const { chanceText, occSuffix, trendLabel, trendAria } = formatChanceLine(detail);
+  const whyLine = formatWhyLine(detail);
+  const coverage = coverageText(detail.total_bays, detail.has_live_bays);
+  const pct = pressureSignalPct(detail);
+  const events = detail.events ?? detail.events_nearby ?? [];
+
   return (
-    <View style={{ flex: 1, gap: 2 }}>
-      <Text style={{ fontSize: 10, fontWeight: '500', color: colors.surfaceDarkTertiary, textTransform: 'uppercase' }}>
-        {label}
+    <View accessibilityRole="summary" accessibilityLabel="Street parking chance detail">
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+        <View
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: dot,
+          }}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        />
+        <Text
+          style={{ flex: 1, fontSize: 14, fontWeight: '600', color: colors.surfaceDark }}
+          numberOfLines={2}
+        >
+          {detail.street_name || 'Street segment'}
+        </Text>
+      </View>
+
+      {detail.seg_descr ? (
+        <Text style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginBottom: 4 }}>
+          {detail.seg_descr}
+        </Text>
+      ) : null}
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+        <Text style={{ fontSize: 11, fontWeight: '500', color: colors.surfaceDark }}>
+          {chanceText}
+          {occSuffix}
+        </Text>
+        {trendLabel ? (
+          <Text
+            style={{ fontSize: 11, fontWeight: '500', color: colors.surfaceDark }}
+            accessibilityLabel={trendAria}
+          >
+            {` ${trendLabel}`}
+          </Text>
+        ) : null}
+      </View>
+
+      {(detail.total_bays ?? 0) > 0 && detail.has_live_bays ? (
+        <Text style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginTop: 2 }}>
+          {detail.free_bays} of {detail.total_bays} bays free
+        </Text>
+      ) : null}
+
+      <Text style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginTop: 2 }}>
+        {coverage}
+        {pct != null ? ` · ${pct}% pressure signal` : ''}
       </Text>
-      <Text style={{ fontSize: 14, fontWeight: '600', color: colors.surfaceDark }}>{value}</Text>
+
+      {whyLine ? (
+        <Text
+          style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginTop: 4 }}
+          accessibilityLabel={whyLine.replace(/^Why: /, '')}
+        >
+          {whyLine}
+        </Text>
+      ) : null}
+
+      <EventBadge events={events} />
     </View>
   );
 }

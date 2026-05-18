@@ -242,7 +242,7 @@ export function SearchBar({
           }}
         >
           <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-            <LogoMark size={28} variant="light" />
+            <LogoMark size={28} />
           </View>
           <TextInput
             ref={inputRef}

@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useToast } from '../components/common/Toast';
 import { BusyNowLayer } from '../components/maps/BusyNowLayer';
-import { ParkingMap } from '../components/maps/ParkingMap';
+import { ParkingMap, type ParkingMapRef } from '../components/maps/ParkingMap';
+import { MapLegend } from '../components/map/MapLegend';
 import { OnboardingOverlay } from '../components/onboarding/OnboardingOverlay';
 import { SearchBar } from '../components/chrome/SearchBar';
 import { ScopeStrip } from '../components/chrome/ScopeStrip';
-import { ParkingChanceSheet, type ParkingChanceSheetRef, type QuietStreet } from '../components/sheets/ParkingChanceSheet';
+import { ParkingChanceSheet, type ParkingChanceSheetRef } from '../components/sheets/ParkingChanceSheet';
 import { FilterSheet, type FilterSheetRef } from '../components/sheets/FilterSheet';
 import { SettingsSheet, type SettingsSheetRef } from '../components/sheets/SettingsSheet';
 import { HelpModal, type HelpModalRef } from '../components/help/HelpModal';
@@ -23,16 +25,30 @@ import {
   SegmentDetailSheet,
   type SegmentDetailSheetRef,
 } from '../components/sheets/SegmentDetailSheet';
-import { colors, nativeTabBarHeight, zIndex } from '../design-system';
+import { colors, nativeTabBarHeight, SNAP_HALF, zIndex } from '../design-system';
+import { useMapChromeAnchor } from '../hooks/useMapChromeAnchor';
 import { useBays } from '../hooks/useBays';
 import { useBusyNow } from '../hooks/useBusyNow';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useDestination } from '../hooks/useDestination';
 import { useFilters } from '../hooks/useFilters';
 import { useLocationPermission } from '../hooks/useLocationPermission';
 import { useOnboarding } from '../hooks/useOnboarding';
+import { useDestinationAlternatives } from '../hooks/useDestinationAlternatives';
+import { useDarkMode } from '../hooks/useDarkMode';
+import { useQuietestSegments } from '../hooks/useQuietestSegments';
 import type { TabParamList } from '../navigation/types';
+import type { PressureBounds } from '../services/apiPressure';
 import type { Bay } from '../services/apiBays';
-import { SEARCH_RADIUS_M } from '../utils/mapGeo';
+import { boundsToKey, isSignificantBoundsChange } from '../utils/mapBounds';
+import { buildQuietStreetSelection, mapSegmentsToQuietStreets } from '../utils/quietStreets';
+import { frameMapToAlternative } from '../utils/alternativeNavigation';
+import {
+  buildAlternativePinSubtitle,
+  displayAlternativeLabel,
+} from '../utils/destinationPressure';
+import type { PressureAlternativeZone } from '../types/pressureAlternatives';
+import { DEFAULT_CBD_BOUNDS, SEARCH_RADIUS_M } from '../utils/mapGeo';
 
 type Nav = BottomTabNavigationProp<TabParamList, 'MapTab'>;
 
@@ -57,13 +73,72 @@ export function MapScreen() {
   const [colorBlindMode, setColorBlindMode] = useState(false);
   const [accessibleOnly, setAccessibleOnly] = useState(false);
   const [onboardingActive, setOnboardingActive] = useState(false);
+  const [mapBounds, setMapBounds] = useState<PressureBounds | null>(DEFAULT_CBD_BOUNDS);
 
-  const { manifest } = useBusyNow(true);
+  const { manifest, status: busyNowStatus } = useBusyNow(true);
+  const parkingChanceActive =
+    busyNowStatus === 'ready' &&
+    manifest != null &&
+    (manifest.total_segments ?? 0) > 0;
+  const parkingSheetVisible = busyNowStatus !== 'idle';
+  const { animatedPosition, anchorStyle, onMapLayout } = useMapChromeAnchor(parkingSheetVisible);
   const { needsOnboarding, complete: completeOnboarding } = useOnboarding();
   const { show: showToast } = useToast();
   const { state: locationState, canAskAgain, request: requestLocation } = useLocationPermission();
   const { destination, setDestination, clearDestination, altPin, setAltPin } = useDestination();
+  const { dark: mapDark } = useDarkMode();
   const filters = useFilters();
+
+  const debouncedBounds = useDebouncedValue(mapBounds, 300);
+  const lastReportedBoundsRef = useRef<PressureBounds | null>(null);
+  const mapRef = useRef<ParkingMapRef>(null);
+
+  // Match web: fetch when manifest ready (not only when overlay has segments).
+  const quietSegmentsEnabled = busyNowStatus === 'ready' && !destination;
+  const {
+    segments: quietSegmentsAll,
+    loading: quietSegmentsLoading,
+    error: quietSegmentsError,
+  } = useQuietestSegments({
+    bounds: debouncedBounds,
+    enabled: quietSegmentsEnabled,
+  });
+
+  const {
+    data: destinationAlternatives,
+    loading: destinationAlternativesLoading,
+    error: destinationAlternativesError,
+    retry: retryDestinationAlternatives,
+  } = useDestinationAlternatives({
+    destination,
+    enabled: busyNowStatus === 'ready',
+  });
+
+  useEffect(() => {
+    if (quietSegmentsEnabled) {
+      mapRef.current?.refreshBounds();
+    }
+  }, [quietSegmentsEnabled]);
+
+  const quietStreets = useMemo(
+    () => mapSegmentsToQuietStreets(quietSegmentsAll),
+    [quietSegmentsAll],
+  );
+
+  const parkingChanceSheetTitle = useMemo(() => {
+    if (destination) return `Near ${destination.name}`;
+    return 'Parking chance nearby';
+  }, [destination]);
+
+  const parkingChanceSheetSubtitle = useMemo(() => {
+    if (destination) return `${SEARCH_RADIUS_M} m radius · live now`;
+    return 'Quiet streets around current map view';
+  }, [destination]);
+
+  const selectedSegmentId =
+    altPin?.source === 'quiet-street' || altPin?.segmentId != null ? altPin?.segmentId ?? null : null;
+  const selectedZoneId =
+    altPin?.source === 'alternative' && altPin?.zoneId != null ? altPin.zoneId : null;
 
   useEffect(() => {
     if (locationState === 'never-asked' && canAskAgain) requestLocation();
@@ -84,6 +159,57 @@ export function MapScreen() {
   const onSegmentPress = useCallback((segmentId: string) => {
     segmentDetailRef.current?.present(segmentId);
   }, []);
+
+  const handleMapBounds = useCallback((b: PressureBounds) => {
+    if (!isSignificantBoundsChange(lastReportedBoundsRef.current, b)) return;
+    lastReportedBoundsRef.current = b;
+    setMapBounds((prev) => (boundsToKey(prev) === boundsToKey(b) ? prev : b));
+  }, []);
+
+  const handleQuietStreetClick = useCallback(
+    (street: ReturnType<typeof mapSegmentsToQuietStreets>[number]) => {
+      const selection = buildQuietStreetSelection(street);
+      if (!selection) return;
+      mapRef.current?.flyTo(selection.lat, selection.lng, selection.flyOpts);
+      setAltPin({
+        segmentId: selection.altPin.segmentId,
+        bayId: null,
+        source: 'quiet-street',
+        lat: selection.altPin.lat,
+        lng: selection.altPin.lng,
+        label: selection.altPin.label,
+        subtitle: selection.altPin.subtitle,
+      });
+      pcSheetRef.current?.snapTo(SNAP_HALF);
+    },
+    [setAltPin],
+  );
+
+  const handleAlternativeClick = useCallback(
+    (alt: PressureAlternativeZone) => {
+      const lat = alt.centroid_lat;
+      const lng = alt.centroid_lon;
+      if (typeof lat !== 'number' || typeof lng !== 'number') return;
+      frameMapToAlternative(
+        mapRef.current,
+        destination ? { lat: destination.lat, lng: destination.lng } : null,
+        { lat, lng },
+      );
+      const label = displayAlternativeLabel(alt.label, alt.zone_id);
+      setAltPin({
+        zoneId: alt.zone_id,
+        source: 'alternative',
+        segmentId: null,
+        bayId: null,
+        lat,
+        lng,
+        label,
+        subtitle: buildAlternativePinSubtitle(alt),
+      });
+      pcSheetRef.current?.snapTo(SNAP_HALF);
+    },
+    [destination, setAltPin],
+  );
 
   useEffect(() => {
     const bayId = route.params?.bayId;
@@ -128,20 +254,13 @@ export function MapScreen() {
     else pcSheetRef.current?.snapTo(0);
   }, [destination]);
 
-  const quietStreets = useMemo<QuietStreet[]>(() => {
-    // Hook out to useQuietestSegments when API shape is finalized.
-    // For now derive a small list from available bays so the panel isn't empty.
-    return bays
-      .filter((b) => b.type === 'available' && b.name)
-      .slice(0, 3)
-      .map((b, i) => ({
-        id: b.id,
-        name: b.name ?? `Bay ${b.id}`,
-        freeBays: b.free,
-        walkM: 100 + i * 60,
-        status: 'good',
-      }));
-  }, [bays]);
+  useEffect(() => {
+    if (destination) setAltPin(null);
+  }, [destination, setAltPin]);
+
+  useEffect(() => {
+    if (altPin && !destination) pcSheetRef.current?.snapTo(SNAP_HALF);
+  }, [altPin, destination]);
 
   const accessibilityBayIds = useMemo<string[] | undefined>(
     () => (accessibleOnly ? bays.filter((b) => b.bayType === 'Disabled').map((b) => b.id) : undefined),
@@ -149,13 +268,18 @@ export function MapScreen() {
   );
 
   return (
-    <View className="flex-1 bg-surface dark:bg-surface-dark" style={{ paddingTop: 0 }}>
+    <View
+      className="flex-1 bg-surface dark:bg-surface-dark"
+      style={{ paddingTop: 0 }}
+      onLayout={onMapLayout}
+    >
       {loading && bays.length === 0 ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color={colors.brand} />
         </View>
       ) : (
         <ParkingMap
+          ref={mapRef}
           bays={bays}
           selectedBayId={selectedBayId}
           onSelectBay={onSelectBay}
@@ -163,10 +287,21 @@ export function MapScreen() {
           altPin={altPin}
           dimRadiusM={destination ? SEARCH_RADIUS_M : undefined}
           colorBlindMode={colorBlindMode}
+          mapDark={mapDark}
           accessibilityBayIds={accessibilityBayIds}
           onMapEmptyClick={() => setAltPin(null)}
+          onBoundsChange={handleMapBounds}
         >
-          <BusyNowLayer manifest={manifest} onSegmentPress={onSegmentPress} />
+          {parkingChanceActive && manifest ? (
+            <BusyNowLayer
+              manifest={manifest}
+              mapStyleKey={mapDark ? 'dark' : 'light'}
+              colorBlindMode={colorBlindMode}
+              destination={destination}
+              dimRadiusM={destination ? SEARCH_RADIUS_M : undefined}
+              onSegmentPress={onSegmentPress}
+            />
+          ) : null}
         </ParkingMap>
       )}
 
@@ -179,26 +314,59 @@ export function MapScreen() {
         variant="map"
       />
 
-      <ScopeStrip onOpenFilters={() => filterSheetRef.current?.present()} bottomOffset={0} />
+      <Animated.View
+        pointerEvents="box-none"
+        style={[
+          {
+            position: 'absolute',
+            left: 14,
+            right: 14,
+            zIndex: zIndex.mapChrome,
+          },
+          anchorStyle,
+        ]}
+      >
+        <ScopeStrip onOpenFilters={() => filterSheetRef.current?.present()} />
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents="box-none"
+        style={[
+          {
+            position: 'absolute',
+            left: 14,
+            right: 14 + insets.right,
+            zIndex: zIndex.mapChrome,
+            alignItems: 'flex-end',
+          },
+          anchorStyle,
+        ]}
+      >
+        <MapLegend colorBlindMode={colorBlindMode} parkingChanceActive={parkingChanceActive} />
+      </Animated.View>
 
       <ParkingChanceSheet
         ref={pcSheetRef}
+        animatedPosition={animatedPosition}
         destination={destination}
         altPin={altPin}
         quietStreets={quietStreets}
-        pressureModeNote={filters.pressureModeNote}
-        onAlternativeClick={(s) =>
-          setAltPin({
-            segmentId: null,
-            bayId: s.id,
-            lat: bays.find((b) => b.id === s.id)?.lat ?? 0,
-            lng: bays.find((b) => b.id === s.id)?.lng ?? 0,
-            label: s.name,
-          })
-        }
-        onStreetClick={(id) => onSegmentPress(id)}
+        quietStreetsLoading={quietSegmentsLoading}
+        quietStreetsError={quietSegmentsError}
+        busyNowStatus={busyNowStatus}
+        sheetTitle={parkingChanceSheetTitle}
+        sheetSubtitle={parkingChanceSheetSubtitle}
+        selectedSegmentId={selectedSegmentId}
+        onStreetClick={handleQuietStreetClick}
         onClearSelectedSuggestion={() => setAltPin(null)}
         onSheetIndexChange={setPcSheetIndex}
+        destinationAlternatives={destinationAlternatives}
+        destinationAlternativesLoading={destinationAlternativesLoading}
+        destinationAlternativesError={destinationAlternativesError}
+        onRetryDestinationAlternatives={retryDestinationAlternatives}
+        selectedZoneId={selectedZoneId}
+        onAlternativePress={handleAlternativeClick}
+        colorBlindMode={colorBlindMode}
       />
 
       <FilterSheet ref={filterSheetRef} />
@@ -222,7 +390,11 @@ export function MapScreen() {
         onSheetIndexChange={setBaySheetIndex}
         onTrapDetected={(msg) => showToast(msg, 'warning')}
       />
-      <SegmentDetailSheet ref={segmentDetailRef} />
+      <SegmentDetailSheet
+        ref={segmentDetailRef}
+        manifest={manifest}
+        colorBlindMode={colorBlindMode}
+      />
 
       {needsOnboarding === true ? (
         <OnboardingOverlay
@@ -236,7 +408,6 @@ export function MapScreen() {
           }}
         />
       ) : null}
-      {/* insets reference for ts-noUnused */}
       <View pointerEvents="none" style={{ position: 'absolute', top: insets.top, left: 0, width: 0, height: 0 }} />
     </View>
   );

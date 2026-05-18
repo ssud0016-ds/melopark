@@ -1,4 +1,12 @@
-import { type ReactNode, useEffect, useMemo, useRef } from 'react';
+import {
+  forwardRef,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from 'react';
 import Mapbox, {
   Camera,
   CircleLayer,
@@ -8,19 +16,48 @@ import Mapbox, {
   ShapeSource,
   SymbolLayer,
 } from '@rnmapbox/maps';
+import type { MapState } from '@rnmapbox/maps';
 
 import { colors } from '../../design-system';
 import { haptics } from '../../design-system/haptics';
 import type { Landmark } from '../../data/landmarks';
 import type { AltPin } from '../../hooks/useDestination';
+import type { PressureBounds } from '../../services/apiPressure';
 import {
+  BAY_CLUSTER_PROPERTIES,
+  clusterCircleColorExpression,
+  clusterCircleRadiusExpression,
+  clusterTextFieldExpression,
+} from '../../utils/clusterBadgeColors';
+import { mapStateToPressureBounds, visibleBoundsPairToPressureBounds } from '../../utils/mapBounds';
+import { getStatusFillColor, type BayStatus } from '../../utils/pressureSegmentStyle';
+import {
+  boundsFromLatLngs,
   circlePolygon,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   DESTINATION_MAP_ZOOM,
   SEARCH_RADIUS_M,
 } from '../../utils/mapGeo';
+import { mapBasemapStyleUrl } from '../../utils/mapStyle';
 import type { Bay } from '../../services/apiBays';
+
+export type FlyToOptions = {
+  zoom?: number;
+  durationMs?: number;
+};
+
+export type FitBoundsOptions = {
+  paddingPx?: number;
+  maxZoom?: number;
+  durationMs?: number;
+};
+
+export type ParkingMapRef = {
+  flyTo: (lat: number, lng: number, opts?: FlyToOptions) => void;
+  fitBounds: (points: { lat: number; lng: number }[], opts?: FitBoundsOptions) => void;
+  refreshBounds: () => void;
+};
 
 type Props = {
   bays: Bay[];
@@ -32,22 +69,23 @@ type Props = {
   altPin?: AltPin | null;
   dimRadiusM?: number;
   colorBlindMode?: boolean;
+  /** When true, use Mapbox Navigation Night basemap. */
+  mapDark?: boolean;
   accessibilityBayIds?: string[];
   onMapEmptyClick?: () => void;
+  onBoundsChange?: (bounds: PressureBounds) => void;
   children?: ReactNode;
 };
 
+function bayStatusForColor(type: Bay['type']): BayStatus {
+  if (type === 'trap') return 'caution';
+  if (type === 'occupied') return 'occupied';
+  if (type === 'available') return 'available';
+  return 'unknown';
+}
+
 function statusColor(type: Bay['type'], cb: boolean): string {
-  if (cb) {
-    if (type === 'available') return '#2563eb';
-    if (type === 'trap') return '#d97706';
-    if (type === 'occupied') return '#7c2d12';
-    return colors.statusUnknown;
-  }
-  if (type === 'available') return colors.statusGood;
-  if (type === 'trap') return colors.statusCaution;
-  if (type === 'occupied') return colors.statusAvoid;
-  return colors.statusUnknown;
+  return getStatusFillColor(bayStatusForColor(type), cb);
 }
 
 function baysToGeoJson(bays: Bay[], cb: boolean, accessibleIds?: string[]): GeoJSON.FeatureCollection {
@@ -95,25 +133,88 @@ function altPinGeoJson(a: AltPin): GeoJSON.FeatureCollection {
   };
 }
 
-export function ParkingMap({
-  bays,
-  selectedBayId,
-  onSelectBay,
-  initialCenter = DEFAULT_MAP_CENTER,
-  initialZoom = DEFAULT_MAP_ZOOM,
-  destination = null,
-  altPin = null,
-  dimRadiusM,
-  colorBlindMode = false,
-  accessibilityBayIds,
-  onMapEmptyClick,
-  children,
-}: Props) {
+export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
+  {
+    bays,
+    selectedBayId,
+    onSelectBay,
+    initialCenter = DEFAULT_MAP_CENTER,
+    initialZoom = DEFAULT_MAP_ZOOM,
+    destination = null,
+    altPin = null,
+    dimRadiusM,
+    colorBlindMode = false,
+    mapDark = false,
+    accessibilityBayIds,
+    onMapEmptyClick,
+    onBoundsChange,
+    children,
+  },
+  ref,
+) {
   const shape = useMemo(
     () => baysToGeoJson(bays, colorBlindMode, accessibilityBayIds),
     [bays, colorBlindMode, accessibilityBayIds],
   );
+  const styleURL = useMemo(() => mapBasemapStyleUrl(mapDark), [mapDark]);
+  const clusterCircleColor = useMemo(
+    () => clusterCircleColorExpression(colorBlindMode, mapDark),
+    [colorBlindMode, mapDark],
+  );
   const cameraRef = useRef<Camera>(null);
+  const mapViewRef = useRef<MapView>(null);
+  const zoomRef = useRef(initialZoom);
+
+  const reportVisibleBounds = useCallback(async () => {
+    if (!onBoundsChange) return;
+    const map = mapViewRef.current;
+    if (!map) return;
+    try {
+      const pair = await map.getVisibleBounds();
+      onBoundsChange(visibleBoundsPairToPressureBounds(pair));
+    } catch {
+      /* native map not ready */
+    }
+  }, [onBoundsChange]);
+
+  const reportBoundsFromState = useCallback(
+    (state: MapState) => {
+      const z = state?.properties?.zoom;
+      if (typeof z === 'number') zoomRef.current = z;
+      if (!onBoundsChange) return;
+      const b = state?.properties?.bounds;
+      if (b?.ne && b?.sw) {
+        onBoundsChange(mapStateToPressureBounds(b));
+        return;
+      }
+      void reportVisibleBounds();
+    },
+    [onBoundsChange, reportVisibleBounds],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      flyTo(lat: number, lng: number, opts?: FlyToOptions) {
+        cameraRef.current?.setCamera({
+          centerCoordinate: [lng, lat],
+          zoomLevel: opts?.zoom ?? DESTINATION_MAP_ZOOM,
+          animationDuration: opts?.durationMs ?? 600,
+        });
+      },
+      fitBounds(points, opts) {
+        const bounds = boundsFromLatLngs(points);
+        if (!bounds || !cameraRef.current) return;
+        const pad = opts?.paddingPx ?? 80;
+        const duration = opts?.durationMs ?? 800;
+        cameraRef.current.fitBounds(bounds.ne, bounds.sw, [pad, pad], duration);
+      },
+      refreshBounds: () => {
+        void reportVisibleBounds();
+      },
+    }),
+    [reportVisibleBounds],
+  );
 
   const radiusM = dimRadiusM ?? SEARCH_RADIUS_M;
   const ALT_RADIUS_M = 140;
@@ -157,13 +258,19 @@ export function ParkingMap({
 
   return (
     <MapView
+      ref={mapViewRef}
       style={{ flex: 1 }}
-      styleURL={Mapbox.StyleURL.Street}
+      styleURL={styleURL}
+      projection="mercator"
       attributionEnabled
       logoEnabled
       compassEnabled={false}
       scaleBarEnabled={false}
       onPress={() => onMapEmptyClick?.()}
+      onMapIdle={reportBoundsFromState}
+      onDidFinishLoadingMap={() => {
+        void reportVisibleBounds();
+      }}
     >
       <Camera ref={cameraRef} defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: initialZoom }} />
 
@@ -212,19 +319,31 @@ export function ParkingMap({
         </ShapeSource>
       ) : null}
 
-      {children}
-
       <ShapeSource
         id="melopark-bays-src"
         shape={shape}
         cluster
         clusterRadius={50}
-        clusterMaxZoomLevel={16}
+        clusterMaxZoomLevel={18}
+        clusterProperties={BAY_CLUSTER_PROPERTIES}
         onPress={(e) => {
           const f = e.features?.[0];
           if (!f) return;
           const props = f.properties as { bayId?: string; cluster?: boolean } | undefined;
-          if (props?.cluster) return;
+          if (props?.cluster) {
+            const geom = f.geometry;
+            if (geom?.type === 'Point' && Array.isArray(geom.coordinates)) {
+              const [lng, lat] = geom.coordinates as [number, number];
+              const nextZoom = Math.min(19, zoomRef.current + 2);
+              haptics.light();
+              cameraRef.current?.setCamera({
+                centerCoordinate: [lng, lat],
+                zoomLevel: nextZoom,
+                animationDuration: 400,
+              });
+            }
+            return;
+          }
           const bayId = props?.bayId;
           const bay = bays.find((b) => b.id === bayId);
           if (bay) {
@@ -237,8 +356,8 @@ export function ParkingMap({
           id="melopark-bay-clusters"
           filter={['has', 'point_count']}
           style={{
-            circleColor: colorBlindMode ? '#2563eb' : colors.statusGood,
-            circleRadius: ['step', ['get', 'point_count'], 18, 25, 22, 75, 26],
+            circleColor: clusterCircleColor,
+            circleRadius: clusterCircleRadiusExpression,
             circleStrokeWidth: 2,
             circleStrokeColor: colors.surface,
           }}
@@ -247,7 +366,7 @@ export function ParkingMap({
           id="melopark-bay-cluster-count"
           filter={['has', 'point_count']}
           style={{
-            textField: ['get', 'point_count_abbreviated'],
+            textField: clusterTextFieldExpression,
             textSize: 14,
             textColor: colors.surface,
             textFont: ['Open Sans Bold'],
@@ -272,6 +391,8 @@ export function ParkingMap({
         />
       </ShapeSource>
 
+      {children}
+
       {destination ? (
         <ShapeSource id="melopark-destination-src" shape={destinationGeoJson(destination)}>
           <CircleLayer
@@ -291,15 +412,26 @@ export function ParkingMap({
           <CircleLayer
             id="melopark-alt-pin-circle"
             style={{
-              circleColor: colors.statusGood,
-              circleRadius: 9,
+              circleColor: altPin.source === 'alternative' ? '#047857' : colors.statusGood,
+              circleRadius: altPin.source === 'alternative' ? 18 : 9,
               circleStrokeColor: colors.surface,
               circleStrokeWidth: 3,
             }}
           />
+          {altPin.source === 'alternative' ? (
+            <SymbolLayer
+              id="melopark-alt-pin-diamond"
+              style={{
+                textField: '◆',
+                textSize: 15,
+                textColor: '#ffffff',
+                textAllowOverlap: true,
+                textIgnorePlacement: true,
+              }}
+            />
+          ) : null}
         </ShapeSource>
       ) : null}
-
     </MapView>
   );
-}
+});
