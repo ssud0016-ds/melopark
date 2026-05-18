@@ -88,15 +88,6 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
       if (plannerArrivalIso && plannerDurationMins != null) {
         return { arrivalIso: plannerArrivalIso, durationMins: plannerDurationMins };
       }
-      if (!durationFilter) return null;
-      const mins = durationFilter === 'custom' ? customDuration : FILTER_TO_MINS[durationFilter];
-      return mins ? { arrivalIso: new Date().toISOString(), durationMins: mins } : null;
-    }, [plannerArrivalIso, plannerDurationMins, durationFilter, customDuration]);
-
-    const fetchOpts = useMemo(() => {
-      if (plannerArrivalIso && plannerDurationMins != null) {
-        return { arrivalIso: plannerArrivalIso, durationMins: plannerDurationMins };
-      }
       if (durationFilter) {
         const mins =
           durationFilter === 'custom' ? customDuration : FILTER_TO_MINS[durationFilter];
