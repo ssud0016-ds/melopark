@@ -1,5 +1,5 @@
 """Parking data endpoints."""
-
+import logging
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -16,7 +16,7 @@ from app.services.parking_service import (
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-
+logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/api/parking", tags=["parking"])
@@ -36,12 +36,14 @@ async def get_parking_bays(request: Request, response: Response):
     except SensorCacheEmptyError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Parking data is not available yet — the server is still loading or the upstream API is temporarily unavailable. Please try again shortly.",
+            detail="Parking data is not available yet. Please try again shortly.",
         ) from exc
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=502, detail=f"Upstream API returned {exc.response.status_code}") from exc
+        logger.error("Upstream HTTP error: %s", exc)
+        raise HTTPException(status_code=502, detail="Upstream data source returned an error. Please try again shortly.") from exc
     except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Could not reach upstream API: {exc}") from exc
+        logger.error("Upstream connection error: %s", exc)
+        raise HTTPException(status_code=503, detail="Could not reach the upstream data source. Please try again shortly.") from exc
 
 
 @router.get("/raw")
@@ -52,11 +54,14 @@ async def get_raw_parking_bays(request: Request):
         data = await fetch_raw_parking_bays()
         return {"count": len(data), "data": data}
     except SensorCacheEmptyError as exc:
-        raise HTTPException(status_code=503, detail="Parking data is not available yet — cache is still loading.") from exc
+        raise HTTPException(status_code=503, detail="Parking data is not available yet. Please try again shortly.") from exc
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=502, detail=f"Upstream API returned {exc.response.status_code}") from exc
+        logger.error("Upstream HTTP error: %s", exc)
+        raise HTTPException(status_code=502, detail="Upstream data source returned an error. Please try again shortly.") from exc
     except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Could not reach upstream API: {exc}") from exc
+        logger.error("Upstream connection error: %s", exc)
+        raise HTTPException(status_code=503, detail="Could not reach the upstream data source. Please try again shortly.") from exc
+
 
 
 @router.get("/filter", summary="Filter bays by needed parking duration, arrival time, and day")
