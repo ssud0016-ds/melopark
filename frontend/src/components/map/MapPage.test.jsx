@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import MapPage from './MapPage'
@@ -69,13 +70,11 @@ const mockParkingMap = vi.fn(() => <div data-testid="mock-parking-map" />)
 vi.mock('./ParkingMap', () => ({
   getStatusFillColor: vi.fn((status, colorBlindMode) => {
     if (colorBlindMode) {
-      if (status === 'available') return '#3b82f6'
-      if (status === 'caution') return '#f59e0b'
       if (status === 'occupied') return '#374151'
+      return '#3b82f6'
     }
-    if (status === 'available') return '#a3ec48'
-    if (status === 'caution') return '#FFB382'
-    return '#ed6868'
+    if (status === 'occupied') return '#ed6868'
+    return '#a3ec48'
   }),
   default: function MockParkingMap(props) {
     mockParkingMap(props)
@@ -138,6 +137,26 @@ vi.mock('../../services/apiPressure', () => ({
 
 function setViewportWidth(w) {
   Object.defineProperty(window, 'innerWidth', { value: w, configurable: true, writable: true })
+}
+
+function renderMapPage(overrides = {}) {
+  function Harness() {
+    const [settingsOpen, setSettingsOpen] = useState(false)
+    return (
+      <MapPage
+        bays={[]}
+        lastUpdated={null}
+        apiError={null}
+        apiLoading={false}
+        onRetry={undefined}
+        settingsOpen={settingsOpen}
+        onSettingsOpen={() => setSettingsOpen(true)}
+        onSettingsClose={() => setSettingsOpen(false)}
+        {...overrides}
+      />
+    )
+  }
+  return render(<Harness />)
 }
 
 beforeEach(() => {
@@ -301,22 +320,26 @@ describe('MapPage verified bays legend', () => {
     mockParkingMap.mockClear()
   })
 
-  it('shows full Verified bays legend by default on desktop with status labels', () => {
+  it('starts with compact Legend on desktop and expands to show Verified bays', () => {
     setViewportWidth(1200)
-    const { container } = render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    const { container } = renderMapPage()
+    expect(screen.getByRole('button', { name: 'Show legend' })).toBeInTheDocument()
+    expect(screen.queryByText('Verified bays')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show legend' }))
+
     expect(screen.getByText('Verified bays')).toBeInTheDocument()
     expect(screen.getByText('Available parking spots')).toBeInTheDocument()
-    expect(screen.getByText('Caution: Tow Away / Loading Zone')).toBeInTheDocument()
     expect(screen.getByText('Parking spots occupied')).toBeInTheDocument()
     expect(container.querySelector('.legend-symbol-available')).toBeTruthy()
-    expect(container.querySelector('.legend-symbol-caution')).toBeTruthy()
     expect(container.querySelector('.legend-symbol-occupied')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Show legend' })).not.toBeInTheDocument()
+    expect(container.querySelector('.legend-symbol-caution')).toBeFalsy()
+    expect(screen.getByRole('button', { name: 'Hide legend' })).toBeInTheDocument()
   })
 
   it('starts with compact Legend on mobile and expands to show Verified bays and Hide legend', () => {
     setViewportWidth(414)
-    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    renderMapPage()
     expect(screen.getByRole('button', { name: 'Show legend' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Hide legend' })).not.toBeInTheDocument()
 
@@ -329,7 +352,7 @@ describe('MapPage verified bays legend', () => {
 
   it('toggles color-blind mode and passes mode to ParkingMap', () => {
     setViewportWidth(414)
-    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    renderMapPage()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open settings' }))
 
@@ -349,7 +372,7 @@ describe('MapPage verified bays legend', () => {
 
   it('keeps legend labels and switches legend palette in color-blind mode', () => {
     setViewportWidth(414)
-    render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    renderMapPage()
 
     fireEvent.click(screen.getByRole('button', { name: 'Show legend' }))
     fireEvent.click(screen.getByRole('button', { name: 'Open settings' }))
@@ -358,8 +381,8 @@ describe('MapPage verified bays legend', () => {
     expect(available).toBeTruthy()
     expect(available?.getAttribute('style') || '').toContain('rgb(163, 236, 72)')
     expect(screen.getByText('Available parking spots')).toBeInTheDocument()
-    expect(screen.getByText('Caution: Tow Away / Loading Zone')).toBeInTheDocument()
     expect(screen.getByText('Parking spots occupied')).toBeInTheDocument()
+    expect(screen.queryByText('Caution: Tow Away / Loading Zone')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('switch', { name: 'Color-blind palette' }))
 

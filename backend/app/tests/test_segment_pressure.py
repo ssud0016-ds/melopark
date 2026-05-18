@@ -383,9 +383,9 @@ def test_router_segments_bbox_excludes_segments_without_parking_zones(monkeypatc
         ),
     )
 
-    data = pressure_router.get_segments_bbox(bbox="-1,-1,1,1", limit=10)
-
-    assert [item["segment_id"] for item in data] == ["in-zone"]
+    r = client.get("/api/pressure/segments?bbox=-1,-1,1,1&limit=10")
+    assert r.status_code == 200
+    assert [item["segment_id"] for item in r.json()] == ["in-zone"]
 
 
 def test_router_segments_bbox_missing_422():
