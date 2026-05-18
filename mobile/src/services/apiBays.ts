@@ -150,6 +150,56 @@ export async function fetchBayCarbon(bayId: string): Promise<BayCarbon | null> {
   }
 }
 
+export type AccessibilityBayRow = {
+  bay_id: string;
+  lat?: number | null;
+  lon?: number | null;
+  typedesc?: string | null;
+  plain_english?: string | null;
+};
+
+export type AccessibilityAllResponse = {
+  total_candidates: number;
+  returned: number;
+  bays: AccessibilityBayRow[];
+};
+
+/** Epic 4 gold disability bays — same contract as web `fetchAccessibilityAll`. */
+export async function fetchAccessibilityAll({
+  topN = 5000,
+  availableOnly = false,
+  timeoutMs = 30_000,
+}: {
+  topN?: number;
+  availableOnly?: boolean;
+  timeoutMs?: number;
+} = {}): Promise<AccessibilityAllResponse> {
+  try {
+    const data = await fetchJson<AccessibilityAllResponse>(
+      buildUrl('/api/accessibility/all', {
+        top_n: topN,
+        available_only: availableOnly,
+      }),
+      { timeoutMs },
+    );
+    return data && typeof data === 'object'
+      ? {
+          total_candidates: data.total_candidates ?? 0,
+          returned: data.returned ?? 0,
+          bays: Array.isArray(data.bays) ? data.bays : [],
+        }
+      : { total_candidates: 0, returned: 0, bays: [] };
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    const suffix = status != null ? ` (${status})` : '';
+    throw new Error(
+      err instanceof Error
+        ? `Could not load accessibility bays${suffix}: ${err.message}`
+        : `Could not load accessibility bays${suffix}`,
+    );
+  }
+}
+
 export async function fetchAccessibilityNearby(params: {
   lat: number;
   lon: number;

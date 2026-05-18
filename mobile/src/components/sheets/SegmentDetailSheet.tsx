@@ -4,6 +4,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 
 import { EventBadge } from '../busyNow/EventBadge';
 import { colors } from '../../design-system';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { fetchSegmentDetail, type PressureManifest } from '../../services/apiPressure';
 import { segmentDetailFromApi, type SegmentPopupDetail } from '../../utils/segmentDetailFromApi';
 import {
@@ -32,6 +33,7 @@ export const SegmentDetailSheet = forwardRef<SegmentDetailSheetRef, Props>(
     const [segmentId, setSegmentId] = useState<string | null>(null);
     const [detail, setDetail] = useState<SegmentPopupDetail | null>(null);
     const [loading, setLoading] = useState(false);
+    const theme = useThemeColors();
 
     const dataVersion = manifest?.data_version ?? manifest?.minute_bucket ?? null;
 
@@ -68,8 +70,8 @@ export const SegmentDetailSheet = forwardRef<SegmentDetailSheetRef, Props>(
         ref={sheetRef}
         snapPoints={SNAP_POINTS}
         enableDynamicSizing={false}
-        backgroundStyle={{ backgroundColor: colors.surface }}
-        handleIndicatorStyle={{ backgroundColor: colors.surfaceDarkTertiary }}
+        backgroundStyle={{ backgroundColor: theme.sheet }}
+        handleIndicatorStyle={{ backgroundColor: theme.handle }}
       >
         <BottomSheetView style={{ flex: 1, padding: 20, paddingBottom: 32 }}>
           {loading ? (
@@ -77,7 +79,7 @@ export const SegmentDetailSheet = forwardRef<SegmentDetailSheetRef, Props>(
           ) : detail ? (
             <SegmentPopupContent detail={detail} colorBlindMode={colorBlindMode} />
           ) : (
-            <Text style={{ color: colors.surfaceDarkTertiary }}>Segment detail unavailable.</Text>
+            <Text style={{ color: theme.textSecondary }}>Segment detail unavailable.</Text>
           )}
         </BottomSheetView>
       </BottomSheetModal>
@@ -93,6 +95,7 @@ function SegmentPopupContent({
   detail: SegmentPopupDetail;
   colorBlindMode: boolean;
 }) {
+  const theme = useThemeColors();
   const dot = statusDotColor(detail.level, colorBlindMode);
   const { chanceText, occSuffix, trendLabel, trendAria } = formatChanceLine(detail);
   const whyLine = formatWhyLine(detail);
@@ -114,7 +117,7 @@ function SegmentPopupContent({
           importantForAccessibility="no-hide-descendants"
         />
         <Text
-          style={{ flex: 1, fontSize: 14, fontWeight: '600', color: colors.surfaceDark }}
+          style={{ flex: 1, fontSize: 14, fontWeight: '600', color: theme.text }}
           numberOfLines={2}
         >
           {detail.street_name || 'Street segment'}
@@ -122,19 +125,19 @@ function SegmentPopupContent({
       </View>
 
       {detail.seg_descr ? (
-        <Text style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginBottom: 4 }}>
+        <Text style={{ fontSize: 11, color: theme.textSecondary, marginBottom: 4 }}>
           {detail.seg_descr}
         </Text>
       ) : null}
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
-        <Text style={{ fontSize: 11, fontWeight: '500', color: colors.surfaceDark }}>
+        <Text style={{ fontSize: 11, fontWeight: '500', color: theme.text }}>
           {chanceText}
           {occSuffix}
         </Text>
         {trendLabel ? (
           <Text
-            style={{ fontSize: 11, fontWeight: '500', color: colors.surfaceDark }}
+            style={{ fontSize: 11, fontWeight: '500', color: theme.text }}
             accessibilityLabel={trendAria}
           >
             {` ${trendLabel}`}
@@ -143,19 +146,19 @@ function SegmentPopupContent({
       </View>
 
       {(detail.total_bays ?? 0) > 0 && detail.has_live_bays ? (
-        <Text style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginTop: 2 }}>
+        <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
           {detail.free_bays} of {detail.total_bays} bays free
         </Text>
       ) : null}
 
-      <Text style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginTop: 2 }}>
+      <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>
         {coverage}
         {pct != null ? ` · ${pct}% pressure signal` : ''}
       </Text>
 
       {whyLine ? (
         <Text
-          style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginTop: 4 }}
+          style={{ fontSize: 11, color: theme.textSecondary, marginTop: 4 }}
           accessibilityLabel={whyLine.replace(/^Why: /, '')}
         >
           {whyLine}

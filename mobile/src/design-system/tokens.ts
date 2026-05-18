@@ -11,7 +11,8 @@ export { minTapTarget, assertTapTarget } from './touch';
 export { useFocusRing } from './focus';
 export { rootStyle } from './layout';
 
-export const nativeTabBarHeight = 56;
+/** Tab bar content row (icon 18 + label 10 + padding). Safe-area added separately. */
+export const nativeTabBarHeight = 36;
 export const nativeSearchBarHeight = 48;
 export const sheetSnapPoints = ['15%', '50%', '75%'] as const;
 export const SNAP_PEEK = 0;

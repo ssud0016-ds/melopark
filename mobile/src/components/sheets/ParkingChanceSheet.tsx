@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DestinationPressureBlock } from './DestinationPressureBlock';
 import {
   colors,
-  nativeTabBarHeight,
   sheetSnapPoints,
   SNAP_FULL,
   SNAP_HALF,
@@ -16,6 +15,8 @@ import {
 import type { Landmark } from '../../data/landmarks';
 import type { AltPin } from '../../hooks/useDestination';
 import type { BusyNowStatus } from '../../hooks/useBusyNow';
+import { useThemeColors } from '../../hooks/useThemeColors';
+import { useTabBarLayout } from '../../navigation/tabBarStyle';
 import type { AlternativesResponse, PressureAlternativeZone } from '../../types/pressureAlternatives';
 import { CHANCE_TEXT } from '../../utils/quietStreets';
 
@@ -112,6 +113,8 @@ export const ParkingChanceSheet = forwardRef<ParkingChanceSheetRef, Props>((prop
   } = props;
 
   const insets = useSafeAreaInsets();
+  const tabBar = useTabBarLayout();
+  const theme = useThemeColors();
   const sheetRef = useRef<BottomSheet>(null);
   const indexRef = useRef(SNAP_PEEK);
   const inDestMode = !!destination;
@@ -119,17 +122,23 @@ export const ParkingChanceSheet = forwardRef<ParkingChanceSheetRef, Props>((prop
   const snaps = useMemo(() => [...sheetSnapPoints], []);
   const [snapIndex, setSnapIndex] = useState(SNAP_PEEK);
 
-  // Match web: sheet sits on tab bar (not safe-area gap). At full snap, sheet covers tab bar.
-  const sheetBottomInset = snapIndex === SNAP_FULL ? 0 : nativeTabBarHeight;
-  const scrollBottomPadding = 48 + insets.bottom + (snapIndex === SNAP_FULL ? 0 : nativeTabBarHeight);
+  // Sheet bottom flush with tab bar top (shared layout with MeloparkTabBar). Full snap covers tab bar.
+  const sheetBottomInset = snapIndex === SNAP_FULL ? 0 : tabBar.sheetBottomInset;
+  const scrollBottomPadding =
+    snapIndex === SNAP_PEEK
+      ? 12
+      : snapIndex === SNAP_FULL
+        ? 24 + tabBar.safeBottom
+        : 24 + tabBar.totalHeight;
 
   useEffect(() => {
     if (destination) {
       setSnapIndex(SNAP_HALF);
       return;
     }
+    // Web default: SNAP_PEEK — do not auto-expand to half when manifest loads.
     if (isReady) {
-      setSnapIndex(SNAP_HALF);
+      setSnapIndex(SNAP_PEEK);
     }
   }, [destination, isReady]);
 
@@ -154,11 +163,11 @@ export const ParkingChanceSheet = forwardRef<ParkingChanceSheetRef, Props>((prop
       bottomInset={sheetBottomInset}
       animatedPosition={animatedPosition}
       backgroundStyle={{
-        backgroundColor: colors.surface,
+        backgroundColor: theme.sheet,
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
       }}
-      handleIndicatorStyle={{ backgroundColor: colors.surfaceDarkTertiary, width: 32, height: 4 }}
+      handleIndicatorStyle={{ backgroundColor: theme.handle, width: 32, height: 4 }}
       onChange={(i) => {
         indexRef.current = i;
         setSnapIndex(i);
@@ -169,10 +178,10 @@ export const ParkingChanceSheet = forwardRef<ParkingChanceSheetRef, Props>((prop
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: scrollBottomPadding }}
         showsVerticalScrollIndicator
       >
-        <Text style={{ fontSize: 18, fontWeight: '700', color: colors.surfaceDark, marginBottom: 4 }}>
+        <Text style={{ fontSize: 18, fontWeight: '700', color: theme.text, marginBottom: 4 }}>
           {sheetTitle}
         </Text>
-        <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary, marginBottom: 12 }}>{sheetSubtitle}</Text>
+        <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 12 }}>{sheetSubtitle}</Text>
 
         <View
           style={{
@@ -182,7 +191,7 @@ export const ParkingChanceSheet = forwardRef<ParkingChanceSheetRef, Props>((prop
             paddingHorizontal: 8,
             paddingVertical: 4,
             borderRadius: 999,
-            backgroundColor: colors.surfaceTertiary,
+            backgroundColor: theme.chromeMuted,
             marginBottom: 16,
           }}
         >
@@ -195,7 +204,7 @@ export const ParkingChanceSheet = forwardRef<ParkingChanceSheetRef, Props>((prop
               backgroundColor: busyNowStatus === 'error' ? colors.statusAvoid : '#10b981',
             }}
           />
-          <Text style={{ fontSize: 11, fontWeight: '500', color: colors.surfaceDark }}>
+          <Text style={{ fontSize: 11, fontWeight: '500', color: theme.text }}>
             {busyNowStatus === 'loading' ? 'loading...' : busyNowStatus === 'error' ? 'error' : 'Live'}
           </Text>
         </View>
@@ -205,25 +214,25 @@ export const ParkingChanceSheet = forwardRef<ParkingChanceSheetRef, Props>((prop
             style={{
               padding: 12,
               borderRadius: 12,
-              backgroundColor: colors.statusGoodBg,
+              backgroundColor: theme.statusGoodBg,
               borderWidth: 1,
-              borderColor: '#bbf7d0',
+              borderColor: theme.liveChipText,
               marginBottom: 16,
             }}
           >
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.statusGood, letterSpacing: 1 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: theme.liveChipText, letterSpacing: 1 }}>
                 Your pick
               </Text>
               <Pressable accessibilityRole="button" onPress={onClearSelectedSuggestion} hitSlop={8}>
-                <Text style={{ fontSize: 12, color: colors.brand, fontWeight: '600' }}>Clear</Text>
+                <Text style={{ fontSize: 12, color: theme.tabActive, fontWeight: '600' }}>Clear</Text>
               </Pressable>
             </View>
-            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.surfaceDark, marginTop: 4 }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text, marginTop: 4 }}>
               {altPin.label}
             </Text>
             {altPin.subtitle ? (
-              <Text style={{ fontSize: 12, color: colors.statusGood, fontWeight: '500', marginTop: 2 }}>
+              <Text style={{ fontSize: 12, color: theme.liveChipText, fontWeight: '500', marginTop: 2 }}>
                 {altPin.subtitle}
               </Text>
             ) : null}
@@ -231,7 +240,7 @@ export const ParkingChanceSheet = forwardRef<ParkingChanceSheetRef, Props>((prop
         ) : null}
 
         {!isReady && busyNowStatus === 'loading' ? (
-          <Text style={{ fontSize: 13, color: colors.surfaceDark, marginBottom: 12 }}>
+          <Text style={{ fontSize: 13, color: theme.text, marginBottom: 12 }}>
             Loading parking chance data...
           </Text>
         ) : null}
@@ -284,13 +293,15 @@ function QuietStreetsBody({
   selectedSegmentId?: string | null;
   onStreetClick?: (street: QuietStreet) => void;
 }) {
+  const theme = useThemeColors();
+
   if (!isReady) {
     return null;
   }
 
   if (loading) {
     return (
-      <Text style={{ fontSize: 13, color: colors.surfaceDark }}>Loading quiet streets nearby...</Text>
+      <Text style={{ fontSize: 13, color: theme.text }}>Loading quiet streets nearby...</Text>
     );
   }
 
@@ -300,7 +311,7 @@ function QuietStreetsBody({
 
   if (streets.length === 0) {
     return (
-      <Text style={{ fontSize: 13, color: colors.surfaceDark, lineHeight: 20 }}>
+      <Text style={{ fontSize: 13, color: theme.text, lineHeight: 20 }}>
         Pick a destination to compare nearby parking streets. Green = good chance, amber = getting busy, red =
         hard to park.
       </Text>
@@ -313,7 +324,7 @@ function QuietStreetsBody({
         style={{
           fontSize: 11,
           fontWeight: '600',
-          color: colors.surfaceDarkTertiary,
+          color: theme.textMuted,
           letterSpacing: 0.5,
           textTransform: 'uppercase',
           marginBottom: 10,
@@ -322,7 +333,7 @@ function QuietStreetsBody({
         Better parking options
       </Text>
       {streets.map((s, i) => (
-        <View key={s.id} style={{ marginBottom: i < streets.length - 1 ? 8 : 0 }}>
+        <View key={`street-${s.id}-${i}`} style={{ marginBottom: i < streets.length - 1 ? 8 : 0 }}>
           <QuietStreetChip
             street={s}
             selected={selectedSegmentId != null && String(selectedSegmentId) === String(s.id)}
@@ -349,6 +360,7 @@ function QuietStreetChip({
   featured: boolean;
   onPress: () => void;
 }) {
+  const theme = useThemeColors();
   const subtitle = streetSubtitle(street);
   return (
     <Pressable
@@ -364,17 +376,17 @@ function QuietStreetChip({
         paddingHorizontal: 10,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: selected ? '#6ee7b7' : colors.surfaceTertiary,
-        backgroundColor: selected ? colors.statusGoodBg : colors.surface,
+        borderColor: selected ? theme.liveChipText : theme.border,
+        backgroundColor: selected ? theme.statusGoodBg : theme.chrome,
       }}
     >
-      <Text style={{ fontSize: featured ? 15 : 13, fontWeight: '600', color: colors.surfaceDark }}>
+      <Text style={{ fontSize: featured ? 15 : 13, fontWeight: '600', color: theme.text }}>
         {street.name}
       </Text>
       {street.crossStreet ? (
-        <Text style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginTop: 2 }}>{street.crossStreet}</Text>
+        <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>{street.crossStreet}</Text>
       ) : null}
-      <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary, marginTop: 4 }}>{subtitle}</Text>
+      <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 4 }}>{subtitle}</Text>
     </Pressable>
   );
 }

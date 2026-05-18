@@ -7,7 +7,9 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { colors, haptics, sheetSnapPoints } from '../../design-system';
+import { DARK_MODE_STORAGE_KEY, type ThemeMode } from '../../hooks/useDarkMode';
 import { useMapsProvider, type MapsProvider } from '../../hooks/useMapsProvider';
+import { useThemeColors, type ThemeColors } from '../../hooks/useThemeColors';
 import type { RootStackParamList } from '../../navigation/types';
 
 export type SettingsSheetRef = {
@@ -23,9 +25,6 @@ type Props = {
   onOpenHelp: () => void;
 };
 
-const DARK_MODE_KEY = 'melopark-dark-mode';
-type ThemeMode = 'light' | 'dark' | 'system';
-
 const Nav: ThemeMode[] = ['light', 'dark', 'system'];
 
 export const SettingsSheet = forwardRef<SettingsSheetRef, Props>((props, ref) => {
@@ -34,7 +33,8 @@ export const SettingsSheet = forwardRef<SettingsSheetRef, Props>((props, ref) =>
   const { colorScheme, setColorScheme } = useColorScheme();
   const { provider, setProvider } = useMapsProvider();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [theme, setTheme] = useState<ThemeMode>((colorScheme as ThemeMode) ?? 'system');
+  const palette = useThemeColors();
+  const [themeMode, setThemeMode] = useState<ThemeMode>((colorScheme as ThemeMode) ?? 'system');
 
   useImperativeHandle(ref, () => ({
     present: () => sheetRef.current?.present(),
@@ -43,9 +43,9 @@ export const SettingsSheet = forwardRef<SettingsSheetRef, Props>((props, ref) =>
 
   const applyTheme = useCallback(
     (next: ThemeMode) => {
-      setTheme(next);
+      setThemeMode(next);
       setColorScheme(next);
-      AsyncStorage.setItem(DARK_MODE_KEY, next).catch(() => {});
+      AsyncStorage.setItem(DARK_MODE_STORAGE_KEY, next).catch(() => {});
     },
     [setColorScheme],
   );
@@ -61,43 +61,46 @@ export const SettingsSheet = forwardRef<SettingsSheetRef, Props>((props, ref) =>
       snapPoints={snaps}
       index={1}
       enableDynamicSizing={false}
-      backgroundStyle={{ backgroundColor: colors.surface }}
-      handleIndicatorStyle={{ backgroundColor: colors.surfaceDarkTertiary, width: 32, height: 4 }}
+      backgroundStyle={{ backgroundColor: palette.sheet }}
+      handleIndicatorStyle={{ backgroundColor: palette.handle, width: 32, height: 4 }}
     >
       <BottomSheetScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40, gap: 20 }}>
-        <Text style={{ fontSize: 22, fontWeight: '800', color: colors.brand }}>Settings</Text>
+        <Text style={{ fontSize: 22, fontWeight: '800', color: palette.tabActive }}>Settings</Text>
 
-        <Section title="Appearance">
+        <Section title="Appearance" theme={palette}>
           <ChipRow>
             {Nav.map((m) => (
-              <Chip key={m} active={theme === m} onPress={() => applyTheme(m)}>
+              <Chip key={m} theme={palette} active={themeMode === m} onPress={() => applyTheme(m)}>
                 {m[0].toUpperCase() + m.slice(1)}
               </Chip>
             ))}
           </ChipRow>
         </Section>
 
-        <Section title="Map Display">
+        <Section title="Map Display" theme={palette}>
           <ToggleRow
+            theme={palette}
             label="Color-blind palette"
             value={props.colorBlindMode}
             onChange={props.onToggleColorBlind}
           />
         </Section>
 
-        <Section title="Accessibility">
+        <Section title="Accessibility" theme={palette}>
           <ToggleRow
+            theme={palette}
             label="Accessible bays only"
             value={props.accessibleOnly}
             onChange={props.onToggleAccessible}
           />
         </Section>
 
-        <Section title="Navigation">
+        <Section title="Navigation" theme={palette}>
           <ChipRow>
             {(['google', 'web'] as MapsProvider[]).map((p) => (
               <Chip
                 key={p}
+                theme={palette}
                 active={provider === p}
                 onPress={() => {
                   haptics.selection();
@@ -110,12 +113,12 @@ export const SettingsSheet = forwardRef<SettingsSheetRef, Props>((props, ref) =>
           </ChipRow>
         </Section>
 
-        <Section title="Help & About">
-          <LinkRow label="Help & How to use" onPress={() => { sheetRef.current?.dismiss(); setTimeout(props.onOpenHelp, 120); }} />
-          <LinkRow label="Attribution" onPress={() => goto('Attribution')} />
-          <LinkRow label="Terms of Use" onPress={() => goto('Terms')} />
-          <LinkRow label="About MelOPark" onPress={() => goto('About')} />
-          <Text style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginTop: 8 }}>
+        <Section title="Help & About" theme={palette}>
+          <LinkRow theme={palette} label="Help & How to use" onPress={() => { sheetRef.current?.dismiss(); setTimeout(props.onOpenHelp, 120); }} />
+          <LinkRow theme={palette} label="Attribution" onPress={() => goto('Attribution')} />
+          <LinkRow theme={palette} label="Terms of Use" onPress={() => goto('Terms')} />
+          <LinkRow theme={palette} label="About MelOPark" onPress={() => goto('About')} />
+          <Text style={{ fontSize: 11, color: palette.textMuted, marginTop: 8 }}>
             MelOPark v1.0 · Data: City of Melbourne + VicRoads
           </Text>
         </Section>
@@ -125,10 +128,10 @@ export const SettingsSheet = forwardRef<SettingsSheetRef, Props>((props, ref) =>
 });
 SettingsSheet.displayName = 'SettingsSheet';
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, theme }: { title: string; children: React.ReactNode; theme: ThemeColors }) {
   return (
     <View style={{ gap: 10 }}>
-      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.surfaceDarkTertiary, letterSpacing: 1 }}>
+      <Text style={{ fontSize: 11, fontWeight: '700', color: theme.textMuted, letterSpacing: 1 }}>
         {title.toUpperCase()}
       </Text>
       {children}
@@ -144,10 +147,12 @@ function Chip({
   children,
   active,
   onPress,
+  theme,
 }: {
   children: React.ReactNode;
   active: boolean;
   onPress: () => void;
+  theme: ThemeColors;
 }) {
   return (
     <Pressable
@@ -160,17 +165,27 @@ function Chip({
         borderRadius: 999,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: active ? colors.brand : colors.surfaceTertiary,
+        backgroundColor: active ? colors.brand : theme.chromeMuted,
       }}
     >
-      <Text style={{ color: active ? colors.surface : colors.surfaceDark, fontWeight: '600', fontSize: 13 }}>
+      <Text style={{ color: active ? theme.brandOnBrand : theme.text, fontWeight: '600', fontSize: 13 }}>
         {children}
       </Text>
     </Pressable>
   );
 }
 
-function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+function ToggleRow({
+  label,
+  value,
+  onChange,
+  theme,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+  theme: ThemeColors;
+}) {
   return (
     <View
       style={{
@@ -181,13 +196,13 @@ function ToggleRow({ label, value, onChange }: { label: string; value: boolean; 
         paddingVertical: 4,
       }}
     >
-      <Text style={{ fontSize: 14, color: colors.surfaceDark }}>{label}</Text>
+      <Text style={{ fontSize: 14, color: theme.text }}>{label}</Text>
       <Switch value={value} onValueChange={onChange} trackColor={{ true: colors.brand }} />
     </View>
   );
 }
 
-function LinkRow({ label, onPress }: { label: string; onPress: () => void }) {
+function LinkRow({ label, onPress, theme }: { label: string; onPress: () => void; theme: ThemeColors }) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -199,8 +214,8 @@ function LinkRow({ label, onPress }: { label: string; onPress: () => void }) {
         justifyContent: 'space-between',
       }}
     >
-      <Text style={{ fontSize: 14, color: colors.surfaceDark }}>{label}</Text>
-      <Text style={{ fontSize: 16, color: colors.surfaceDarkTertiary }}>›</Text>
+      <Text style={{ fontSize: 14, color: theme.text }}>{label}</Text>
+      <Text style={{ fontSize: 16, color: theme.textMuted }}>›</Text>
     </Pressable>
   );
 }

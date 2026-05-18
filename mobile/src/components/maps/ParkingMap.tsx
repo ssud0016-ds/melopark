@@ -11,6 +11,7 @@ import Mapbox, {
   Camera,
   CircleLayer,
   FillLayer,
+  Images,
   LineLayer,
   MapView,
   ShapeSource,
@@ -29,18 +30,34 @@ import {
   clusterCircleRadiusExpression,
   clusterTextFieldExpression,
 } from '../../utils/clusterBadgeColors';
+import { buildMapBayShape } from '../../utils/bayMapGeo';
 import { mapStateToPressureBounds, visibleBoundsPairToPressureBounds } from '../../utils/mapBounds';
-import { getStatusFillColor, type BayStatus } from '../../utils/pressureSegmentStyle';
 import {
   boundsFromLatLngs,
+  BAY_CLUSTER_MAX_ZOOM_LEVEL,
+  BAY_INDIVIDUAL_MIN_ZOOM,
   circlePolygon,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   DESTINATION_MAP_ZOOM,
+  MELBOURNE_MAX_ZOOM,
   SEARCH_RADIUS_M,
 } from '../../utils/mapGeo';
 import { mapBasemapStyleUrl } from '../../utils/mapStyle';
 import type { Bay } from '../../services/apiBays';
+
+/** 48×48 PNG — must match file pixels; iconSize scales from native width. */
+const ACCESSIBLE_MARKER_IMAGE = require('../../../assets/map/accessible-marker.png');
+/** ~22px / 30px on map — aligns with web mobile wheelchair diameter. */
+const ACCESSIBLE_ICON_SIZE = 0.46;
+const ACCESSIBLE_ICON_SIZE_SELECTED = 0.62;
+
+type FilterExpression = unknown[];
+
+/** Unclustered bay point (not a cluster bubble). */
+const BAY_POINT: FilterExpression = ['!', ['has', 'point_count']];
+const BAY_REGULAR: FilterExpression = ['all', BAY_POINT, ['==', ['get', 'isAccessible'], 'no']];
+const BAY_ACCESSIBLE: FilterExpression = ['all', BAY_POINT, ['==', ['get', 'isAccessible'], 'yes']];
 
 export type FlyToOptions = {
   zoom?: number;
@@ -76,36 +93,6 @@ type Props = {
   onBoundsChange?: (bounds: PressureBounds) => void;
   children?: ReactNode;
 };
-
-function bayStatusForColor(type: Bay['type']): BayStatus {
-  if (type === 'trap') return 'caution';
-  if (type === 'occupied') return 'occupied';
-  if (type === 'available') return 'available';
-  return 'unknown';
-}
-
-function statusColor(type: Bay['type'], cb: boolean): string {
-  return getStatusFillColor(bayStatusForColor(type), cb);
-}
-
-function baysToGeoJson(bays: Bay[], cb: boolean, accessibleIds?: string[]): GeoJSON.FeatureCollection {
-  const allow = accessibleIds && accessibleIds.length > 0 ? new Set(accessibleIds) : null;
-  return {
-    type: 'FeatureCollection',
-    features: bays
-      .filter((b) => (allow ? allow.has(b.id) : true))
-      .map((b) => ({
-        type: 'Feature',
-        id: b.id,
-        properties: {
-          bayId: b.id,
-          type: b.type,
-          color: statusColor(b.type, cb),
-        },
-        geometry: { type: 'Point', coordinates: [b.lng, b.lat] },
-      })),
-  };
-}
 
 function destinationGeoJson(d: Landmark): GeoJSON.FeatureCollection {
   return {
@@ -152,8 +139,8 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
   },
   ref,
 ) {
-  const shape = useMemo(
-    () => baysToGeoJson(bays, colorBlindMode, accessibilityBayIds),
+  const bayShape = useMemo(
+    () => buildMapBayShape(bays, colorBlindMode, accessibilityBayIds),
     [bays, colorBlindMode, accessibilityBayIds],
   );
   const styleURL = useMemo(() => mapBasemapStyleUrl(mapDark), [mapDark]);
@@ -272,7 +259,13 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
         void reportVisibleBounds();
       }}
     >
-      <Camera ref={cameraRef} defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: initialZoom }} />
+      <Camera
+        ref={cameraRef}
+        defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: initialZoom }}
+        maxZoomLevel={MELBOURNE_MAX_ZOOM}
+      />
+
+      <Images images={{ 'accessible-marker': ACCESSIBLE_MARKER_IMAGE }} />
 
       {destRadiusShape ? (
         <ShapeSource id="melopark-dest-radius-src" shape={destRadiusShape}>
@@ -321,10 +314,10 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
 
       <ShapeSource
         id="melopark-bays-src"
-        shape={shape}
+        shape={bayShape}
         cluster
         clusterRadius={50}
-        clusterMaxZoomLevel={18}
+        clusterMaxZoomLevel={BAY_CLUSTER_MAX_ZOOM_LEVEL}
         clusterProperties={BAY_CLUSTER_PROPERTIES}
         onPress={(e) => {
           const f = e.features?.[0];
@@ -334,7 +327,10 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
             const geom = f.geometry;
             if (geom?.type === 'Point' && Array.isArray(geom.coordinates)) {
               const [lng, lat] = geom.coordinates as [number, number];
-              const nextZoom = Math.min(19, zoomRef.current + 2);
+              const nextZoom = Math.min(
+                MELBOURNE_MAX_ZOOM,
+                Math.max(BAY_INDIVIDUAL_MIN_ZOOM, zoomRef.current + 2),
+              );
               haptics.light();
               cameraRef.current?.setCamera({
                 centerCoordinate: [lng, lat],
@@ -376,10 +372,10 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
         />
         <CircleLayer
           id="melopark-bay-dots"
-          filter={['!', ['has', 'point_count']]}
+          filter={BAY_REGULAR}
           style={{
             circleColor: ['get', 'color'],
-            circleRadius: ['case', ['==', ['get', 'bayId'], selectedBayId ?? ''], 8, 5],
+            circleRadius: ['case', ['==', ['get', 'bayId'], selectedBayId ?? ''], 10, 6],
             circleStrokeWidth: ['case', ['==', ['get', 'bayId'], selectedBayId ?? ''], 2, 1],
             circleStrokeColor: [
               'case',
@@ -387,6 +383,22 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
               colors.brand,
               colors.surface,
             ],
+          }}
+        />
+        <SymbolLayer
+          id="melopark-bay-accessible-icon"
+          filter={BAY_ACCESSIBLE}
+          style={{
+            iconImage: 'accessible-marker',
+            iconSize: [
+              'case',
+              ['==', ['get', 'bayId'], selectedBayId ?? ''],
+              ACCESSIBLE_ICON_SIZE_SELECTED,
+              ACCESSIBLE_ICON_SIZE,
+            ],
+            iconAnchor: 'center',
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
           }}
         />
       </ShapeSource>

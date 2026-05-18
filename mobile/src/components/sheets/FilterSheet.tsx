@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 
 import { colors, haptics, sheetSnapPoints } from '../../design-system';
 import { useFilters, type DurationFilter, type StatusFilter } from '../../hooks/useFilters';
+import { useThemeColors, type ThemeColors } from '../../hooks/useThemeColors';
 
 export type FilterSheetRef = {
   present: () => void;
@@ -28,6 +29,7 @@ const DURATIONS: { value: DurationFilter; label: string }[] = [
 export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
   const sheetRef = useRef<BottomSheetModal>(null);
   const filters = useFilters();
+  const theme = useThemeColors();
   const snaps = useMemo(() => [...sheetSnapPoints], []);
 
   useImperativeHandle(ref, () => ({
@@ -41,12 +43,12 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
       snapPoints={snaps}
       index={1}
       enableDynamicSizing={false}
-      backgroundStyle={{ backgroundColor: colors.surface }}
-      handleIndicatorStyle={{ backgroundColor: colors.surfaceDarkTertiary, width: 32, height: 4 }}
+      backgroundStyle={{ backgroundColor: theme.sheet }}
+      handleIndicatorStyle={{ backgroundColor: theme.handle, width: 32, height: 4 }}
     >
       <BottomSheetScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40, gap: 20 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: colors.surfaceDark }}>Filters</Text>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: theme.text }}>Filters</Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => {
@@ -55,15 +57,16 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
             }}
             style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}
           >
-            <Text style={{ color: colors.brand, fontWeight: '600' }}>Done</Text>
+            <Text style={{ color: theme.tabActive, fontWeight: '600' }}>Done</Text>
           </Pressable>
         </View>
 
-        <Group title="Status">
+        <Group title="Status" theme={theme}>
           <ChipRow>
             {STATUS.map((s) => (
               <Chip
                 key={s.value}
+                theme={theme}
                 active={filters.statusFilter === s.value}
                 onPress={() => {
                   haptics.selection();
@@ -76,11 +79,12 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
           </ChipRow>
         </Group>
 
-        <Group title="Duration">
+        <Group title="Duration" theme={theme}>
           <ChipRow>
             {DURATIONS.map((d) => (
               <Chip
                 key={d.value}
+                theme={theme}
                 active={filters.durationFilter === d.value}
                 onPress={() => {
                   haptics.selection();
@@ -91,6 +95,7 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
               </Chip>
             ))}
             <Chip
+              theme={theme}
               active={filters.durationFilter === 'custom'}
               onPress={() => {
                 haptics.selection();
@@ -102,12 +107,13 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
           </ChipRow>
         </Group>
 
-        <Group title="Arrive by">
-          <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary }}>
+        <Group title="Arrive by" theme={theme}>
+          <Text style={{ fontSize: 12, color: theme.textSecondary }}>
             {filters.plannerArrivalIso ? `Arriving ${filters.plannerArrivalIso}` : 'Live now (no arrival set)'}
           </Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Chip
+              theme={theme}
               active={filters.plannerArrivalIso == null}
               onPress={() => {
                 haptics.selection();
@@ -117,6 +123,7 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
               Live now
             </Chip>
             <Chip
+              theme={theme}
               active={!!filters.plannerArrivalIso}
               onPress={() => {
                 haptics.selection();
@@ -127,6 +134,7 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
               +30 min
             </Chip>
             <Chip
+              theme={theme}
               active={false}
               onPress={() => {
                 haptics.selection();
@@ -150,12 +158,12 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
               minHeight: 44,
               borderRadius: 12,
               borderWidth: 1,
-              borderColor: colors.surfaceTertiary,
+              borderColor: theme.border,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Text style={{ color: colors.surfaceDarkTertiary, fontWeight: '600' }}>Reset filters</Text>
+            <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>Reset filters</Text>
           </Pressable>
         ) : null}
       </BottomSheetScrollView>
@@ -164,10 +172,10 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
 });
 FilterSheet.displayName = 'FilterSheet';
 
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
+function Group({ title, children, theme }: { title: string; children: React.ReactNode; theme: ThemeColors }) {
   return (
     <View style={{ gap: 8 }}>
-      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.surfaceDarkTertiary, letterSpacing: 1 }}>
+      <Text style={{ fontSize: 11, fontWeight: '700', color: theme.textMuted, letterSpacing: 1 }}>
         {title.toUpperCase()}
       </Text>
       {children}
@@ -183,10 +191,12 @@ function Chip({
   children,
   active,
   onPress,
+  theme,
 }: {
   children: React.ReactNode;
   active: boolean;
   onPress: () => void;
+  theme: ThemeColors;
 }) {
   return (
     <Pressable
@@ -199,10 +209,10 @@ function Chip({
         borderRadius: 999,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: active ? colors.brand : colors.surfaceTertiary,
+        backgroundColor: active ? colors.brand : theme.chromeMuted,
       }}
     >
-      <Text style={{ color: active ? colors.surface : colors.surfaceDark, fontWeight: '600', fontSize: 13 }}>
+      <Text style={{ color: active ? theme.brandOnBrand : theme.text, fontWeight: '600', fontSize: 13 }}>
         {children}
       </Text>
     </Pressable>

@@ -17,6 +17,7 @@ import { SearchBar } from '../components/chrome/SearchBar';
 import { colors, haptics, nativeSearchBarHeight, nativeTabBarHeight } from '../design-system';
 import { useDestination } from '../hooks/useDestination';
 import { useParkingForecast } from '../hooks/useParkingForecast';
+import { useThemeColors } from '../hooks/useThemeColors';
 import type { TabParamList } from '../navigation/types';
 import type { ForecastWarning, WarningLevel } from '../services/apiForecasts';
 
@@ -36,6 +37,7 @@ export function PredictionsScreen() {
   const [chartWidth, setChartWidth] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [showAllBusiest, setShowAllBusiest] = useState(false);
+  const theme = useThemeColors();
   const { warnings, zoneWarnings, alternatives, loading, error, refresh, worstLevel } = useParkingForecast({
     enabled: true,
   });
@@ -75,14 +77,14 @@ export function PredictionsScreen() {
         refreshControl={undefined}
       >
         <View style={{ gap: 4 }}>
-          <Text style={{ fontSize: 22, fontWeight: '800', color: colors.brand }}>Parking Predictions</Text>
-          <Text style={{ fontSize: 13, color: colors.surfaceDarkTertiary }}>
+          <Text style={{ fontSize: 22, fontWeight: '800', color: theme.tabActive }}>Parking Predictions</Text>
+          <Text style={{ fontSize: 13, color: theme.textSecondary }}>
             Melbourne CBD · 6-hour forecast · {summary}
           </Text>
         </View>
 
         {error ? (
-          <View style={{ padding: 12, borderRadius: 12, backgroundColor: colors.statusAvoidBg }}>
+          <View style={{ padding: 12, borderRadius: 12, backgroundColor: theme.statusAvoidBg }}>
             <Text style={{ color: colors.statusAvoid }}>Forecast unavailable: {error}</Text>
           </View>
         ) : null}
@@ -93,15 +95,15 @@ export function PredictionsScreen() {
             gap: 8,
             padding: 16,
             borderRadius: 16,
-            backgroundColor: colors.surfaceTertiary,
+            backgroundColor: theme.chromeMuted,
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.brand, letterSpacing: 1 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: theme.tabActive, letterSpacing: 1 }}>
               CBD DEMAND
             </Text>
             {veryBusy ? (
-              <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.statusAvoidBg }}>
+              <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: theme.statusAvoidBg }}>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: colors.statusAvoid }}>Very busy</Text>
               </View>
             ) : null}
@@ -122,14 +124,14 @@ export function PredictionsScreen() {
           style={{
             minHeight: 44,
             borderRadius: 12,
-            backgroundColor: colors.surface,
+            backgroundColor: theme.chrome,
             borderWidth: 1,
-            borderColor: colors.surfaceTertiary,
+            borderColor: theme.border,
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <Text style={{ color: colors.brand, fontWeight: '700' }}>
+          <Text style={{ color: theme.tabActive, fontWeight: '700' }}>
             {expanded ? 'Hide forecast & zone detail' : 'Show forecast & zone detail'}
           </Text>
         </Pressable>
@@ -141,21 +143,21 @@ export function PredictionsScreen() {
                 gap: 8,
                 padding: 16,
                 borderRadius: 16,
-                backgroundColor: colors.surfaceTertiary,
+                backgroundColor: theme.chromeMuted,
               }}
             >
-              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.brand, letterSpacing: 1 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: theme.tabActive, letterSpacing: 1 }}>
                 FORECAST TREND
               </Text>
               {chartWidth > 0 ? <AlternativesLineChart data={alternatives} width={chartWidth - 32} /> : null}
             </View>
 
             <View style={{ gap: 8 }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.brand, letterSpacing: 1 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: theme.tabActive, letterSpacing: 1 }}>
                 BUSIEST AREAS NOW
               </Text>
               {visibleBusiest.length === 0 ? (
-                <Text style={{ fontSize: 13, color: colors.surfaceDarkTertiary }}>No zone warnings right now.</Text>
+                <Text style={{ fontSize: 13, color: theme.textSecondary }}>No zone warnings right now.</Text>
               ) : (
                 visibleBusiest.map((w) => <BusiestRow key={`${w.zone}-${w.hours_from_now}`} w={w} />)
               )}
@@ -165,7 +167,7 @@ export function PredictionsScreen() {
                   onPress={() => setShowAllBusiest((v) => !v)}
                   style={{ minHeight: 44, justifyContent: 'center' }}
                 >
-                  <Text style={{ color: colors.brand, fontWeight: '600' }}>
+                  <Text style={{ color: theme.tabActive, fontWeight: '600' }}>
                     {showAllBusiest ? 'Show fewer' : `See all ${zoneWarnings.length} busiest →`}
                   </Text>
                 </Pressable>
@@ -182,7 +184,7 @@ export function PredictionsScreen() {
           }}
           style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center' }}
         >
-          <Text style={{ color: colors.surfaceDarkTertiary, fontSize: 12 }}>↺ Refresh</Text>
+          <Text style={{ color: theme.textSecondary, fontSize: 12 }}>↺ Refresh</Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -190,6 +192,7 @@ export function PredictionsScreen() {
 }
 
 function BusiestRow({ w }: { w: ForecastWarning }) {
+  const theme = useThemeColors();
   return (
     <View
       style={{
@@ -209,8 +212,8 @@ function BusiestRow({ w }: { w: ForecastWarning }) {
         }}
       />
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.surfaceDark }}>{w.zone}</Text>
-        <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary }}>
+        <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{w.zone}</Text>
+        <Text style={{ fontSize: 12, color: theme.textSecondary }}>
           {w.warning_level} · +{w.hours_from_now}h
         </Text>
       </View>

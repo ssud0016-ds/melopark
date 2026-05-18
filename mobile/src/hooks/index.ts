@@ -1,8 +1,10 @@
 export { useAccessibility } from './useAccessibility';
+export { useAccessibilityBays } from './useAccessibilityBays';
 export { useBays } from './useBays';
 export { useBusyNow, type BusyNowStatus } from './useBusyNow';
 export { useClock } from './useClock';
-export { useDarkMode, type ThemeMode } from './useDarkMode';
+export { useDarkMode, DARK_MODE_STORAGE_KEY, type ThemeMode } from './useDarkMode';
+export { getThemeColors, useThemeColors, type ThemeColors } from './useThemeColors';
 export { useDebouncedValue } from './useDebouncedValue';
 export { useDestinationAlternatives } from './useDestinationAlternatives';
 export { useMapsProvider, MAPS_PROVIDER_STORAGE_KEY, type MapsProvider } from './useMapsProvider';

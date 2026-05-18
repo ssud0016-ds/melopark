@@ -1,7 +1,21 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import React from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ParkingChanceSheet, type QuietStreet } from '../ParkingChanceSheet';
+
+jest.mock('../../../hooks/useDarkMode', () => ({
+  useDarkMode: () => ({ dark: false, toggle: jest.fn(), setTheme: jest.fn() }),
+}));
+
+const safeAreaMetrics = {
+  insets: { top: 0, left: 0, right: 0, bottom: 0 },
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+};
+
+function renderSheet(ui: React.ReactElement) {
+  return render(<SafeAreaProvider initialMetrics={safeAreaMetrics}>{ui}</SafeAreaProvider>);
+}
 
 jest.mock('@gorhom/bottom-sheet', () => {
   const React = require('react');
@@ -45,7 +59,7 @@ const quietStreetNoCoords: QuietStreet = {
 describe('ParkingChanceSheet quiet street chips', () => {
   test('calls onStreetClick when chip has mid coords', () => {
     const onStreetClick = jest.fn();
-    render(
+    renderSheet(
       <ParkingChanceSheet
         destination={null}
         altPin={null}
@@ -65,7 +79,7 @@ describe('ParkingChanceSheet quiet street chips', () => {
 
   test('does not call onStreetClick when mid coords missing', () => {
     const onStreetClick = jest.fn();
-    render(
+    renderSheet(
       <ParkingChanceSheet
         destination={null}
         altPin={null}

@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { AlternativeRow } from '../pressure/AlternativeRow';
 import { PressureBar } from '../pressure/PressureBar';
 import { colors } from '../../design-system';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import type { AlternativesResponse, PressureAlternativeZone } from '../../types/pressureAlternatives';
 import {
   chanceLabelForLevel,
@@ -34,11 +35,13 @@ export function DestinationPressureBlock({
   selectedZoneId = null,
   onAlternativePress,
 }: Props) {
+  const theme = useThemeColors();
+
   if (!isReady) return null;
 
   if (loading) {
     return (
-      <Text style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginBottom: 12 }}>
+      <Text style={{ fontSize: 11, color: theme.textSecondary, marginBottom: 12 }}>
         Loading alternatives...
       </Text>
     );
@@ -52,8 +55,8 @@ export function DestinationPressureBlock({
           padding: 10,
           borderRadius: 8,
           borderWidth: 1,
-          borderColor: '#fecaca',
-          backgroundColor: '#fff1f2',
+          borderColor: theme.statusAvoidBg,
+          backgroundColor: theme.statusAvoidBg,
         }}
       >
         <Text style={{ fontSize: 10, color: colors.statusAvoid, marginBottom: 8 }}>
@@ -68,8 +71,8 @@ export function DestinationPressureBlock({
             paddingVertical: 4,
             borderRadius: 6,
             borderWidth: 1,
-            borderColor: '#fca5a5',
-            backgroundColor: colors.surface,
+            borderColor: theme.border,
+            backgroundColor: theme.chrome,
           }}
         >
           <Text style={{ fontSize: 10, fontWeight: '600', color: colors.statusAvoid }}>Retry</Text>
@@ -81,7 +84,7 @@ export function DestinationPressureBlock({
   const zone = data?.target_zone;
   if (!zone) {
     return (
-      <Text style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginBottom: 12 }}>
+      <Text style={{ fontSize: 11, color: theme.textSecondary, marginBottom: 12 }}>
         Destination pressure unavailable for this area.
       </Text>
     );
@@ -102,11 +105,11 @@ export function DestinationPressureBlock({
             padding: 8,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: '#fde68a',
-            backgroundColor: '#fffbeb',
+            borderColor: theme.statusCautionBg,
+            backgroundColor: theme.statusCautionBg,
           }}
         >
-          <Text style={{ fontSize: 10, color: '#92400e' }}>
+          <Text style={{ fontSize: 10, color: theme.textSecondary }}>
             Alternatives using live street model fallback.
           </Text>
         </View>
@@ -116,7 +119,7 @@ export function DestinationPressureBlock({
         style={{
           fontSize: 15,
           fontWeight: '700',
-          color: colors.surfaceDark,
+          color: theme.text,
           marginBottom: 4,
         }}
         accessibilityRole="header"
@@ -124,7 +127,7 @@ export function DestinationPressureBlock({
         {chance}
       </Text>
 
-      <Text style={{ fontSize: 11, color: colors.surfaceDarkTertiary, marginBottom: 2 }}>
+      <Text style={{ fontSize: 11, color: theme.textSecondary, marginBottom: 2 }}>
         {formatTargetZoneMetadata(zone)}
       </Text>
 
@@ -134,7 +137,7 @@ export function DestinationPressureBlock({
         <Text
           style={{
             fontSize: 11,
-            color: colors.statusGood,
+            color: theme.liveChipText,
             marginTop: 10,
             lineHeight: 16,
           }}
@@ -147,7 +150,7 @@ export function DestinationPressureBlock({
             style={{
               fontSize: 10,
               fontWeight: '600',
-              color: colors.surfaceDarkTertiary,
+              color: theme.textMuted,
               letterSpacing: 0.5,
               textTransform: 'uppercase',
               marginBottom: 8,
@@ -155,9 +158,9 @@ export function DestinationPressureBlock({
           >
             Better nearby options
           </Text>
-          {better.map((alt) => (
+          {better.map((alt, i) => (
             <AlternativeRow
-              key={String(alt.zone_id)}
+              key={`zone-${alt.zone_id}-${i}`}
               alt={alt}
               selected={selectedZoneId != null && String(selectedZoneId) === String(alt.zone_id)}
               colorBlindMode={colorBlindMode}
@@ -169,7 +172,7 @@ export function DestinationPressureBlock({
         <Text
           style={{
             fontSize: 11,
-            color: colors.surfaceDarkTertiary,
+            color: theme.textSecondary,
             marginTop: 10,
             lineHeight: 16,
           }}

@@ -2,7 +2,8 @@ import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import { Text, View } from 'react-native';
 
-import { colors, sheetSnapPoints } from '../../design-system';
+import { sheetSnapPoints } from '../../design-system';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 export type HelpModalRef = {
   present: () => void;
@@ -30,6 +31,7 @@ const SECTIONS: { title: string; body: string }[] = [
 
 export const HelpModal = forwardRef<HelpModalRef>((_props, ref) => {
   const sheetRef = useRef<BottomSheetModal>(null);
+  const theme = useThemeColors();
   const snaps = useMemo(() => [...sheetSnapPoints], []);
 
   useImperativeHandle(ref, () => ({
@@ -43,15 +45,15 @@ export const HelpModal = forwardRef<HelpModalRef>((_props, ref) => {
       snapPoints={snaps}
       index={1}
       enableDynamicSizing={false}
-      backgroundStyle={{ backgroundColor: colors.surface }}
-      handleIndicatorStyle={{ backgroundColor: colors.surfaceDarkTertiary, width: 32, height: 4 }}
+      backgroundStyle={{ backgroundColor: theme.sheet }}
+      handleIndicatorStyle={{ backgroundColor: theme.handle, width: 32, height: 4 }}
     >
       <BottomSheetScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40, gap: 16 }}>
-        <Text style={{ fontSize: 22, fontWeight: '800', color: colors.brand }}>Help & how to use</Text>
+        <Text style={{ fontSize: 22, fontWeight: '800', color: theme.tabActive }}>Help & how to use</Text>
         {SECTIONS.map((s) => (
           <View key={s.title} style={{ gap: 4 }}>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: colors.surfaceDark }}>{s.title}</Text>
-            <Text style={{ fontSize: 13, color: colors.surfaceDarkTertiary, lineHeight: 20 }}>{s.body}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>{s.title}</Text>
+            <Text style={{ fontSize: 13, color: theme.textSecondary, lineHeight: 20 }}>{s.body}</Text>
           </View>
         ))}
       </BottomSheetScrollView>

@@ -1,3 +1,4 @@
+import { dedupeByKey } from './dedupeByKey';
 import type { BayStatus } from './pressureSegmentStyle';
 import { getStatusFillColor } from './pressureSegmentStyle';
 import type {
@@ -77,7 +78,8 @@ export function pickBetterAlternatives(
   if (!target) return [];
   const targetRank = LEVEL_RANK[target.level ?? 'unknown'] ?? 3;
   const targetPressure = Number(target.pressure ?? 1);
-  return (alternatives ?? [])
+  const unique = dedupeByKey(alternatives ?? [], (alt) => String(alt.zone_id));
+  return unique
     .filter((alt) => {
       const rank = LEVEL_RANK[alt.level ?? 'unknown'] ?? 3;
       const pressure = Number(alt.pressure ?? 1);
