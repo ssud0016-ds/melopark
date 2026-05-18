@@ -9,4 +9,5 @@ export { useDebouncedValue } from './useDebouncedValue';
 export { useDestinationAlternatives } from './useDestinationAlternatives';
 export { useMapsProvider, MAPS_PROVIDER_STORAGE_KEY, type MapsProvider } from './useMapsProvider';
 export { useParkingForecast } from './useParkingForecast';
+export { useCbdForecastDerived } from './useCbdForecastDerived';
 export { useQuietestSegments } from './useQuietestSegments';

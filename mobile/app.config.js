@@ -69,7 +69,7 @@ module.exports = {
       permissions: ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'],
       adaptiveIcon: {
         backgroundColor: '#35338c',
-        foregroundImage: './assets/images/android-icon-foreground.png',
+        foregroundImage: './assets/images/icon.png',
         monochromeImage: './assets/images/android-icon-monochrome.png',
       },
       predictiveBackGestureEnabled: false,

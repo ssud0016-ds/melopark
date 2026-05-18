@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   LayoutChangeEvent,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -12,76 +12,139 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlternativesLineChart } from '../components/charts/AlternativesLineChart';
-import { WarningsBarChart } from '../components/charts/WarningsBarChart';
-import { SearchBar } from '../components/chrome/SearchBar';
-import { colors, haptics, nativeSearchBarHeight, nativeTabBarHeight } from '../design-system';
-import { useDestination } from '../hooks/useDestination';
+import { buildKpiItems, CbdKpiStrip } from '../components/predictions/cbd/CbdKpiStrip';
+import { CbdDemandOverview } from '../components/predictions/cbd/CbdDemandOverview';
+import { EventsNearbySection } from '../components/predictions/EventsNearbySection';
+import { MapGoActions } from '../components/predictions/MapGoActions';
+import { PredictionsHeader } from '../components/predictions/PredictionsHeader';
+import { SelectedZoneBanner } from '../components/predictions/SelectedZoneBanner';
+import { ZoneSearch } from '../components/predictions/ZoneSearch';
+import { predictionsCardBorder, predictionsPageBg } from '../components/predictions/predictionsTheme';
+import { colors, haptics, nativeTabBarHeight } from '../design-system';
+import { useCbdForecastDerived } from '../hooks/useCbdForecastDerived';
+import { useDarkMode } from '../hooks/useDarkMode';
+import { useMapFlyTarget } from '../hooks/useMapFlyTarget';
 import { useParkingForecast } from '../hooks/useParkingForecast';
 import { useThemeColors } from '../hooks/useThemeColors';
 import type { TabParamList } from '../navigation/types';
 import type { ForecastWarning, WarningLevel } from '../services/apiForecasts';
-
-const LEVEL_COLOR: Record<WarningLevel, string> = {
-  low: colors.statusGood,
-  moderate: colors.statusCaution,
-  high: colors.statusAvoid,
-  critical: colors.statusAvoid,
-};
+import { FORECAST_TIERS, occupancyPct, splitZone } from '../utils/forecastUtils';
 
 type Nav = BottomTabNavigationProp<TabParamList, 'PredictionsTab'>;
 
 export function PredictionsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
-  const { destination, setDestination, clearDestination } = useDestination();
+  const { dark } = useDarkMode();
+  const theme = useThemeColors();
+  const { setFlyTarget } = useMapFlyTarget();
   const [chartWidth, setChartWidth] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [showAllBusiest, setShowAllBusiest] = useState(false);
-  const theme = useThemeColors();
-  const { warnings, zoneWarnings, alternatives, loading, error, refresh, worstLevel } = useParkingForecast({
+  const [zoneQuery, setZoneQuery] = useState('');
+  const [selectedZone, setSelectedZone] = useState<ForecastWarning | null>(null);
+  const [selectedHour, setSelectedHour] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [fetchedAt, setFetchedAt] = useState<Date | null>(null);
+
+  const selectedCoords = useMemo(() => {
+    if (!selectedZone?.zone_lat || !selectedZone?.zone_lon) return null;
+    return { lat: selectedZone.zone_lat, lng: selectedZone.zone_lon };
+  }, [selectedZone?.zone_lat, selectedZone?.zone_lon]);
+
+  const {
+    warnings,
+    alternatives,
+    loading,
+    alternativesLoading,
+    error,
+    refresh,
+  } = useParkingForecast({
     enabled: true,
+    selectedZone: selectedCoords,
   });
 
-  const summary = useMemo(() => {
-    if (worstLevel === 'low') return 'Calm — most zones available.';
-    if (worstLevel === 'moderate') return 'Some pressure expected soon.';
-    return 'High demand expected — plan ahead.';
-  }, [worstLevel]);
+  const derived = useCbdForecastDerived(warnings);
 
-  const veryBusy = worstLevel === 'critical' || worstLevel === 'high';
+  const kpiItems = useMemo(
+    () =>
+      buildKpiItems({
+        cbdFree: derived.cbdFree,
+        cbdTierLabel: derived.cbdTier.label,
+        peakLabel: derived.peakLabel,
+        peakPct: derived.peakPct,
+        bestMain: derived.bestMain,
+        bestOccPct: derived.best ? occupancyPct(derived.best) : 0,
+        zoneCount: derived.zones.length,
+      }),
+    [derived],
+  );
+
+  const fetchedLabel = useMemo(() => {
+    if (!fetchedAt) return 'Live';
+    return fetchedAt.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  }, [fetchedAt]);
+
   const onChartLayout = (e: LayoutChangeEvent) => setChartWidth(e.nativeEvent.layout.width);
 
-  const visibleBusiest = showAllBusiest ? zoneWarnings : zoneWarnings.slice(0, 3);
+  const visibleBusiest = showAllBusiest ? derived.busiest : derived.busiest.slice(0, 3);
+
+  const openOnMap = useCallback(
+    (lat: number, lon: number, label?: string) => {
+      setFlyTarget({ lat, lng: lon, label });
+      navigation.navigate('MapTab');
+    },
+    [navigation, setFlyTarget],
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refresh();
+    setFetchedAt(new Date());
+    setRefreshing(false);
+  }, [refresh]);
+
+  const pickZone = useCallback((z: ForecastWarning) => {
+    setSelectedZone(z);
+    setZoneQuery(z.zone);
+    setExpanded(true);
+  }, []);
+
+  const pageBg = predictionsPageBg(dark);
+  const cardBd = predictionsCardBorder(dark);
+
+  useEffect(() => {
+    if (warnings.length > 0 && !fetchedAt) setFetchedAt(new Date());
+  }, [warnings.length, fetchedAt]);
 
   return (
-    <View className="flex-1 bg-surface dark:bg-surface-dark" style={{ paddingTop: insets.top }}>
-      <SearchBar
-        destination={destination}
-        onPick={(l) => {
-          setDestination(l);
-          navigation.navigate('MapTab');
-        }}
-        onClear={clearDestination}
-        onSettingsOpen={() => navigation.navigate('MapTab')}
-        onNavTrigger={() => navigation.navigate('MapTab')}
-        variant="predictions"
-      />
-
+    <View className="flex-1" style={{ backgroundColor: pageBg }}>
       <ScrollView
         contentContainerStyle={{
-          paddingTop: insets.top + nativeSearchBarHeight + 24,
+          paddingTop: insets.top,
           paddingHorizontal: 20,
           paddingBottom: insets.bottom + nativeTabBarHeight + 24,
           gap: 16,
         }}
-        refreshControl={undefined}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />
+        }
       >
-        <View style={{ gap: 4 }}>
-          <Text style={{ fontSize: 22, fontWeight: '800', color: theme.tabActive }}>Parking Predictions</Text>
-          <Text style={{ fontSize: 13, color: theme.textSecondary }}>
-            Melbourne CBD · 6-hour forecast · {summary}
-          </Text>
-        </View>
+        <PredictionsHeader
+          fetchedLabel={fetchedLabel}
+          onRefresh={onRefresh}
+          refreshing={refreshing}
+          zoneSearch={
+            <ZoneSearch
+              variant="header"
+              warnings={warnings}
+              value={zoneQuery}
+              onChangeQuery={setZoneQuery}
+              onPick={pickZone}
+            />
+          }
+          kpiStrip={!loading && warnings.length > 0 ? <CbdKpiStrip items={kpiItems} variant="header" /> : null}
+        />
 
         {error ? (
           <View style={{ padding: 12, borderRadius: 12, backgroundColor: theme.statusAvoidBg }}>
@@ -89,31 +152,34 @@ export function PredictionsScreen() {
           </View>
         ) : null}
 
-        <View
+        <CbdDemandOverview
+          derived={derived}
+          loading={loading && warnings.length === 0}
+          selectedHour={selectedHour}
+          onSelectHour={setSelectedHour}
+          selectedZoneName={selectedZone?.zone}
+          onPickZone={pickZone}
+          onMap={openOnMap}
           onLayout={onChartLayout}
-          style={{
-            gap: 8,
-            padding: 16,
-            borderRadius: 16,
-            backgroundColor: theme.chromeMuted,
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: theme.tabActive, letterSpacing: 1 }}>
-              CBD DEMAND
-            </Text>
-            {veryBusy ? (
-              <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: theme.statusAvoidBg }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.statusAvoid }}>Very busy</Text>
-              </View>
-            ) : null}
-          </View>
-          {loading && warnings.length === 0 ? (
-            <ActivityIndicator color={colors.brand} />
-          ) : chartWidth > 0 ? (
-            <WarningsBarChart warnings={warnings} width={chartWidth - 32} />
-          ) : null}
-        </View>
+        />
+
+        <EventsNearbySection warnings={warnings} />
+
+        {selectedZone ? (
+          <SelectedZoneBanner
+            zone={selectedZone}
+            warnings={warnings}
+            alternatives={alternatives}
+            alternativesLoading={alternativesLoading}
+            selectedHour={selectedHour}
+            onSelectHour={setSelectedHour}
+            onClose={() => {
+              setSelectedZone(null);
+              setZoneQuery('');
+            }}
+            onMap={openOnMap}
+          />
+        ) : null}
 
         <Pressable
           accessibilityRole="button"
@@ -124,14 +190,12 @@ export function PredictionsScreen() {
           style={{
             minHeight: 44,
             borderRadius: 12,
-            backgroundColor: theme.chrome,
+            backgroundColor: dark ? '#0f172a' : colors.surface,
             borderWidth: 1,
-            borderColor: theme.border,
-            alignItems: 'center',
-            justifyContent: 'center',
+            borderColor: cardBd,
           }}
         >
-          <Text style={{ color: theme.tabActive, fontWeight: '700' }}>
+          <Text style={{ color: theme.tabActive, fontWeight: '700', textAlign: 'center', paddingVertical: 12 }}>
             {expanded ? 'Hide forecast & zone detail' : 'Show forecast & zone detail'}
           </Text>
         </Pressable>
@@ -143,80 +207,125 @@ export function PredictionsScreen() {
                 gap: 8,
                 padding: 16,
                 borderRadius: 16,
-                backgroundColor: theme.chromeMuted,
+                backgroundColor: dark ? '#0f172a' : '#F2F4FD',
+                borderWidth: 2,
+                borderColor: dark ? 'rgba(255,255,255,0.08)' : '#c8ccec',
               }}
             >
-              <Text style={{ fontSize: 11, fontWeight: '700', color: theme.tabActive, letterSpacing: 1 }}>
-                FORECAST TREND
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '700',
+                  letterSpacing: 0.6,
+                  color: dark ? '#64748b' : '#94a3b8',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Forecast trend
               </Text>
-              {chartWidth > 0 ? <AlternativesLineChart data={alternatives} width={chartWidth - 32} /> : null}
+              {chartWidth > 0 ? (
+                <AlternativesLineChart
+                  data={alternatives}
+                  width={chartWidth - 32}
+                  emptyMessage={
+                    selectedZone
+                      ? 'No alternative trend data for this zone.'
+                      : 'Search a zone above to see alternatives.'
+                  }
+                />
+              ) : null}
             </View>
 
             <View style={{ gap: 8 }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: theme.tabActive, letterSpacing: 1 }}>
-                BUSIEST AREAS NOW
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '700',
+                  letterSpacing: 0.6,
+                  color: dark ? '#64748b' : '#94a3b8',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Busiest areas now
               </Text>
               {visibleBusiest.length === 0 ? (
-                <Text style={{ fontSize: 13, color: theme.textSecondary }}>No zone warnings right now.</Text>
+                <Text style={{ fontSize: 13, color: dark ? '#64748b' : '#94a3b8' }}>
+                  No zone warnings right now.
+                </Text>
               ) : (
-                visibleBusiest.map((w) => <BusiestRow key={`${w.zone}-${w.hours_from_now}`} w={w} />)
+                visibleBusiest.map((w) => (
+                  <BusiestRow
+                    key={`busy-${w.zone}`}
+                    w={w}
+                    dark={dark}
+                    onSelect={() => pickZone(w)}
+                    onMap={() => {
+                      if (w.zone_lat != null && w.zone_lon != null) {
+                        openOnMap(w.zone_lat, w.zone_lon, w.zone);
+                      }
+                    }}
+                  />
+                ))
               )}
-              {zoneWarnings.length > 3 ? (
+              {derived.busiest.length > 3 ? (
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setShowAllBusiest((v) => !v)}
                   style={{ minHeight: 44, justifyContent: 'center' }}
                 >
                   <Text style={{ color: theme.tabActive, fontWeight: '600' }}>
-                    {showAllBusiest ? 'Show fewer' : `See all ${zoneWarnings.length} busiest →`}
+                    {showAllBusiest ? 'Show fewer' : `See all ${derived.busiest.length} busiest →`}
                   </Text>
                 </Pressable>
               ) : null}
             </View>
           </>
         ) : null}
-
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            haptics.selection();
-            refresh();
-          }}
-          style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center' }}
-        >
-          <Text style={{ color: theme.textSecondary, fontSize: 12 }}>↺ Refresh</Text>
-        </Pressable>
       </ScrollView>
     </View>
   );
 }
 
-function BusiestRow({ w }: { w: ForecastWarning }) {
-  const theme = useThemeColors();
+function BusiestRow({
+  w,
+  dark,
+  onSelect,
+  onMap,
+}: {
+  w: ForecastWarning;
+  dark: boolean;
+  onSelect: () => void;
+  onMap: () => void;
+}) {
+  const [main, cross] = splitZone(w.zone);
+  const pct = occupancyPct(w);
+  const t = FORECAST_TIERS[w.warning_level];
+
   return (
-    <View
+    <Pressable
+      accessibilityRole="button"
+      onPress={onSelect}
       style={{
         minHeight: 44,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
         paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: dark ? '#1e293b' : '#e8eaf8',
       }}
     >
-      <View
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: 4,
-          backgroundColor: LEVEL_COLOR[w.warning_level] || colors.statusUnknown,
-        }}
-      />
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.color }} />
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{w.zone}</Text>
-        <Text style={{ fontSize: 12, color: theme.textSecondary }}>
-          {w.warning_level} · +{w.hours_from_now}h
+        <Text style={{ fontSize: 14, fontWeight: '600', color: dark ? '#e2e8f0' : '#1e293b' }}>{main}</Text>
+        {cross ? <Text style={{ fontSize: 12, color: dark ? '#64748b' : '#94a3b8' }}>{cross}</Text> : null}
+        <Text style={{ fontSize: 12, color: dark ? '#64748b' : '#94a3b8' }}>
+          {w.warning_level} · {pct}% · tap for detail
         </Text>
       </View>
-    </View>
+      {w.zone_lat != null && w.zone_lon != null ? (
+        <MapGoActions lat={w.zone_lat} lon={w.zone_lon} onMap={onMap} compact />
+      ) : null}
+    </Pressable>
   );
 }

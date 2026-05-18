@@ -15,11 +15,16 @@ const LEVEL_VALUE: Record<WarningLevel, number> = {
 type Props = {
   data: ForecastAlternativesResponse | null;
   width: number;
+  emptyMessage?: string;
 };
 
 // Plan §15: line chart in PredictionsScreen.
 // X = alternative index, Y = pressure level. Sparkline-style.
-export function AlternativesLineChart({ data, width }: Props) {
+export function AlternativesLineChart({
+  data,
+  width,
+  emptyMessage = 'Search a zone to see alternatives.',
+}: Props) {
   const alts = data?.alternatives ?? [];
   if (!alts.length) {
     return (
@@ -33,7 +38,9 @@ export function AlternativesLineChart({ data, width }: Props) {
           borderRadius: 12,
         }}
       >
-        <Text style={{ color: colors.surfaceDarkTertiary }}>Set a destination to see alternatives.</Text>
+        <Text style={{ color: colors.surfaceDarkTertiary, textAlign: 'center', paddingHorizontal: 12 }}>
+          {emptyMessage}
+        </Text>
       </View>
     );
   }
@@ -44,10 +51,11 @@ export function AlternativesLineChart({ data, width }: Props) {
   const stepX = alts.length > 1 ? innerW / (alts.length - 1) : 0;
 
   const points = alts.map((a, i) => {
-    const v = LEVEL_VALUE[a.pressure_level] || 1;
+    const level = a.pressure_level ?? 'low';
+    const v = LEVEL_VALUE[level] || 1;
     const y = padding + innerH - ((v - 1) / 3) * innerH;
     const x = padding + i * stepX;
-    return { x, y, level: a.pressure_level };
+    return { x, y, level };
   });
 
   const polylineStr = points.map((p) => `${p.x},${p.y}`).join(' ');

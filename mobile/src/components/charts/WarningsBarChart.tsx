@@ -2,67 +2,55 @@ import { Text, View } from 'react-native';
 import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 
 import { colors } from '../../design-system';
-import type { ForecastWarning, WarningLevel } from '../../services/apiForecasts';
+import type { CbdHourPoint } from '../../utils/forecastUtils';
+import { FORECAST_HOUR_LABELS, FORECAST_TIERS } from '../../utils/forecastUtils';
 
 const HEIGHT = 180;
-const BAR_GAP = 4;
-const LEVEL_VALUE: Record<WarningLevel, number> = {
-  low: 1,
-  moderate: 2,
-  high: 3,
-  critical: 4,
-};
-const LEVEL_COLOR: Record<WarningLevel, string> = {
-  low: colors.statusGood,
-  moderate: colors.statusCaution,
-  high: colors.statusAvoid,
-  critical: colors.statusAvoid,
-};
+const BAR_GAP = 6;
 
 type Props = {
-  warnings: ForecastWarning[];
+  /** Web cbdChart — 7 hourly CBD averages, not raw zone rows. */
+  chart: CbdHourPoint[];
   width: number;
 };
 
-// Plan §15: bar chart in PredictionsScreen.
-// Bars = next-N hours, height = warning level. Pure SVG, no chart lib.
-export function WarningsBarChart({ warnings, width }: Props) {
-  const sorted = [...warnings].sort((a, b) => a.hours_from_now - b.hours_from_now).slice(0, 12);
-  if (!sorted.length) {
+export function WarningsBarChart({ chart, width }: Props) {
+  if (!chart.length) {
     return <Empty width={width} />;
   }
 
-  const barWidth = Math.max(8, (width - BAR_GAP * (sorted.length + 1)) / sorted.length);
-  const max = 4;
+  const barWidth = Math.max(12, (width - BAR_GAP * (chart.length + 1)) / chart.length);
+  const maxOcc = Math.max(0.2, ...chart.map((d) => d.occ));
 
   return (
     <View>
       <Svg width={width} height={HEIGHT}>
-        {sorted.map((w, i) => {
-          const value = LEVEL_VALUE[w.warning_level] || 1;
-          const h = (value / max) * (HEIGHT - 30);
+        {chart.map((d, i) => {
+          const pct = Math.round(d.occ * 100);
+          const h = Math.max(8, (d.occ / maxOcc) * (HEIGHT - 30));
+          const fill = FORECAST_TIERS[d.level]?.color ?? colors.statusUnknown;
           return (
             <Rect
-              key={`${w.zone}-${w.hours_from_now}`}
+              key={`cbd-hour-${d.h}`}
               x={BAR_GAP + i * (barWidth + BAR_GAP)}
               y={HEIGHT - 20 - h}
               width={barWidth}
               height={h}
               rx={4}
-              fill={LEVEL_COLOR[w.warning_level] || colors.statusUnknown}
+              fill={fill}
             />
           );
         })}
-        {sorted.map((w, i) => (
+        {chart.map((d, i) => (
           <SvgText
-            key={`label-${i}`}
+            key={`cbd-label-${d.h}`}
             x={BAR_GAP + i * (barWidth + BAR_GAP) + barWidth / 2}
             y={HEIGHT - 4}
             fontSize={9}
             fill={colors.surfaceDarkTertiary}
             textAnchor="middle"
           >
-            +{w.hours_from_now}h
+            {FORECAST_HOUR_LABELS[i] ?? `+${d.h}h`}
           </SvgText>
         ))}
       </Svg>
@@ -82,7 +70,7 @@ function Empty({ width }: { width: number }) {
         borderRadius: 12,
       }}
     >
-      <Text style={{ color: colors.surfaceDarkTertiary }}>No warnings in the next 12 hours.</Text>
+      <Text style={{ color: colors.surfaceDarkTertiary }}>No forecast data.</Text>
     </View>
   );
 }

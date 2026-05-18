@@ -11,32 +11,38 @@ import {
 const POLL_MS = 5 * 60 * 1000;
 const LEVEL_ORDER: Record<WarningLevel, number> = { low: 0, moderate: 1, high: 2, critical: 3 };
 
-type Destination = { lat: number; lng: number } | null;
+type LatLng = { lat: number; lng: number } | null;
 
 export function useParkingForecast({
   destination = null,
+  selectedZone = null,
   plannerArrivalIso = null,
   enabled = true,
   hoursAhead = 6,
 }: {
-  destination?: Destination;
+  destination?: LatLng;
+  selectedZone?: LatLng;
   plannerArrivalIso?: string | null;
   enabled?: boolean;
   hoursAhead?: number;
 } = {}) {
   const [warnings, setWarnings] = useState<ForecastWarning[]>([]);
   const [alternatives, setAlternatives] = useState<ForecastAlternativesResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [warningsLoading, setWarningsLoading] = useState(false);
+  const [alternativesLoading, setAlternativesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshWarnings = useCallback(async () => {
     if (!enabled) return;
     try {
+      setWarningsLoading(true);
       const data = await fetchForecastWarnings(hoursAhead);
       setWarnings(data.warnings ?? []);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'forecast warnings failed');
+    } finally {
+      setWarningsLoading(false);
     }
   }, [enabled, hoursAhead]);
 
@@ -50,27 +56,33 @@ export function useParkingForecast({
     return () => clearInterval(id);
   }, [enabled, refreshWarnings]);
 
+  const altCoords = useMemo(() => {
+    if (selectedZone?.lat != null && selectedZone?.lng != null) return selectedZone;
+    if (destination?.lat != null && destination?.lng != null) return destination;
+    return null;
+  }, [selectedZone?.lat, selectedZone?.lng, destination?.lat, destination?.lng]);
+
   useEffect(() => {
-    if (!enabled || !destination || destination.lat == null || destination.lng == null) {
+    if (!enabled || !altCoords) {
       setAlternatives(null);
       return;
     }
     let cancelled = false;
-    setLoading(true);
-    fetchForecastAlternatives(destination.lat, destination.lng, plannerArrivalIso || null)
+    setAlternativesLoading(true);
+    fetchForecastAlternatives(altCoords.lat, altCoords.lng, plannerArrivalIso || null)
       .then((data) => {
         if (!cancelled) setAlternatives(data);
       })
       .catch(() => {
-        if (!cancelled) setAlternatives(null);
+        if (!cancelled) setAlternatives({ target_zone: null, alternatives: [] });
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setAlternativesLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [enabled, destination?.lat, destination?.lng, plannerArrivalIso]);
+  }, [enabled, altCoords?.lat, altCoords?.lng, plannerArrivalIso]);
 
   const worstLevel = useMemo<WarningLevel>(() => {
     const now = warnings.filter((w) => w.hours_from_now <= 1);
@@ -100,7 +112,8 @@ export function useParkingForecast({
     zoneWarnings,
     worstLevel,
     alternatives,
-    loading,
+    loading: warningsLoading,
+    alternativesLoading,
     error,
     refresh: refreshWarnings,
   };

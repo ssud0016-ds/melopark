@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -33,6 +33,7 @@ import { useBays } from '../hooks/useBays';
 import { useBusyNow } from '../hooks/useBusyNow';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useDestination } from '../hooks/useDestination';
+import { useMapFlyTarget } from '../hooks/useMapFlyTarget';
 import { useFilters } from '../hooks/useFilters';
 import { useLocationPermission } from '../hooks/useLocationPermission';
 import { useOnboarding } from '../hooks/useOnboarding';
@@ -51,7 +52,7 @@ import {
   displayAlternativeLabel,
 } from '../utils/destinationPressure';
 import type { PressureAlternativeZone } from '../types/pressureAlternatives';
-import { DEFAULT_CBD_BOUNDS, SEARCH_RADIUS_M } from '../utils/mapGeo';
+import { DEFAULT_CBD_BOUNDS, DESTINATION_MAP_ZOOM, QUIET_STREET_FLY_MS, SEARCH_RADIUS_M } from '../utils/mapGeo';
 
 type Nav = BottomTabNavigationProp<TabParamList, 'MapTab'>;
 
@@ -91,6 +92,7 @@ export function MapScreen() {
   const { show: showToast } = useToast();
   const { state: locationState, canAskAgain, request: requestLocation } = useLocationPermission();
   const { destination, setDestination, clearDestination, altPin, setAltPin } = useDestination();
+  const { consumeFlyTarget } = useMapFlyTarget();
   const { dark: mapDark } = useDarkMode();
   const theme = useThemeColors();
   const filters = useFilters();
@@ -103,6 +105,21 @@ export function MapScreen() {
   const debouncedBounds = useDebouncedValue(mapBounds, 300);
   const lastReportedBoundsRef = useRef<PressureBounds | null>(null);
   const mapRef = useRef<ParkingMapRef>(null);
+
+  // Navigate from Predictions: fly to selected zone (web MapPage flyTarget).
+  useFocusEffect(
+    useCallback(() => {
+      const target = consumeFlyTarget();
+      if (!target) return;
+      const t = setTimeout(() => {
+        mapRef.current?.flyTo(target.lat, target.lng, {
+          zoom: DESTINATION_MAP_ZOOM,
+          durationMs: QUIET_STREET_FLY_MS,
+        });
+      }, 300);
+      return () => clearTimeout(t);
+    }, [consumeFlyTarget]),
+  );
 
   // Match web: fetch when manifest ready (not only when overlay has segments).
   const quietSegmentsEnabled = busyNowStatus === 'ready' && !destination;

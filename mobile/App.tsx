@@ -16,6 +16,7 @@ import { OfflineBanner } from './src/components/common/OfflineBanner';
 import { ToastProvider } from './src/components/common/Toast';
 import { colors, interFontMap, rootStyle } from './src/design-system';
 import { DestinationProvider } from './src/hooks/useDestination';
+import { MapFlyTargetProvider } from './src/hooks/useMapFlyTarget';
 import { DARK_MODE_STORAGE_KEY, type ThemeMode } from './src/hooks/useDarkMode';
 import { FiltersProvider } from './src/hooks/useFilters';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -83,9 +84,11 @@ export default function App() {
         <ToastProvider>
           <FiltersProvider>
             <DestinationProvider>
-              <RootNavigator />
-              <OfflineBanner />
-              <LocationPermissionBanner />
+              <MapFlyTargetProvider>
+                <RootNavigator />
+                <OfflineBanner />
+                <LocationPermissionBanner />
+              </MapFlyTargetProvider>
             </DestinationProvider>
           </FiltersProvider>
         </ToastProvider>
