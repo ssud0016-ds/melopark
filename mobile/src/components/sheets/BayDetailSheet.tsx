@@ -84,6 +84,14 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
     }));
 
     const FILTER_TO_MINS: Record<string, number> = { '15min': 15, '30min': 30, '1h': 60, '2h': 120, '3h': 180, '4h': 240 };
+    const fetchOpts = useMemo(() => {
+      if (plannerArrivalIso && plannerDurationMins != null) {
+        return { arrivalIso: plannerArrivalIso, durationMins: plannerDurationMins };
+      }
+      if (!durationFilter) return null;
+      const mins = durationFilter === 'custom' ? customDuration : FILTER_TO_MINS[durationFilter];
+      return mins ? { arrivalIso: new Date().toISOString(), durationMins: mins } : null;
+    }, [plannerArrivalIso, plannerDurationMins, durationFilter, customDuration]);
 
     const fetchOpts = useMemo(() => {
       if (plannerArrivalIso && plannerDurationMins != null) {

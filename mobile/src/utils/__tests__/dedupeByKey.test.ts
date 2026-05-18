@@ -34,8 +34,8 @@ describe('pickBetterAlternatives dedupes zone_id', () => {
     const out = pickBetterAlternatives(
       { level: 'high', pressure: 0.9 },
       [
-        { zone_id: 20099, level: 'low', pressure: 0.2, walk_distance_m: 100 },
-        { zone_id: 20099, level: 'low', pressure: 0.1, walk_distance_m: 200 },
+        { zone_id: 20099, label: 'Zone 20099', level: 'low', pressure: 0.2, walk_distance_m: 100 },
+        { zone_id: 20099, label: 'Zone 20099', level: 'low', pressure: 0.1, walk_distance_m: 200 },
       ],
     );
     expect(out).toHaveLength(1);

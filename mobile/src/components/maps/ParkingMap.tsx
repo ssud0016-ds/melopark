@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  type ComponentProps,
   type ReactNode,
   useCallback,
   useEffect,
@@ -54,12 +55,12 @@ const ACCESSIBLE_MARKER_IMAGE = require('../../../assets/map/accessible-marker.p
 const ACCESSIBLE_ICON_SIZE = 0.46;
 const ACCESSIBLE_ICON_SIZE_SELECTED = 0.62;
 
-type FilterExpression = unknown[];
+type LayerFilter = NonNullable<ComponentProps<typeof CircleLayer>['filter']>;
 
 /** Unclustered bay point (not a cluster bubble). */
-const BAY_POINT: FilterExpression = ['!', ['has', 'point_count']];
-const BAY_REGULAR: FilterExpression = ['all', BAY_POINT, ['==', ['get', 'isAccessible'], 'no']];
-const BAY_ACCESSIBLE: FilterExpression = ['all', BAY_POINT, ['==', ['get', 'isAccessible'], 'yes']];
+const BAY_POINT: LayerFilter = ['!', ['has', 'point_count']];
+const BAY_REGULAR: LayerFilter = ['all', BAY_POINT, ['==', ['get', 'isAccessible'], 'no']];
+const BAY_ACCESSIBLE: LayerFilter = ['all', BAY_POINT, ['==', ['get', 'isAccessible'], 'yes']];
 
 export type FlyToOptions = {
   zoom?: number;
@@ -445,7 +446,9 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
                 textIgnorePlacement: true,
               }}
             />
-          ) : null}
+          ) : (
+            <></>
+          )}
         </ShapeSource>
       ) : null}
     </MapView>

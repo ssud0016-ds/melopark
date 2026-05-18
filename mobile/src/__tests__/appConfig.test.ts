@@ -33,7 +33,7 @@ describe('app.config.js', () => {
   test('App Links autoVerify on melopark.app', () => {
     const filters = appConfig.expo.android.intentFilters ?? [];
     const appLink = filters.find((f) =>
-      f.data?.some?.((d) => d.host === 'melopark.app'),
+      f.data?.some?.((d) => 'host' in d && d.host === 'melopark.app'),
     );
     expect(appLink?.autoVerify).toBe(true);
   });
