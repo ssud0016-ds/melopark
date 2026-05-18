@@ -8,6 +8,8 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.schemas.pressure import (
     AlternativesResponse,
@@ -22,6 +24,8 @@ from app.services.pressure_service import (
 )
 from app.services import segment_pressure_service as sps
 from app.services.segment_tiles_service import build_tile_with_metadata
+
+limiter = Limiter(key_func=get_remote_address)
 
 DATA_ATTRIBUTION = "© City of Melbourne (CC BY 4.0) · Events © Eventfinda"
 DATA_ATTRIBUTION_HTML = "&copy; City of Melbourne (CC BY 4.0) &middot; Events &copy; Eventfinda"
@@ -40,7 +44,7 @@ def _parse_at(at: Optional[str]) -> Optional[datetime]:
             dt = dt.replace(tzinfo=MELB_TZ)
         return dt
     except (ValueError, TypeError) as e:
-        raise HTTPException(status_code=400, detail=f"Invalid 'at' datetime: {e}") from e
+        raise HTTPException(status_code=400, detail="Invalid datetime format") from e
 
 
 @router.get(
@@ -48,6 +52,7 @@ def _parse_at(at: Optional[str]) -> Optional[datetime]:
     response_model=PressureResponse,
     summary="Get parking pressure for all zones",
 )
+@limiter.limit("30/minute")
 def get_pressure(
     request: Request,
     response: Response,
@@ -79,6 +84,7 @@ def get_pressure(
     response_model=AlternativesResponse,
     summary="Find lower-pressure zones near a destination",
 )
+@limiter.limit("30/minute")
 def get_alternatives(
     request: Request,
     response: Response,
@@ -205,7 +211,8 @@ def _fallback_alternatives_from_segments(lat: float, lon: float, radius: int, li
     "/zones/geojson",
     summary="Get zone boundary polygons as GeoJSON",
 )
-def get_zones_geojson():
+@limiter.limit("30/minute")
+def get_zones_geojson(request: Request):
     if not is_gold_loaded():
         raise HTTPException(status_code=503, detail="Pressure data not loaded yet")
     return get_zone_hulls_geojson()
@@ -220,11 +227,13 @@ def get_zones_geojson():
     "/tiles/manifest.json",
     summary="Tile manifest with current minute_bucket and data sources",
 )
-def get_tile_manifest():
+@limiter.limit("30/minute")
+def get_tile_manifest(request: Request, response: Response):
     if not sps.is_loaded():
         raise HTTPException(status_code=503, detail="Segment pressure data not loaded yet")
 
     bucket, rows, active_event_count = sps.get_pressure_by_data_version()
+    response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=120"
     now_melb = datetime.now(MELB_TZ)
     return {
         "generated_at": now_melb.isoformat(),
@@ -248,7 +257,8 @@ def get_tile_manifest():
     "/tiles/{z}/{x}/{y}.mvt",
     summary="Mapbox Vector Tile of segment pressure",
 )
-def get_tile(z: int, x: int, y: int, response: Response):
+@limiter.limit("30/minute")
+def get_tile(request: Request, z: int, x: int, y: int, response: Response):
     if not sps.is_loaded():
         raise HTTPException(status_code=503, detail="Segment pressure data not loaded yet")
     if z < 13 or z > 19:
@@ -263,7 +273,7 @@ def get_tile(z: int, x: int, y: int, response: Response):
         content=body,
         media_type="application/vnd.mapbox-vector-tile",
         headers={
-            "Cache-Control": "public, max-age=60",
+            "Cache-Control": "public, max-age=60, stale-while-revalidate=600",
             "ETag": f'"{etag}"',
             "X-Attribution": DATA_ATTRIBUTION_HTML,
             "X-Tile-Cache": str(meta["cache"]),
@@ -277,7 +287,9 @@ def get_tile(z: int, x: int, y: int, response: Response):
     "/segments",
     summary="List segments within a bounding box, ordered by pressure ascending",
 )
+@limiter.limit("30/minute")
 def get_segments_bbox(
+    request: Request,
     bbox: str = Query(..., description="minLon,minLat,maxLon,maxLat"),
     limit: int = Query(3, ge=1, le=150, description="Max segments to return"),
 ):
@@ -333,7 +345,8 @@ def get_segments_bbox(
     "/segments/{segment_id}",
     summary="Pressure detail for a single segment",
 )
-def get_segment(segment_id: str):
+@limiter.limit("30/minute")
+def get_segment(request: Request, segment_id: str):
     if not sps.is_loaded():
         raise HTTPException(status_code=503, detail="Segment pressure data not loaded yet")
     detail = sps.build_segment_public_detail(segment_id)

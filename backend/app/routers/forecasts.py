@@ -36,7 +36,9 @@ from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.services.forecast_service import (
     get_warnings,
@@ -44,7 +46,7 @@ from app.services.forecast_service import (
     get_alternatives_for,
     get_event_risk,
 )
-
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/forecasts", tags=["forecasts"])
 
 MELB_TZ = ZoneInfo("Australia/Melbourne")
@@ -79,7 +81,9 @@ def _parse_at(at: Optional[str]) -> Optional[datetime]:
         "AC 6.1.3: entries span hours_from_now 0–N, enabling the hour-chip timeline."
     ),
 )
+@limiter.limit("30/minute")
 def get_forecast_warnings(
+    request: Request,
     hours: int = Query(
         6,
         ge=1,
@@ -115,7 +119,9 @@ def get_forecast_warnings(
         "before leaving home."
     ),
 )
+@limiter.limit("30/minute")
 def get_arrival_pressure(
+    request: Request,
     lat: float = Query(..., ge=-90.0, le=90.0, description="Destination latitude"),
     lon: float = Query(..., ge=-180.0, le=180.0, description="Destination longitude"),
     at: Optional[str] = Query(
@@ -149,7 +155,9 @@ def get_arrival_pressure(
         "can show 'No quieter alternatives nearby' (AC 6.2.3)."
     ),
 )
+@limiter.limit("30/minute")
 def get_forecast_alternatives(
+    request: Request,
     lat: float = Query(..., ge=-90.0, le=90.0, description="Destination latitude"),
     lon: float = Query(..., ge=-180.0, le=180.0, description="Destination longitude"),
     at: Optional[str] = Query(
@@ -199,7 +207,10 @@ def get_forecast_alternatives(
         "Used by the map overlay to shade zones with upcoming events."
     ),
 )
-def get_forecast_events():
+@limiter.limit("30/minute")
+def get_forecast_events(
+    request: Request
+):
     risks = get_event_risk()
     return {
         "generated_at": datetime.now(MELB_TZ).isoformat(),

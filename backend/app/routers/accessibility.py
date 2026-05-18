@@ -5,9 +5,13 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
+
 
 from app.schemas.accessibility import AccessibilityNearbyResponse
 from app.services.accessibility_service import (
@@ -24,7 +28,9 @@ router = APIRouter(prefix="/api/accessibility", tags=["accessibility"])
     response_model=AccessibilityNearbyResponse,
     summary="Find nearby disability bays near destination",
 )
+@limiter.limit("30/minute")
 def get_nearby_disability_bays(
+    request: Request,
     lat: float = Query(..., ge=-90.0, le=90.0, description="Destination latitude"),
     lon: float = Query(..., ge=-180.0, le=180.0, description="Destination longitude"),
     radius_m: int = Query(500, ge=50, le=50000, description="Search radius in meters"),
@@ -51,7 +57,9 @@ def get_nearby_disability_bays(
     "/points",
     summary="Get raw accessibility points for map overlay",
 )
+@limiter.limit("30/minute")
 def get_raw_accessibility_points(
+    request: Request,
     top_n: int = Query(5000, ge=1, le=10000, description="Maximum points to return"),
 ) -> dict:
     """Return raw accessibility point markers (not limited by live bay overlap)."""
@@ -68,7 +76,9 @@ def get_raw_accessibility_points(
     "/all",
     summary="Get all accessibility bays",
 )
+@limiter.limit("30/minute")
 def get_all_accessibility_bays(
+    request: Request,
     top_n: int = Query(5000, ge=1, le=10000, description="Maximum bays to return"),
     available_only: bool = Query(False, description="Return only bays currently available"),
 ) -> dict:

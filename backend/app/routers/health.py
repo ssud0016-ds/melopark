@@ -17,6 +17,7 @@ class HealthResponse(BaseModel):
 
 @router.get("/health", response_model=HealthResponse)
 def health_check(settings: Settings = Depends(get_settings)) -> HealthResponse:
-    """Return service health and runtime environment."""
-    return HealthResponse(status="ok", environment=settings.ENVIRONMENT)
-
+    env = settings.ENVIRONMENT
+    if env.strip().lower() == "production":
+        env = "live"
+    return HealthResponse(status="ok", environment=env)
