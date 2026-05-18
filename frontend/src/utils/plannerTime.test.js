@@ -8,7 +8,10 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_PLANNER_DURATION_MINS,
   PLANNER_DURATION_PRESETS_MINS,
+  durationFilterLabel,
   formatDurationLabel,
+  formatMelbourneDate,
+  formatMelbourneTime,
   melbourneAwareIsoFromDateTimeLocal,
   melbourneWallClockToAwareIso,
   nextQuarterHourDefaults,
@@ -91,6 +94,23 @@ describe('Bug 3 — plannerTime Melbourne arrival_iso', () => {
       const iso = melbourneWallClockToAwareIso(2026, 12, 22, 14, 0, 0)
       expect(iso).toMatch(/^2026-12-22T14:00:00[+-]\d{2}:\d{2}$/)
       expect(isNaivePlannerIso(iso)).toBe(false)
+    })
+  })
+
+  describe('bay-detail Showing strip formatters', () => {
+    it('formatMelbourneDate uses dd/mm/yyyy', () => {
+      const iso = melbourneWallClockToAwareIso(2026, 5, 18, 13, 7, 0)
+      expect(formatMelbourneDate(iso)).toMatch(/^Mon, 18\/05\/2026$/)
+    })
+
+    it('formatMelbourneTime uppercases AM/PM', () => {
+      const iso = melbourneWallClockToAwareIso(2026, 5, 18, 13, 7, 0)
+      expect(formatMelbourneTime(iso)).toMatch(/1:07\s*PM/i)
+    })
+
+    it('durationFilterLabel maps 1h chip to 1H', () => {
+      expect(durationFilterLabel('1h')).toBe('1H')
+      expect(durationFilterLabel(null)).toBe('Any duration')
     })
   })
 

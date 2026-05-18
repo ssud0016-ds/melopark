@@ -130,17 +130,17 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
   })()
 
   return (
-    <div className={cn('mx-5 mt-3 rounded-2xl p-5', panelTone)}>
+    <div className={cn('mx-5 mt-3 rounded-[16px] p-5', panelTone)}>
       {permitOnly ? (
         <>
-          <div className="text-5xl font-extrabold tracking-tight text-[#263089]">
+          <div className="text-[44px] leading-none font-extrabold tracking-[-0.5px] text-[#263089]">
             {word}
           </div>
           <div className="mt-1 text-sm font-semibold text-[#263089]">{sentence}</div>
         </>
       ) : (
         <div className="flex items-baseline gap-3">
-          <div className="text-5xl font-extrabold tracking-tight text-[#263089]">
+          <div className="text-[44px] leading-none font-extrabold tracking-[-0.5px] text-[#263089]">
             {word}
           </div>
           <div className="text-sm font-semibold text-[#263089]">{sentence}</div>
@@ -154,7 +154,7 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
 
       <hr className="mt-3 border-t border-[#263089]/20" />
 
-      <div className="mt-3 space-y-2.5 text-sm text-[#263089]">
+      <div className="mt-3 space-y-[10px] text-sm text-[#263089]">
         {showRestrictionRow && (
           <div className="flex items-center justify-between gap-3">
             <div className="font-semibold">Parking Restriction:</div>

@@ -40,7 +40,9 @@ import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   DESTINATION_MAP_ZOOM,
+  MELBOURNE_MAX_BOUNDS,
   MELBOURNE_MAX_ZOOM,
+  MELBOURNE_MIN_ZOOM,
   SEARCH_RADIUS_M,
 } from '../../utils/mapGeo';
 import { mapBasemapStyleUrl } from '../../utils/mapStyle';
@@ -262,7 +264,9 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
       <Camera
         ref={cameraRef}
         defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: initialZoom }}
+        minZoomLevel={MELBOURNE_MIN_ZOOM}
         maxZoomLevel={MELBOURNE_MAX_ZOOM}
+        maxBounds={MELBOURNE_MAX_BOUNDS}
       />
 
       <Images images={{ 'accessible-marker': ACCESSIBLE_MARKER_IMAGE }} />

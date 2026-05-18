@@ -4,10 +4,23 @@ const NORTH_LAT = -37.8055;
 const SOUTH_LAT = -37.8225;
 const WEST_LNG = 144.9475;
 const EAST_LNG = 144.9745;
+/** Web mapGeo CITY_PAD — padded City of Melbourne interactive area. */
+const CITY_PAD = 0.02;
+
+/** Mapbox Camera maxBounds — matches web Leaflet MELBOURNE_MAX_BOUNDS. */
+export const MELBOURNE_MAX_BOUNDS = {
+  ne: [EAST_LNG + CITY_PAD, NORTH_LAT + CITY_PAD] as [number, number],
+  sw: [WEST_LNG - CITY_PAD, SOUTH_LAT - CITY_PAD] as [number, number],
+};
+
+/** Web mapGeo MELBOURNE_MIN_ZOOM — prevents zooming out past CBD overview. */
+export const MELBOURNE_MIN_ZOOM = 13;
 
 export const DEFAULT_MAP_CENTER: [number, number] = [144.9631, -37.8136];
-export const DEFAULT_MAP_ZOOM = 13;
-export const DESTINATION_MAP_ZOOM = 16;
+/** Web mapGeo DEFAULT_MAP_ZOOM. */
+export const DEFAULT_MAP_ZOOM = 15;
+/** Web mapGeo DESTINATION_MAP_ZOOM. */
+export const DESTINATION_MAP_ZOOM = 17;
 /** Web ParkingMap CLUSTER_ZOOM_CUTOFF — individual bay dots at this zoom and above. */
 export const BAY_INDIVIDUAL_MIN_ZOOM = 18;
 /** Web mapGeo MELBOURNE_MAX_ZOOM — max pinch / cluster expansion zoom. */

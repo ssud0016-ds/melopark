@@ -275,3 +275,55 @@ export function formatLeaveByClock(iso) {
   if (Number.isNaN(d.getTime())) return null
   return d.toLocaleTimeString('en-AU', TIME_OPTS) || null
 }
+
+const SHOWING_DATE_OPTS = {
+  weekday: 'short',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  timeZone: MELBOURNE_TZ,
+}
+
+/** "Mon, 18/05/2026" — Melbourne wall clock for the bay-detail "Showing" strip. */
+export function formatMelbourneDate(iso) {
+  const d = new Date(iso ?? Date.now())
+  if (Number.isNaN(d.getTime())) return ''
+  try {
+    const parts = new Intl.DateTimeFormat('en-AU', SHOWING_DATE_OPTS).formatToParts(d)
+    const get = (t) => parts.find((p) => p.type === t)?.value ?? ''
+    return `${get('weekday')}, ${get('day')}/${get('month')}/${get('year')}`
+  } catch {
+    return ''
+  }
+}
+
+/** "1:07 PM" — Melbourne wall clock for the bay-detail "Showing" strip. */
+export function formatMelbourneTime(iso) {
+  const d = new Date(iso ?? Date.now())
+  if (Number.isNaN(d.getTime())) return ''
+  try {
+    return d.toLocaleTimeString('en-AU', TIME_OPTS).toUpperCase()
+  } catch {
+    return ''
+  }
+}
+
+const DUR_FILTER_LABELS = {
+  '15m': '15 min',
+  '15min': '15 min',
+  '30m': '30 min',
+  '30min': '30 min',
+  '1h': '1H',
+  '2h': '2H',
+  '3h': '3H',
+  '4h': '4H',
+}
+
+/** Map duration-filter code to short label used in the "Showing" strip. */
+export function durationFilterLabel(durationFilter, customDuration) {
+  if (!durationFilter) return 'Any duration'
+  if (durationFilter === 'custom') {
+    return customDuration ? `${customDuration} min` : 'Custom'
+  }
+  return DUR_FILTER_LABELS[durationFilter] || durationFilter
+}
