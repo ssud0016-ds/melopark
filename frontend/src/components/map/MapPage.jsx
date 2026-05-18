@@ -6,7 +6,6 @@ import OnboardingOverlay, { setOnboardingDestination } from './OnboardingOverlay
 import SearchBar from '../search/SearchBar'
 import ChromeSearchBar from '../search/ChromeSearchBar'
 import BottomTabBar, { TAB_BAR_HEIGHT } from '../nav/BottomTabBar'
-import SettingsSheet from '../settings/SettingsSheet'
 import BayDetailSheet from '../bay/BayDetailSheet'
 import FilterChips from '../feedback/FilterChips'
 import BusyNowPanel from '../busyNow/BusyNowPanel'
@@ -71,7 +70,7 @@ function isSignificantBoundsChange(prev, next) {
   return Math.abs(nextArea - prevArea) / denom >= BOUNDS_AREA_EPS_RATIO
 }
 
-export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry, flyTarget, onNavigate, darkMode, onToggleDark, onSetTheme, settingsOpen = false, onSettingsOpen, onSettingsClose }) {
+export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry, flyTarget, onNavigate, darkMode, onToggleDark, onSetTheme, onSettingsOpen, colorBlindMode, onToggleColorBlind, accessibilityAvailableOnly, onSetAccessibilityAvailableOnly, triggerOnboarding, onOnboardingConsumed }) {
   const mapRef = useRef(null)
   const lastReportedBoundsRef = useRef(null)
 
@@ -141,7 +140,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
 
   // ── Parking chance context (internal vector-tile street pressure layer) ──
   const { manifest: busyNowManifest, status: busyNowStatus } = useBusyNow(true)
-  const [colorBlindMode, setColorBlindMode] = useState(false)
 
   const parkingChanceActive =
     busyNowStatus === 'ready' &&
@@ -323,6 +321,12 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setShowOnboarding(false)
   }, [])
 
+  useEffect(() => {
+    if (!triggerOnboarding) return
+    setShowOnboarding(true)
+    onOnboardingConsumed?.()
+  }, [triggerOnboarding, onOnboardingConsumed])
+
   const handleOnboardingPick = useCallback((lm, arrivalIso = null) => {
     pickDestination(lm)
     if (arrivalIso) {
@@ -338,7 +342,6 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
   const [accessibilityNearby, setAccessibilityNearby] = useState([])
   const [accessibilityLoading, setAccessibilityLoading] = useState(false)
   const [accessibilityError, setAccessibilityError] = useState(null)
-  const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [mobileFilterSheetOpen, setMobileFilterSheetOpen] = useState(false)
   const [mobileFilterSnap, setMobileFilterSnap] = useState(SNAP_PEEK)
@@ -667,7 +670,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
       ) : (
         <>
           {_activePills.slice(0, 2).map((pill) => (
-            <span key={pill} className="inline-flex items-center rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-[11px] font-semibold text-white dark:border-brand-light/30 dark:bg-brand/20 dark:text-white">
+            <span key={pill} className="inline-flex items-center rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-[11px] font-semibold dark:border-brand-light/30 dark:bg-brand/20 dark:text-white" style={{ color: '#35338c' }}>
               {pill}
             </span>
           ))}
@@ -1063,9 +1066,6 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
             <div className="font-semibold text-white dark:text-white">Total parking bays</div>
             <div className="mt-1 leading-relaxed">
               Total bays loaded from the live parking feed across the City of Melbourne.
-              {verifiedCount > 0 && (
-                <> Currently in view: {verifiedCount} with CoM restriction data{limitedCount > 0 ? `, ${limitedCount} without` : ''}.</>
-              )}
             </div>
           </div>
           <span className="text-xs sm:text-sm font-semibold text-white dark:text-white whitespace-nowrap">
@@ -1377,18 +1377,6 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           />
         )}
 
-        <SettingsSheet
-          open={settingsOpen}
-          onClose={onSettingsClose}
-          darkMode={darkMode}
-          onSetTheme={onSetTheme}
-          colorBlindMode={colorBlindMode}
-          onToggleColorBlind={() => setColorBlindMode((v) => !v)}
-          accessibleOnly={accessibilityAvailableOnly}
-          onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)}
-          onNavigate={onNavigate}
-          onHelpOpen={() => { setShowOnboarding(true) }}
-        />
       </div>
     </div>
   )

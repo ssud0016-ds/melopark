@@ -5,6 +5,7 @@ import AttributionPage from './components/legal/AttributionPage'
 import TermsPage from './components/legal/TermsPage'
 import MapPage from './components/map/MapPage'
 import PredictionsPage from './components/predictions/PredictionsPage'
+import SettingsSheet from './components/settings/SettingsSheet'
 import { useBays } from './hooks/useBays'
 import { useDarkMode } from './hooks/useDarkMode'
 
@@ -14,6 +15,9 @@ export default function App() {
   const [darkMode, toggleDark, setTheme] = useDarkMode()
   const [flyTarget, setFlyTarget] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [colorBlindMode, setColorBlindMode] = useState(false)
+  const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
+  const [triggerOnboarding, setTriggerOnboarding] = useState(false)
 
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 900,
@@ -55,9 +59,13 @@ export default function App() {
             darkMode={darkMode}
             onToggleDark={toggleDark}
             onSetTheme={setTheme}
-            settingsOpen={settingsOpen}
             onSettingsOpen={() => setSettingsOpen(true)}
-            onSettingsClose={() => setSettingsOpen(false)}
+            colorBlindMode={colorBlindMode}
+            onToggleColorBlind={() => setColorBlindMode((v) => !v)}
+            accessibilityAvailableOnly={accessibilityAvailableOnly}
+            onSetAccessibilityAvailableOnly={setAccessibilityAvailableOnly}
+            triggerOnboarding={triggerOnboarding}
+            onOnboardingConsumed={() => setTriggerOnboarding(false)}
           />
         )}
         {page === 'predictions' && (
@@ -73,6 +81,19 @@ export default function App() {
         {page === 'attribution' && <AttributionPage onNavigate={setPage} />}
         {page === 'terms'       && <TermsPage onNavigate={setPage} />}
       </div>
+
+      <SettingsSheet
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        darkMode={darkMode}
+        onSetTheme={setTheme}
+        colorBlindMode={colorBlindMode}
+        onToggleColorBlind={() => setColorBlindMode((v) => !v)}
+        accessibleOnly={accessibilityAvailableOnly}
+        onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)}
+        onNavigate={setPage}
+        onHelpOpen={() => { setPage('map'); setTriggerOnboarding(true) }}
+      />
     </div>
   )
 }
