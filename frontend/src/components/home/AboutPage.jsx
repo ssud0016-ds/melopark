@@ -140,13 +140,13 @@ export default function AboutPage({ onNavigate }) {
                   tabIndex={0}
                   onClick={() => onNavigate?.('map')}
                   onKeyDown={(e) => e.key === 'Enter' && onNavigate?.('map')}
-                  className="rounded-2xl border border-gray-200 dark:border-slate-700 bg-brand-50/40 dark:bg-surface-dark-secondary p-5 text-center shadow-sm cursor-pointer hover:border-brand hover:shadow-md transition-all"
+                  className="rounded-2xl border border-gray-200 dark:border-brand/30 bg-brand-50/40 dark:bg-brand p-5 text-center shadow-sm cursor-pointer hover:border-brand dark:hover:border-brand-light hover:shadow-md transition-all"
                 >
-                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-white dark:bg-surface-dark-tertiary text-brand dark:text-gray-400">
+                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-white dark:bg-brand-dark text-brand dark:text-white">
                     <FeatureIcon type={card.icon} />
                   </div>
                   <h3 className="mt-4 text-base font-bold text-brand-dark dark:text-white">{card.title}</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{card.desc}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-white/70">{card.desc}</p>
                 </article>
               ))}
             </div>

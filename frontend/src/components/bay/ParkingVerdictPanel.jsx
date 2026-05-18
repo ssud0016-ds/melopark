@@ -139,11 +139,18 @@ export default function ParkingVerdictPanel({ variant, durationMins, evaluation 
           <div className="mt-1 text-sm font-semibold text-[#263089]">{sentence}</div>
         </>
       ) : (
-        <div className="flex items-baseline gap-3">
-          <div className="text-[44px] leading-none font-extrabold tracking-[-0.5px] text-[#263089]">
-            {word}
+        <div>
+          <div className="flex items-baseline gap-3">
+            <div className="text-[44px] leading-none font-extrabold tracking-[-0.5px] text-[#263089]">
+              {word}
+            </div>
+            <div className="text-sm font-semibold text-[#263089]">{sentence}</div>
           </div>
-          <div className="text-sm font-semibold text-[#263089]">{sentence}</div>
+          <div className="mt-1 text-[11px] font-medium text-[#263089]/70">
+            {variant === 'yes'
+              ? 'Parking rules allow you to park here.'
+              : 'Parking rules do not allow you to park here at this time.'}
+          </div>
         </div>
       )}
       {trustNote && (

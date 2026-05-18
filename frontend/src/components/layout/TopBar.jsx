@@ -4,6 +4,15 @@ import logoLight from '../../assets/MelOParkLogoLight.png'
 import logoDarkMode from '../../assets/MelOParkLogoDarkMode.png'
 import { LOGO_HEADER_IMG_CLASS } from '../../constants/logoMark'
 
+function MapIcon({ className }) {
+  return (
+    <svg className={className} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+      <circle cx="12" cy="9" r="2.5" />
+    </svg>
+  )
+}
+
 // Chart icon for Predictions nav
 function ChartIcon({ className }) {
   return (
@@ -48,7 +57,10 @@ export default function TopBar({ activePage, onNavigate, darkMode, onSettingsOpe
               : 'bg-transparent font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:bg-transparent dark:font-normal dark:text-gray-200 dark:hover:bg-white/5 dark:hover:text-white',
           )}
         >
-          Live Map
+          <span className="flex items-center gap-1">
+            <MapIcon className="hidden sm:block" />
+            Live Map
+          </span>
         </button>
 
         {/* Predictions — new Epic 6 page */}
@@ -74,12 +86,16 @@ export default function TopBar({ activePage, onNavigate, darkMode, onSettingsOpe
           onClick={() => onNavigate('about')}
           aria-current={activePage === 'about' ? 'page' : undefined}
           className={cn(
-            'hidden sm:block shrink-0 rounded-lg border-0 px-2.5 py-1.5 text-xs transition-colors sm:px-3 sm:text-sm',
+            'hidden sm:flex items-center gap-1 shrink-0 rounded-lg border-0 px-2.5 py-1.5 text-xs transition-colors sm:px-3 sm:text-sm',
             activePage === 'about'
               ? 'bg-brand-50 font-medium text-brand dark:bg-brand dark:font-semibold dark:text-white'
               : 'bg-transparent font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:bg-transparent dark:font-normal dark:text-gray-200 dark:hover:bg-white/5 dark:hover:text-white',
           )}
         >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+          </svg>
           About Us
         </button>
       </div>

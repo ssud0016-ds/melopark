@@ -347,9 +347,9 @@ export default function PredictionsPage({onNavigateToMap,onNavigate,darkMode}){
 
   const signals=useMemo(()=>[
     topFree[0]&&{icon:<Ic.Leaf/>,cfg:TIERS.low,head:splitZone(topFree[0].zone)[0],sub:`${Math.round(topFree[0].predicted_occupancy*100)}% occupied, best now`},
-    {icon:<Ic.Trend/>,cfg:TIERS.moderate,head:`Pressure ${cbdChart[1]?.occ>cbdChart[0]?.occ?'rising':'easing'}`,sub:`${Math.round((cbdChart[1]?.occ??0)*100)}% at plus 1 hour`},
+    {icon:<Ic.Trend/>,cfg:TIERS.moderate,head:`Demand ${cbdChart[1]?.occ>cbdChart[0]?.occ?'rising':'easing'}`,sub:`${Math.round((cbdChart[1]?.occ??0)*100)}% at plus 1 hour`},
     busiest[0]&&{icon:<Ic.Alert/>,cfg:TIERS.high,head:splitZone(busiest[0].zone)[0],sub:`${Math.round(busiest[0].predicted_occupancy*100)}% occupied, avoid`},
-    {icon:<Ic.Clock/>,cfg:TIERS.moderate,head:`Peak at ${HL[peakIdx]}`,sub:`${peakPct}% CBD average`},
+    {icon:<Ic.Clock/>,cfg:TIERS.moderate,head:`CBD in 1 Hour`,sub:`${peakPct}% bays taken`},
   ].filter(Boolean),[topFree,busiest,cbdChart,peakIdx,peakPct])
 
   const results=useMemo(()=>{if(!q.trim())return[];const lo=q.toLowerCase();return zones.filter(z=>z.zone.toLowerCase().includes(lo)).sort((a,b)=>a.zone.toLowerCase().indexOf(lo)-b.zone.toLowerCase().indexOf(lo)).slice(0,10)},[q,zones])
@@ -436,13 +436,13 @@ export default function PredictionsPage({onNavigateToMap,onNavigate,darkMode}){
         <div className="grid grid-cols-4 gap-2">
           {/* 1. Available bays — NOT occupied, clearly labelled */}
           {[
-            {icon:<Ic.Check/>,lbl:'Available bays',val:`${cbdFree}%`,sub:`${cbdTier.label} pressure`,c:cbdFree>=60?TEAL:cbdFree>=40?'#BA7517':'#D85A30'},
-            {icon:<Ic.Clock/>,lbl:`Busiest ${HL[peakIdx]}`,val:`${peakPct}%`,sub:'CBD avg occupied',c:'#BA7517'},
-            {icon:<Ic.Leaf/>,lbl:'Most available',val:bestMain,sub:`${Math.round((best?.predicted_occupancy??0)*100)}% occupied`,c:TEAL,sm:true},
-            {icon:<Ic.Park/>,lbl:'Zones live',val:`${zones.length}`,sub:'every 5 min',c:'#9d8fef'},
+            {icon:<Ic.Check/>,lbl:'Available bays',val:`${cbdFree}%`,sub:`${cbdTier.label} parking demand`,c:cbdFree>=60?TEAL:cbdFree>=40?'#BA7517':'#D85A30'},
+            {icon:<Ic.Clock/>,lbl:`CBD in 1 Hour`,val:`${peakPct}%`,sub:'of parking bays taken',c:'#BA7517'},
+            {icon:<Ic.Leaf/>,lbl:'Most free bays',val:bestMain,sub:`${Math.round((best?.predicted_occupancy??0)*100)}% occupied`,c:TEAL},
+            {icon:<Ic.Park/>,lbl:'Live Coverage',val:`${zones.length}`,sub:'zones refreshing every 5 minutes',c:'#9d8fef'},
           ].map((s,i)=><div key={i} className="rounded-xl px-3 py-2.5" style={{background:'rgba(255,255,255,0.09)',border:'1px solid rgba(255,255,255,0.13)'}}>
             <div className="flex items-center gap-1.5 mb-1"><span style={{color:s.c}}>{s.icon}</span><span className="text-[9px] font-bold uppercase tracking-wider truncate" style={{color:'rgba(255,255,255,0.4)'}}>{s.lbl}</span></div>
-            <p className="font-bold leading-tight tabular-nums" style={{color:s.c,fontSize:s.sm?'0.82rem':'1.15rem'}}>{s.val}</p>
+            <p className="font-bold leading-tight tabular-nums truncate" style={{color:s.c,fontSize:'1.15rem'}}>{s.val}</p>
             <p className="text-[10px] mt-0.5 truncate" style={{color:'rgba(255,255,255,0.35)'}}>{s.sub}</p>
           </div>)}
         </div>
@@ -473,7 +473,17 @@ export default function PredictionsPage({onNavigateToMap,onNavigate,darkMode}){
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 dark:divide-slate-800">
             {/* Arc */}
             <div className="p-6 flex flex-col gap-3">
-              <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{background:cbdTier.c}}/><p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Pressure spectrum</p></div>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full animate-pulse" style={{background:cbdTier.c}}/>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Pressure spectrum</p>
+                <div className="group relative flex items-center">
+                  <button type="button" aria-label="About pressure spectrum" className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 dark:border-slate-600 text-[9px] font-bold text-slate-400 dark:text-slate-500 hover:border-slate-400 dark:hover:border-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-brand">?</button>
+                  <div className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block w-64 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark-secondary px-3 py-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300 shadow-card z-50">
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-slate-200 dark:border-b-slate-700" />
+                    Parking demand based on live occupancy, traffic patterns, and nearby events. Low pressure spectrum means easy parking, high pressure spectrum means harder parking.
+                  </div>
+                </div>
+              </div>
               <div className="flex-1 flex items-center justify-center overflow-visible"><Arc pct={cbdOcc} level={cbdLv} dark={darkMode}/></div>
               <div className="flex items-center justify-center gap-3 flex-wrap">
                 {[['#1D9E75','Low 0 to 20'],['#BA7517','Mod 21 to 40'],['#D85A30','High 41+']].map(([c,l])=><span key={l} className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500"><span className="w-1.5 h-1.5 rounded-full" style={{background:c}}/>{l}</span>)}
@@ -484,22 +494,28 @@ export default function PredictionsPage({onNavigateToMap,onNavigate,darkMode}){
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-slate-400 dark:text-slate-500"><Ic.Clock/></span>
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Day demand</p>
-                {/* tap hint — visible both modes */}
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{background:darkMode?'rgba(255,255,255,0.15)':'rgba(46,42,138,0.12)',color:darkMode?'#c7d2fe':BRAND,border:`1px solid ${darkMode?'rgba(255,255,255,0.25)':'rgba(46,42,138,0.2)'}`}}>tap segments</span>
+                <div className="group relative flex items-center">
+                  <button type="button" aria-label="About day demand" className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 dark:border-slate-600 text-[9px] font-bold text-slate-400 dark:text-slate-500 hover:border-slate-400 dark:hover:border-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-brand">?</button>
+                  <div className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block w-64 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark-secondary px-3 py-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300 shadow-card z-50">
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-slate-200 dark:border-b-slate-700" />
+                    Expected parking demand hour-by-hour. Helping you pick the best time to arrive. Higher percentage means more bays are expected to be occupied at that time and lower percentage means most bays are expected to be free.
+                  </div>
+                </div>
               </div>
               <div className="flex-1 flex items-center justify-center overflow-visible"><Donut chart={cbdChart} sel={selH} onSel={setSelH} dark={darkMode}/></div>
+              <p className="text-center text-[11px] text-slate-400 dark:text-slate-500 mb-1">Press chips to see hour-to-hour expected parking demands</p>
               <div className="flex flex-wrap gap-1.5 justify-center">
                 {cbdChart.map((d,i)=>{const tt=TIERS[d.level]??TIERS.low,s=i===selH;return<button key={i} onClick={()=>setSelH(i)} className="px-2.5 py-1 rounded-full text-xs font-bold transition-all cursor-pointer tabular-nums hover:scale-105" style={s?{background:tt.c,color:'white',boxShadow:`0 2px 8px ${tt.c}55`}:{background:darkMode?'rgba(255,255,255,0.12)':'rgba(46,42,138,0.1)',color:darkMode?'#c7d2fe':BRAND,border:`1px solid ${darkMode?'rgba(255,255,255,0.2)':'rgba(46,42,138,0.18)'}`}}>{HL[i]}</button>})}
               </div>
               <div className="flex items-center justify-center gap-3 flex-wrap">
-                {[['#1D9E75','Low'],['#BA7517','Moderate'],['#D85A30','High']].map(([c,l])=><span key={l} className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500"><span className="w-1.5 h-1.5 rounded-full" style={{background:c}}/>{l}</span>)}
+                {[['#1D9E75','Low','(close to 0%)'],['#BA7517','Moderate',null],['#D85A30','High','(close to 100%)']].map(([c,l,hint])=><span key={l} className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500"><span className="w-1.5 h-1.5 rounded-full" style={{background:c}}/>{l}{hint && <span className="text-[9px] text-slate-400 dark:text-slate-600">{hint}</span>}</span>)}
               </div>
             </div>
             {/* Streets */}
             <div className="p-6 flex flex-col gap-3">
               <div className="flex items-center gap-2">
                 <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-bold" style={{background:darkMode?'rgba(29,158,117,0.2)':'#E8F8F2',color:TEAL}}><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"/>now</span>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Least occupied</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Least occupied street</p>
               </div>
               <div className="space-y-2 flex-1">
                 {topFree.slice(0,6).map(z=><StreetRow key={z.zone} zone={z} onSel={pick} selected={selZ?.zone===z.zone} spin={zLoad&&selZ?.zone===z.zone} nav={nav} dark={darkMode}/>)}

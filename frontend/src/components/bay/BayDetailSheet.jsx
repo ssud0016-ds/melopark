@@ -121,8 +121,14 @@ export default function BayDetailSheet({
       return
     }
     let opts = null
-    if (savedPlannerArrivalIso && savedPlannerDurationMins != null) {
-      opts = { arrivalIso: savedPlannerArrivalIso, durationMins: savedPlannerDurationMins }
+    if (savedPlannerArrivalIso) {
+      const filterMins = durationFilter
+        ? (durationFilter === 'custom' ? customDuration : _FILTER_TO_MINS[durationFilter])
+        : null
+      const durationMins = filterMins ?? savedPlannerDurationMins
+      if (durationMins != null) {
+        opts = { arrivalIso: savedPlannerArrivalIso, durationMins }
+      }
     } else if (durationFilter) {
       const mins = durationFilter === 'custom' ? customDuration : _FILTER_TO_MINS[durationFilter]
       if (mins) opts = { arrivalIso: new Date().toISOString(), durationMins: mins }
@@ -274,7 +280,7 @@ export default function BayDetailSheet({
         </div>
         {streetLine ? (
           <div
-            className="mt-0.5 text-sm font-semibold text-black dark:text-black line-clamp-2"
+            className="mt-0.5 text-sm font-semibold text-black dark:text-white line-clamp-2"
             title={resolvedName}
           >
             {streetLine}
@@ -294,6 +300,14 @@ export default function BayDetailSheet({
           <span className="mx-1">·</span>
           <span className="font-semibold text-[#2E2A8A] dark:text-brand-300">{_showingDate} {_showingTime}</span>
         </div>
+        {isFuturePlanningMode && (
+          <div className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 px-2.5 py-1.5">
+            <span className="text-amber-500 shrink-0 mt-0.5" aria-hidden>⚠</span>
+            <p className="text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+              Live bay availability is unknown for this future time. Parking rules shown are based on the scheduled time only.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* 3. Disability banner (when relevant) */}

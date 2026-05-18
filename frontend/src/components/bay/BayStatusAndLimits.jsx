@@ -1,8 +1,6 @@
 import { cn } from '../../utils/cn'
 import { formatLeaveByClock } from '../../utils/plannerTime'
 
-const TITLE_INK = '#111827'
-const BODY_INK = '#374151'
 const CONNECTOR = '#f4f6ff'
 
 function dot(highlight) {
@@ -39,7 +37,7 @@ export default function BayStatusAndLimits({ bay, evaluation }) {
 
   return (
     <div className="px-5 mt-5">
-      <div className="text-sm font-semibold mb-3" style={{ color: TITLE_INK }}>
+      <div className="text-sm font-semibold mb-3 text-gray-900 dark:text-white">
         Bay Status and Limits
       </div>
 
@@ -53,10 +51,10 @@ export default function BayStatusAndLimits({ bay, evaluation }) {
               )}
             </div>
             <div className={cn('min-w-0 flex-1', i < items.length - 1 && 'pb-5')}>
-              <div className="text-sm font-semibold" style={{ color: TITLE_INK }}>
+              <div className="text-sm font-semibold text-gray-900 dark:text-white">
                 {t.title}
               </div>
-              <div className="mt-0.5 text-[11px] leading-[17px]" style={{ color: BODY_INK }}>
+              <div className="mt-0.5 text-[11px] leading-[17px] text-gray-700 dark:text-gray-300">
                 {t.desc}
               </div>
             </div>
