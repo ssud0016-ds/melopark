@@ -2,9 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
 
 export const MAPS_PROVIDER_STORAGE_KEY = 'melopark-maps-provider';
-export type MapsProvider = 'google' | 'web' | 'waze';
+export type MapsProvider = 'google' | 'web';
 
-const VALID: ReadonlySet<MapsProvider> = new Set(['google', 'web', 'waze']);
+const VALID: ReadonlySet<MapsProvider> = new Set(['google', 'web']);
 
 function isValid(value: string | null): value is MapsProvider {
   return value !== null && VALID.has(value as MapsProvider);
@@ -18,6 +18,7 @@ export function useMapsProvider() {
     AsyncStorage.getItem(MAPS_PROVIDER_STORAGE_KEY)
       .then((stored) => {
         if (mounted && isValid(stored)) setProviderState(stored);
+        else if (stored) AsyncStorage.removeItem(MAPS_PROVIDER_STORAGE_KEY).catch(() => {});
       })
       .catch(() => {});
     return () => {

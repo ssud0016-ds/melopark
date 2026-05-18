@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
 
-const ONBOARDING_KEY = 'melopark-onboarding-v1';
+export const ONBOARDING_KEY = 'melopark-onboarding-v1';
 
 export function useOnboarding() {
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);

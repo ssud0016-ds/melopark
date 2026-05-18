@@ -81,10 +81,10 @@ export const SegmentDetailSheet = forwardRef<SegmentDetailSheetRef>((_props, ref
               <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary }}>{detail.seg_descr}</Text>
             ) : null}
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-              <Stat label="Level" value={detail.level ?? '—'} />
+              <Stat label="Level" value={detail.level ?? '-'} />
               <Stat label="Free" value={`${detail.free ?? 0}/${detail.total ?? 0}`} />
-              <Stat label="Pressure" value={detail.pressure != null ? `${Math.round(detail.pressure * 100)}%` : '—'} />
-              <Stat label="Trend" value={detail.trend ?? '—'} />
+              <Stat label="Pressure" value={detail.pressure != null ? `${Math.round(detail.pressure * 100)}%` : '-'} />
+              <Stat label="Trend" value={detail.trend ?? '-'} />
             </View>
           </View>
         ) : (

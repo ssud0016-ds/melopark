@@ -1,7 +1,7 @@
 import { Text, View } from 'react-native';
 import Svg, { Polyline, Circle } from 'react-native-svg';
 
-import { colors } from '../../design-system';
+import { colors, statusColor } from '../../design-system';
 import type { ForecastAlternativesResponse, WarningLevel } from '../../services/apiForecasts';
 
 const HEIGHT = 140;
@@ -15,11 +15,18 @@ const LEVEL_VALUE: Record<WarningLevel, number> = {
 type Props = {
   data: ForecastAlternativesResponse | null;
   width: number;
+  colorBlindMode?: boolean;
 };
+
+export function alternativeLevelColor(level: WarningLevel, colorBlindMode = false) {
+  if (level === 'low') return statusColor('good', colorBlindMode);
+  if (level === 'moderate') return statusColor('caution', colorBlindMode);
+  return statusColor('avoid', colorBlindMode);
+}
 
 // Plan §15: line chart in PredictionsScreen.
 // X = alternative index, Y = pressure level. Sparkline-style.
-export function AlternativesLineChart({ data, width }: Props) {
+export function AlternativesLineChart({ data, width, colorBlindMode = false }: Props) {
   const alts = data?.alternatives ?? [];
   if (!alts.length) {
     return (
@@ -61,13 +68,7 @@ export function AlternativesLineChart({ data, width }: Props) {
           cx={p.x}
           cy={p.y}
           r={4}
-          fill={
-            p.level === 'low'
-              ? colors.statusGood
-              : p.level === 'moderate'
-                ? colors.statusCaution
-                : colors.statusAvoid
-          }
+          fill={alternativeLevelColor(p.level, colorBlindMode)}
         />
       ))}
     </Svg>

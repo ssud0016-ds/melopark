@@ -1,7 +1,7 @@
 import { Text, View } from 'react-native';
 import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 
-import { colors } from '../../design-system';
+import { colors, statusColor } from '../../design-system';
 import type { ForecastWarning, WarningLevel } from '../../services/apiForecasts';
 
 const HEIGHT = 180;
@@ -12,21 +12,21 @@ const LEVEL_VALUE: Record<WarningLevel, number> = {
   high: 3,
   critical: 4,
 };
-const LEVEL_COLOR: Record<WarningLevel, string> = {
-  low: colors.statusGood,
-  moderate: colors.statusCaution,
-  high: colors.statusAvoid,
-  critical: colors.statusAvoid,
-};
+export function warningChartColor(level: WarningLevel, colorBlindMode = false) {
+  if (level === 'low') return statusColor('good', colorBlindMode);
+  if (level === 'moderate') return statusColor('caution', colorBlindMode);
+  return statusColor('avoid', colorBlindMode);
+}
 
 type Props = {
   warnings: ForecastWarning[];
   width: number;
+  colorBlindMode?: boolean;
 };
 
 // Plan §15: bar chart in PredictionsScreen.
 // Bars = next-N hours, height = warning level. Pure SVG, no chart lib.
-export function WarningsBarChart({ warnings, width }: Props) {
+export function WarningsBarChart({ warnings, width, colorBlindMode = false }: Props) {
   const sorted = [...warnings].sort((a, b) => a.hours_from_now - b.hours_from_now).slice(0, 12);
   if (!sorted.length) {
     return <Empty width={width} />;
@@ -43,19 +43,19 @@ export function WarningsBarChart({ warnings, width }: Props) {
           const h = (value / max) * (HEIGHT - 30);
           return (
             <Rect
-              key={`${w.zone}-${w.hours_from_now}`}
+              key={warningBarKey('bar', w, i)}
               x={BAR_GAP + i * (barWidth + BAR_GAP)}
               y={HEIGHT - 20 - h}
               width={barWidth}
               height={h}
               rx={4}
-              fill={LEVEL_COLOR[w.warning_level] || colors.statusUnknown}
+              fill={warningChartColor(w.warning_level, colorBlindMode)}
             />
           );
         })}
         {sorted.map((w, i) => (
           <SvgText
-            key={`label-${i}`}
+            key={warningBarKey('label', w, i)}
             x={BAR_GAP + i * (barWidth + BAR_GAP) + barWidth / 2}
             y={HEIGHT - 4}
             fontSize={9}
@@ -68,6 +68,10 @@ export function WarningsBarChart({ warnings, width }: Props) {
       </Svg>
     </View>
   );
+}
+
+function warningBarKey(kind: 'bar' | 'label', warning: ForecastWarning, index: number) {
+  return `warning-chart-${kind}:${warning.zone}:${warning.warning_level}:${warning.hours_from_now}:${index}`;
 }
 
 function Empty({ width }: { width: number }) {

@@ -24,11 +24,17 @@ export type ForecastPressureResponse = {
   generated_at: string;
   arrival_at: string | null;
   data_source: string;
-  zones: { zone: string; pressure_level: WarningLevel }[];
+  zones: PressureZone[];
 };
 
-export async function fetchForecastPressure(at: string | null = null): Promise<ForecastPressureResponse> {
-  return fetchJson(buildUrl('/api/forecasts/pressure', { at: at ?? undefined }));
+export type PressureZone = { zone: string; pressure_level: WarningLevel };
+
+export async function fetchForecastPressure(
+  lat: number,
+  lon: number,
+  at: string | null = null,
+): Promise<ForecastPressureResponse> {
+  return fetchJson(buildUrl('/api/forecasts/pressure', { lat, lon, at: at ?? undefined }));
 }
 
 export type ForecastAlternativesResponse = {

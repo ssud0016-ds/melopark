@@ -1,9 +1,15 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { Region } from 'react-native-maps';
-
 import type { Bay } from '../services/apiBays';
 
+export type Region = {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+};
+
 export type Bounds = { minLat: number; maxLat: number; minLng: number; maxLng: number };
+export type Destination = { lat: number; lng: number };
 
 export const MELBOURNE_CBD_REGION: Region = {
   latitude: -37.8136,
@@ -24,6 +30,19 @@ function regionToPaddedBounds(region: Region): Bounds {
     minLng: region.longitude - region.longitudeDelta / 2 - lngPad,
     maxLng: region.longitude + region.longitudeDelta / 2 + lngPad,
   };
+}
+
+export function destinationToBounds(destination: Destination, radiusDegrees = 0.006): Bounds {
+  return {
+    minLat: destination.lat - radiusDegrees,
+    maxLat: destination.lat + radiusDegrees,
+    minLng: destination.lng - radiusDegrees,
+    maxLng: destination.lng + radiusDegrees,
+  };
+}
+
+export function boundsToBbox(bounds: Bounds) {
+  return `${bounds.minLng},${bounds.minLat},${bounds.maxLng},${bounds.maxLat}`;
 }
 
 // Plan 2.A constraint #2: viewport culling.

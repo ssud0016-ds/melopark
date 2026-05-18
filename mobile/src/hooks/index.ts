@@ -1,6 +1,7 @@
 export { useAccessibility } from './useAccessibility';
 export { useBays } from './useBays';
 export { useBusyNow, type BusyNowStatus } from './useBusyNow';
+export { useColorBlindMode } from './useColorBlindMode';
 export { useClock } from './useClock';
 export { useDarkMode, type ThemeMode } from './useDarkMode';
 export { useDebouncedValue } from './useDebouncedValue';

@@ -7,8 +7,7 @@ import { useMapsProvider, type MapsProvider } from '../hooks/useMapsProvider';
 
 const OPTIONS: { value: MapsProvider; label: string; description: string }[] = [
   { value: 'google', label: 'Google Maps', description: 'Native Google Maps app' },
-  { value: 'waze', label: 'Waze', description: 'Crowd-sourced traffic + navigation' },
-  { value: 'web', label: 'Web', description: 'Browser fallback (Google Maps)' },
+  { value: 'web', label: 'Browser fallback', description: 'Open Google Maps in the browser' },
 ];
 
 export function MapsProviderChooserScreen() {
@@ -16,7 +15,7 @@ export function MapsProviderChooserScreen() {
   const { provider, setProvider, clearProvider } = useMapsProvider();
 
   return (
-    <Screen title="Open in…" subtitle="Choose your default navigation app for the Navigate CTA">
+    <Screen title="Open in..." subtitle="Choose your default navigation app for the Navigate CTA">
       <View className="mt-4 gap-2">
         {OPTIONS.map((opt) => {
           const selected = provider === opt.value;

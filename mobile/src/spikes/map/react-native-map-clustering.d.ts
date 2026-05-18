@@ -1,11 +1,11 @@
 declare module 'react-native-map-clustering' {
   import type { ComponentType, ReactNode } from 'react';
-  import type { MapViewProps } from 'react-native-maps';
 
-  type ClusteredMapViewProps = MapViewProps & {
+  type ClusteredMapViewProps = {
     children?: ReactNode;
     clusterColor?: string;
     radius?: number;
+    [key: string]: unknown;
   };
 
   const ClusteredMapView: ComponentType<ClusteredMapViewProps>;

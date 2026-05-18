@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { colors, haptics } from '../../design-system';
 import { useLocationPermission } from '../../hooks/useLocationPermission';
 
-// Plan §Phase 3. Surfaces the deny path so users have a clear path back to
+// Plan Phase 3. Surfaces the deny path so users have a clear path back to
 // Settings. Hidden when granted or never-asked-yet (initial prompt isn't a banner).
 export function LocationPermissionBanner() {
   const { state, canAskAgain, request, openSettings } = useLocationPermission();
@@ -31,7 +31,7 @@ export function LocationPermissionBanner() {
       }}
     >
       <Text style={{ color: colors.surfaceDark, fontWeight: '600' }}>
-        Location off — “bays near me” unavailable
+        Location off - "bays near me" unavailable
       </Text>
       <Pressable
         accessibilityRole="button"

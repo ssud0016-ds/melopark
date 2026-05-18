@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '../../design-system';
 
-// Plan §4.7 OfflineBanner port — Phase 3 wires capabilities (NetInfo, lifecycle).
+// Plan 4.7 OfflineBanner port - Phase 3 wires capabilities (NetInfo, lifecycle).
 // Surfaces here in 2.L for the user-facing banner.
 export function OfflineBanner() {
   const insets = useSafeAreaInsets();
@@ -37,7 +37,7 @@ export function OfflineBanner() {
       }}
     >
       <Text style={{ color: colors.surface, fontWeight: '600' }}>
-        Offline — showing last-known data.
+        Offline - showing last-known data.
       </Text>
     </View>
   );

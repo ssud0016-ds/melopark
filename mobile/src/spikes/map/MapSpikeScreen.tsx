@@ -2,9 +2,9 @@ import { Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Stub: spike served its purpose (Phase 2.A day-1 + day-2 verdict logged in
-// docs/native-component-map.md §6.1). Library subsequently swapped to
-// @rnmapbox/maps for MVT vector segment support. Keeping the route reachable
-// from Settings (dev) so the dev menu link doesn't break.
+// docs/native-component-map.md section 6.1). Production map is now locked to
+// @rnmapbox/maps for MVT vector segment support. This screen is retained as
+// archived spike context only and is not registered in app navigation.
 export function MapSpikeScreen() {
   const insets = useSafeAreaInsets();
   return (

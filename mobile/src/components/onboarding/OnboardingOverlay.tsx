@@ -11,30 +11,34 @@ type Step = {
   body: string;
   ringState: PulseRingState;
   ringPosition: 'top' | 'center' | 'bottom';
+  hint: string;
   cta: string;
 };
 
-const STEPS: Step[] = [
+export const ONBOARDING_STEPS: Step[] = [
   {
     title: 'Welcome to MelOPark',
     body: 'Find a parking bay near your destination. Tap a colored dot to see live availability and rules.',
     ringState: 'load',
     ringPosition: 'center',
-    cta: 'Got it',
-  },
-  {
-    title: 'BusyNow pressure',
-    body: 'Tap the BusyNow pill (top-right) to see which streets are busy right now. Lines color by demand.',
-    ringState: 'first-tap',
-    ringPosition: 'top',
+    hint: 'Green means available, amber means restricted, red means occupied.',
     cta: 'Next',
   },
   {
-    title: 'Search by street',
-    body: 'Use the Search tab to find a bay by street name or bay ID. Tap a result to jump straight to it.',
+    title: 'Search and plan',
+    body: 'Tap the search card on the map or open the Search tab to find a street, destination, or bay ID.',
+    ringState: 'first-tap',
+    ringPosition: 'top',
+    hint: 'Choosing a street sends a planning destination back to the map.',
+    cta: 'Next',
+  },
+  {
+    title: 'BusyNow and predictions',
+    body: 'Use BusyNow on the map for current street pressure, and Predictions for zone-level demand.',
     ringState: 'destination-selected',
     ringPosition: 'bottom',
-    cta: 'Start',
+    hint: 'You can replay these tips from Settings at any time.',
+    cta: 'Done',
   },
 ];
 
@@ -45,8 +49,8 @@ type Props = {
 export function OnboardingOverlay({ onDone }: Props) {
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
-  const step = STEPS[index];
-  const isLast = index === STEPS.length - 1;
+  const step = ONBOARDING_STEPS[index];
+  const isLast = index === ONBOARDING_STEPS.length - 1;
 
   const advance = () => {
     haptics.light();
@@ -108,31 +112,49 @@ export function OnboardingOverlay({ onDone }: Props) {
         }}
       >
         <Text style={{ fontSize: 12, fontWeight: '500', color: colors.brand, textTransform: 'uppercase' }}>
-          Step {index + 1} of {STEPS.length}
+          Step {index + 1} of {ONBOARDING_STEPS.length}
         </Text>
         <Text style={{ fontSize: 22, fontWeight: '700', color: colors.surfaceDark }}>{step.title}</Text>
         <Text style={{ fontSize: 14, color: colors.surfaceDarkTertiary, lineHeight: 20 }}>
           {step.body}
         </Text>
+        <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary, lineHeight: 18 }}>
+          {step.hint}
+        </Text>
+
+        <View
+          accessibilityLabel={`Onboarding progress ${index + 1} of ${ONBOARDING_STEPS.length}`}
+          style={{ flexDirection: 'row', gap: 6 }}
+        >
+          {ONBOARDING_STEPS.map((s, i) => (
+            <View
+              key={s.title}
+              style={{
+                height: 6,
+                flex: 1,
+                borderRadius: 3,
+                backgroundColor: i <= index ? colors.brand : colors.surfaceTertiary,
+              }}
+            />
+          ))}
+        </View>
 
         <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-          {!isLast ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={skip}
-              style={{
-                minHeight: 44,
-                flex: 1,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: colors.surfaceTertiary,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{ color: colors.surfaceDarkTertiary, fontWeight: '600' }}>Skip</Text>
-            </Pressable>
-          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            onPress={skip}
+            style={{
+              minHeight: 44,
+              flex: 1,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: colors.surfaceTertiary,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: colors.surfaceDarkTertiary, fontWeight: '600' }}>Skip</Text>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             onPress={advance}

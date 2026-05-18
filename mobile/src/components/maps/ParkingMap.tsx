@@ -7,13 +7,17 @@ import Mapbox, {
   SymbolLayer,
 } from '@rnmapbox/maps';
 
-import { colors } from '../../design-system';
+import { colorBlindColors, colors, statusColor } from '../../design-system';
 import { haptics } from '../../design-system/haptics';
 import type { Bay } from '../../services/apiBays';
 
 type Props = {
   bays: Bay[];
   selectedBayId?: string | null;
+  highlightedBayIds?: string[];
+  planningVerdicts?: Record<string, 'yes' | 'no' | 'unknown'>;
+  colorBlindMode?: boolean;
+  destination?: { lat: number; lng: number; label?: string } | null;
   onSelectBay: (bay: Bay) => void;
   initialCenter?: [number, number];
   initialZoom?: number;
@@ -23,7 +27,35 @@ type Props = {
 const DEFAULT_CENTER: [number, number] = [144.9631, -37.8136];
 const DEFAULT_ZOOM = 13;
 
-function baysToGeoJson(bays: Bay[]): GeoJSON.FeatureCollection {
+function bayStatusColor(
+  bay: Bay,
+  planningVerdicts: Record<string, 'yes' | 'no' | 'unknown'>,
+  colorBlindMode: boolean,
+) {
+  const verdict = planningVerdicts[bay.id];
+  if (verdict === 'yes') return statusColor('good', colorBlindMode);
+  if (verdict === 'no') return statusColor('avoid', colorBlindMode);
+  if (verdict === 'unknown') return statusColor('unknown', colorBlindMode);
+  if (bay.type === 'available') return statusColor('good', colorBlindMode);
+  if (bay.type === 'trap') return statusColor('caution', colorBlindMode);
+  if (bay.type === 'occupied') return statusColor('avoid', colorBlindMode);
+  return statusColor('unknown', colorBlindMode);
+}
+
+export function clusterBadgeColors(colorBlindMode: boolean) {
+  return {
+    background: colorBlindMode ? colorBlindColors.statusGood : colors.brand,
+    text: colors.surface,
+  };
+}
+
+export function baysToGeoJson(
+  bays: Bay[],
+  highlightedBayIds: string[],
+  planningVerdicts: Record<string, 'yes' | 'no' | 'unknown'>,
+  colorBlindMode = false,
+): GeoJSON.FeatureCollection {
+  const highlighted = new Set(highlightedBayIds);
   return {
     type: 'FeatureCollection',
     features: bays.map((b) => ({
@@ -32,14 +64,9 @@ function baysToGeoJson(bays: Bay[]): GeoJSON.FeatureCollection {
       properties: {
         bayId: b.id,
         type: b.type,
-        color:
-          b.type === 'available'
-            ? colors.statusGood
-            : b.type === 'trap'
-              ? colors.statusCaution
-              : b.type === 'occupied'
-                ? colors.statusAvoid
-                : colors.statusUnknown,
+        highlighted: highlighted.has(b.id),
+        planningVerdict: planningVerdicts[b.id] ?? '',
+        color: bayStatusColor(b, planningVerdicts, colorBlindMode),
       },
       geometry: { type: 'Point', coordinates: [b.lng, b.lat] },
     })),
@@ -49,12 +76,36 @@ function baysToGeoJson(bays: Bay[]): GeoJSON.FeatureCollection {
 export function ParkingMap({
   bays,
   selectedBayId,
+  highlightedBayIds = [],
+  planningVerdicts = {},
+  colorBlindMode = false,
+  destination = null,
   onSelectBay,
   initialCenter = DEFAULT_CENTER,
   initialZoom = DEFAULT_ZOOM,
   children,
 }: Props) {
-  const shape = useMemo(() => baysToGeoJson(bays), [bays]);
+  const shape = useMemo(
+    () => baysToGeoJson(bays, highlightedBayIds, planningVerdicts, colorBlindMode),
+    [bays, highlightedBayIds, planningVerdicts, colorBlindMode],
+  );
+  const clusterColors = clusterBadgeColors(colorBlindMode);
+  const destinationShape = useMemo<GeoJSON.FeatureCollection | null>(
+    () =>
+      destination
+        ? {
+            type: 'FeatureCollection',
+            features: [
+              {
+                type: 'Feature',
+                properties: { label: destination.label ?? 'Destination' },
+                geometry: { type: 'Point', coordinates: [destination.lng, destination.lat] },
+              },
+            ],
+          }
+        : null,
+    [destination],
+  );
 
   return (
     <MapView
@@ -71,6 +122,31 @@ export function ParkingMap({
 
       {/* BusyNow vector layer (rendered below bay markers so dots stay tappable). */}
       {children}
+
+      {destinationShape ? (
+        <ShapeSource id="planning-destination" shape={destinationShape}>
+          <CircleLayer
+            id="planning-destination-dot"
+            style={{
+              circleColor: colors.brand,
+              circleRadius: 9,
+              circleStrokeWidth: 3,
+              circleStrokeColor: colors.surface,
+            }}
+          />
+          <SymbolLayer
+            id="planning-destination-label"
+            style={{
+              textField: 'Destination',
+              textSize: 11,
+              textColor: colors.brand,
+              textOffset: [0, 1.4],
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
+            }}
+          />
+        </ShapeSource>
+      ) : null}
 
       <ShapeSource
         id="bays"
@@ -95,7 +171,7 @@ export function ParkingMap({
           id="bay-clusters"
           filter={['has', 'point_count']}
           style={{
-            circleColor: colors.brand,
+            circleColor: clusterColors.background,
             circleRadius: ['step', ['get', 'point_count'], 14, 25, 18, 75, 22],
             circleStrokeWidth: 2,
             circleStrokeColor: colors.surface,
@@ -107,7 +183,7 @@ export function ParkingMap({
           style={{
             textField: ['get', 'point_count_abbreviated'],
             textSize: 12,
-            textColor: colors.surface,
+            textColor: clusterColors.text,
             textFont: ['Open Sans Bold'],
             textIgnorePlacement: true,
             textAllowOverlap: true,
@@ -118,11 +194,27 @@ export function ParkingMap({
           filter={['!', ['has', 'point_count']]}
           style={{
             circleColor: ['get', 'color'],
-            circleRadius: ['case', ['==', ['get', 'bayId'], selectedBayId ?? ''], 8, 5],
-            circleStrokeWidth: ['case', ['==', ['get', 'bayId'], selectedBayId ?? ''], 2, 1],
+            circleRadius: [
+              'case',
+              ['==', ['get', 'bayId'], selectedBayId ?? ''],
+              8,
+              ['==', ['get', 'highlighted'], true],
+              7,
+              5,
+            ],
+            circleStrokeWidth: [
+              'case',
+              ['==', ['get', 'bayId'], selectedBayId ?? ''],
+              2,
+              ['==', ['get', 'highlighted'], true],
+              2,
+              1,
+            ],
             circleStrokeColor: [
               'case',
               ['==', ['get', 'bayId'], selectedBayId ?? ''],
+              colors.brand,
+              ['==', ['get', 'highlighted'], true],
               colors.brand,
               colors.surface,
             ],

@@ -1,4 +1,3 @@
-const googleMapsApiKey = process.env.GOOGLE_MAPS_ANDROID_API_KEY;
 const mapboxDownloadToken = process.env.MAPBOX_DOWNLOAD_TOKEN;
 const mapboxPublicToken = process.env.MAPBOX_PUBLIC_TOKEN;
 
@@ -29,15 +28,6 @@ const plugins = [
   ],
   'expo-navigation-bar',
 ];
-
-if (googleMapsApiKey) {
-  plugins.push([
-    'react-native-maps',
-    {
-      androidGoogleMapsApiKey: googleMapsApiKey,
-    },
-  ]);
-}
 
 module.exports = {
   expo: {

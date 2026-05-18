@@ -2,7 +2,11 @@ import { View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 
 import { colors } from '../../design-system';
-import { usePulseRing, type PulseRingState } from '../../design-system/motion';
+import {
+  usePulseRing,
+  useReducedMotion,
+  type PulseRingState,
+} from '../../design-system/motion';
 
 type Props = {
   state: PulseRingState;
@@ -12,6 +16,7 @@ type Props = {
 
 export function PulseRing({ state, size = 80, color = colors.accent }: Props) {
   const { opacity, scale } = usePulseRing(state);
+  const reducedMotion = useReducedMotion();
 
   const ringStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -23,19 +28,33 @@ export function PulseRing({ state, size = 80, color = colors.accent }: Props) {
       style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}
       pointerEvents="none"
     >
-      <Animated.View
-        style={[
-          {
+      {reducedMotion ? (
+        <View
+          style={{
             position: 'absolute',
             width: size,
             height: size,
             borderRadius: size / 2,
             borderWidth: 3,
             borderColor: color,
-          },
-          ringStyle,
-        ]}
-      />
+            opacity: state === 'destination-selected' ? 0.5 : 1,
+          }}
+        />
+      ) : (
+        <Animated.View
+          style={[
+            {
+              position: 'absolute',
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              borderWidth: 3,
+              borderColor: color,
+            },
+            ringStyle,
+          ]}
+        />
+      )}
       <View
         style={{
           width: size / 3,

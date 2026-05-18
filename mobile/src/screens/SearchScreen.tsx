@@ -14,35 +14,28 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, haptics } from '../design-system';
+import { colors, haptics, statusColor } from '../design-system';
 import { useBays } from '../hooks/useBays';
+import { useColorBlindMode } from '../hooks/useColorBlindMode';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import type { RootStackParamList } from '../navigation/types';
 import type { Bay } from '../services/apiBays';
+import { buildSearchResults, type DestinationResult, type SearchResult } from './searchPlanning';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-const MAX_RESULTS = 50;
 
 export function SearchScreen() {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
   const { bays, loading } = useBays();
+  const { enabled: colorBlindMode } = useColorBlindMode();
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, 150);
 
-  const results = useMemo<Bay[]>(() => {
-    const q = debouncedQuery.trim().toLowerCase();
-    if (!q) return [];
-    const matches: Bay[] = [];
-    for (const b of bays) {
-      if (matches.length >= MAX_RESULTS) break;
-      const idMatch = b.id.toLowerCase().includes(q);
-      const nameMatch = b.name?.toLowerCase().includes(q);
-      if (idMatch || nameMatch) matches.push(b);
-    }
-    return matches;
-  }, [bays, debouncedQuery]);
+  const results = useMemo<SearchResult[]>(
+    () => buildSearchResults(bays, debouncedQuery),
+    [bays, debouncedQuery],
+  );
 
   const onPickBay = useCallback(
     (bay: Bay) => {
@@ -56,6 +49,23 @@ export function SearchScreen() {
     [navigation],
   );
 
+  const onPickDestination = useCallback(
+    (destination: DestinationResult) => {
+      haptics.light();
+      Keyboard.dismiss();
+      navigation.navigate('Tabs', {
+        screen: 'MapTab',
+        params: {
+          planningMode: 'destination',
+          destinationLat: destination.lat,
+          destinationLng: destination.lng,
+          destinationLabel: destination.label,
+        },
+      });
+    },
+    [navigation],
+  );
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -64,6 +74,9 @@ export function SearchScreen() {
     >
       <View className="gap-3 px-6 pb-3 pt-4">
         <Text className="font-sans text-2xl font-bold text-brand dark:text-accent">Search</Text>
+        <Text className="font-sans text-sm text-gray-500 dark:text-gray-300">
+          Find a bay, or choose a street as your planning destination.
+        </Text>
         <View className="flex-row items-center gap-2 rounded-2xl bg-surface-tertiary px-4 py-3 dark:bg-surface-dark-secondary">
           <TextInput
             value={query}
@@ -75,7 +88,7 @@ export function SearchScreen() {
             returnKeyType="search"
             onSubmitEditing={Keyboard.dismiss}
             className="flex-1 font-sans text-base text-gray-900 dark:text-gray-300"
-            accessibilityLabel="Search bays"
+            accessibilityLabel="Search bays and destinations"
           />
           {query ? (
             <Pressable
@@ -84,7 +97,7 @@ export function SearchScreen() {
               onPress={() => setQuery('')}
               hitSlop={8}
             >
-              <Text className="font-sans text-lg text-gray-500">×</Text>
+              <Text className="font-sans text-lg text-gray-500">x</Text>
             </Pressable>
           ) : null}
         </View>
@@ -95,40 +108,94 @@ export function SearchScreen() {
           <ActivityIndicator color={colors.brand} />
         </View>
       ) : debouncedQuery.trim() === '' ? (
-        <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-center font-sans text-sm text-gray-500">
-            Type a street name or bay ID to find a parking bay.
-          </Text>
-        </View>
+        <EmptyState message="Type a street name to plan near a destination, or a bay ID to open a bay." />
       ) : results.length === 0 ? (
-        <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-center font-sans text-sm text-gray-500">
-            No bays match “{debouncedQuery}”.
-          </Text>
-        </View>
+        <EmptyState message={`No bays or streets match "${debouncedQuery}"`} />
       ) : (
         <FlatList
           data={results}
-          keyExtractor={(b) => b.id}
+          keyExtractor={(item) => (item.kind === 'destination' ? item.id : `bay:${item.bay.id}`)}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 24 }}
-          ItemSeparatorComponent={() => <View className="h-px bg-surface-tertiary dark:bg-surface-dark-secondary" />}
-          renderItem={({ item }) => <Row bay={item} onPress={onPickBay} />}
+          ItemSeparatorComponent={() => (
+            <View className="h-px bg-surface-tertiary dark:bg-surface-dark-secondary" />
+          )}
+          renderItem={({ item }) =>
+            item.kind === 'destination' ? (
+              <DestinationRow destination={item} onPress={onPickDestination} />
+            ) : (
+              <BayRow bay={item.bay} colorBlindMode={colorBlindMode} onPress={onPickBay} />
+            )
+          }
         />
       )}
     </KeyboardAvoidingView>
   );
 }
 
-function Row({ bay, onPress }: { bay: Bay; onPress: (bay: Bay) => void }) {
-  const tint =
-    bay.type === 'available'
-      ? colors.statusGood
-      : bay.type === 'trap'
-        ? colors.statusCaution
-        : bay.type === 'occupied'
-          ? colors.statusAvoid
-          : colors.statusUnknown;
+function EmptyState({ message }: { message: string }) {
+  return (
+    <View className="flex-1 items-center justify-center px-6">
+      <Text className="text-center font-sans text-sm text-gray-500">{message}</Text>
+    </View>
+  );
+}
+
+function DestinationRow({
+  destination,
+  onPress,
+}: {
+  destination: DestinationResult;
+  onPress: (destination: DestinationResult) => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => onPress(destination)}
+      className="min-h-[56px] flex-row items-center gap-3 py-3"
+    >
+      <View
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          backgroundColor: colors.brand,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Text style={{ color: colors.surface, fontSize: 12, fontWeight: '700' }}>P</Text>
+      </View>
+      <View className="flex-1">
+        <Text className="font-sans text-sm font-semibold text-gray-900 dark:text-gray-300" numberOfLines={1}>
+          Plan near {destination.label}
+        </Text>
+        <Text className="font-sans text-xs text-gray-500" numberOfLines={1}>
+          Destination from {destination.bayCount} nearby bays
+        </Text>
+      </View>
+      <Text className="font-sans text-base text-gray-400">&gt;</Text>
+    </Pressable>
+  );
+}
+
+export function baySearchStatusColor(type: Bay['type'], colorBlindMode = false) {
+  if (type === 'available') return statusColor('good', colorBlindMode);
+  if (type === 'trap') return statusColor('caution', colorBlindMode);
+  if (type === 'occupied') return statusColor('avoid', colorBlindMode);
+  return statusColor('unknown', colorBlindMode);
+}
+
+function BayRow({
+  bay,
+  colorBlindMode,
+  onPress,
+}: {
+  bay: Bay;
+  colorBlindMode: boolean;
+  onPress: (bay: Bay) => void;
+}) {
+  const tint = baySearchStatusColor(bay.type, colorBlindMode);
 
   return (
     <Pressable
@@ -151,10 +218,10 @@ function Row({ bay, onPress }: { bay: Bay; onPress: (bay: Bay) => void }) {
           {bay.name ?? `Bay ${bay.id}`}
         </Text>
         <Text className="font-sans text-xs text-gray-500" numberOfLines={1}>
-          ID {bay.id} · {bay.bayType}
+          Open bay {bay.id} - {bay.bayType}
         </Text>
       </View>
-      <Text className="font-sans text-base text-gray-400">›</Text>
+      <Text className="font-sans text-base text-gray-400">&gt;</Text>
     </Pressable>
   );
 }

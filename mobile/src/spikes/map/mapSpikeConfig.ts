@@ -1,4 +1,9 @@
-import type { Region } from 'react-native-maps';
+type Region = {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+};
 
 export const MAP_SPIKE_MARKER_COUNT = 3000;
 

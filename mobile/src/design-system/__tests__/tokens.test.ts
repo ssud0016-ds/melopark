@@ -1,7 +1,7 @@
 import resolveConfig from 'tailwindcss/resolveConfig';
 
 import tailwindConfig from '../../../tailwind.config.js';
-import { colors } from '../colors';
+import { colorBlindColors, colors, statusColor } from '../colors';
 import { elevation } from '../elevation';
 import { interFontMap } from '../typography';
 import { zIndex } from '../zIndex';
@@ -43,6 +43,14 @@ describe('design-system tokens', () => {
     expect(colors.statusCaution).toBe(getColor('status.caution'));
     expect(colors.statusAvoid).toBe(getColor('status.avoid'));
     expect(colors.statusUnknown).toBe(getColor('status.unknown'));
+  });
+
+  test('color-blind status palette uses blue amber charcoal mapping', () => {
+    expect(colorBlindColors.statusGood).toBe('#3b82f6');
+    expect(colorBlindColors.statusCaution).toBe('#f59e0b');
+    expect(colorBlindColors.statusAvoid).toBe('#374151');
+    expect(statusColor('good', true)).toBe(colorBlindColors.statusGood);
+    expect(statusColor('avoid', false)).toBe(colors.statusAvoid);
   });
 
   // §7.5

@@ -1,7 +1,7 @@
 // Central runtime token export (plan §3.2 row 2).
 // Single import surface for non-Tailwind consumers.
 
-export { colors, type ColorToken } from './colors';
+export { colorBlindColors, colors, statusColor, type ColorToken } from './colors';
 export { elevation, type ElevationToken } from './elevation';
 export { haptics } from './haptics';
 export { motion, useReducedMotion, usePulseRing, type PulseRingState } from './motion';

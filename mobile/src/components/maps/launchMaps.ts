@@ -7,12 +7,19 @@ type LaunchArgs = {
   lat: number;
   lng: number;
   label?: string;
+  travelMode?: 'driving' | 'walking';
 };
 
 // Plan §4.7 Linking-based provider chooser (replaces web iframe trick).
 // Falls back to web Google Maps if native handler not installed.
-export async function launchMaps({ provider, lat, lng, label }: LaunchArgs): Promise<boolean> {
-  const candidates = providerUrls({ provider, lat, lng, label });
+export async function launchMaps({
+  provider,
+  lat,
+  lng,
+  label,
+  travelMode,
+}: LaunchArgs): Promise<boolean> {
+  const candidates = providerUrls({ provider, lat, lng, label, travelMode });
   for (const url of candidates) {
     try {
       const can = await Linking.canOpenURL(url);
@@ -27,21 +34,20 @@ export async function launchMaps({ provider, lat, lng, label }: LaunchArgs): Pro
   return false;
 }
 
-function providerUrls({ provider, lat, lng, label }: LaunchArgs): string[] {
+function providerUrls({ provider, lat, lng, label, travelMode = 'driving' }: LaunchArgs): string[] {
   const enc = (s?: string) => (s ? encodeURIComponent(s) : '');
+  const googleMode = travelMode === 'walking' ? '&mode=w' : '';
   const web = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}${
     label ? `&destination_place_id=${enc(label)}` : ''
-  }`;
+  }&travelmode=${travelMode}`;
 
   switch (provider) {
     case 'google':
       return [
-        `google.navigation:q=${lat},${lng}`,
+        `google.navigation:q=${lat},${lng}${googleMode}`,
         `geo:${lat},${lng}?q=${lat},${lng}${label ? `(${enc(label)})` : ''}`,
         web,
       ];
-    case 'waze':
-      return [`waze://?ll=${lat},${lng}&navigate=yes`, web];
     case 'web':
       return [web];
     default:

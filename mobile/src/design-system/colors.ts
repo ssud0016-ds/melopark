@@ -24,3 +24,28 @@ export const colors = {
 } as const;
 
 export type ColorToken = keyof typeof colors;
+
+export const colorBlindColors = {
+  statusGood: '#3b82f6',
+  statusCaution: '#f59e0b',
+  statusAvoid: '#374151',
+  statusUnknown: '#9ca3af',
+  textOnDark: '#f3f4f6',
+  textOnCaution: '#512500',
+} as const;
+
+export function statusColor(
+  status: 'good' | 'caution' | 'avoid' | 'unknown',
+  colorBlindMode = false,
+) {
+  if (colorBlindMode) {
+    if (status === 'good') return colorBlindColors.statusGood;
+    if (status === 'caution') return colorBlindColors.statusCaution;
+    if (status === 'avoid') return colorBlindColors.statusAvoid;
+    return colorBlindColors.statusUnknown;
+  }
+  if (status === 'good') return colors.statusGood;
+  if (status === 'caution') return colors.statusCaution;
+  if (status === 'avoid') return colors.statusAvoid;
+  return colors.statusUnknown;
+}
