@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 
-import { colors } from '../../design-system';
 import { useFilters } from '../../hooks/useFilters';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 type Props = {
   onOpenFilters: () => void;
@@ -9,6 +9,7 @@ type Props = {
 
 /** Live / filter pills — position via parent anchored to parking chance sheet top. */
 export function ScopeStrip({ onOpenFilters }: Props) {
+  const theme = useThemeColors();
   const { isDefault, modifiedPills } = useFilters();
   const visiblePills = modifiedPills.slice(0, 2);
   const overflow = Math.max(0, modifiedPills.length - 2);
@@ -23,15 +24,19 @@ export function ScopeStrip({ onOpenFilters }: Props) {
       }}
     >
       {isDefault ? (
-        <Chip tone="good">Live now</Chip>
+        <Chip tone="good" theme={theme}>
+          Live now
+        </Chip>
       ) : (
         <>
           {visiblePills.map((p) => (
-            <Chip key={p} tone="brand">
+            <Chip key={p} tone="brand" theme={theme}>
               {p}
             </Chip>
           ))}
-          {overflow > 0 ? <Chip tone="brand">{`+${overflow}`}</Chip> : null}
+          {overflow > 0 ? (
+            <Chip tone="brand" theme={theme}>{`+${overflow}`}</Chip>
+          ) : null}
         </>
       )}
       <Pressable
@@ -42,7 +47,7 @@ export function ScopeStrip({ onOpenFilters }: Props) {
           minHeight: 44,
           paddingHorizontal: 12,
           borderRadius: 999,
-          backgroundColor: colors.surface,
+          backgroundColor: theme.chrome,
           alignItems: 'center',
           justifyContent: 'center',
           shadowColor: '#000',
@@ -52,15 +57,23 @@ export function ScopeStrip({ onOpenFilters }: Props) {
           elevation: 3,
         }}
       >
-        <Text style={{ fontSize: 12, fontWeight: '600', color: colors.brand }}>Filters ▾</Text>
+        <Text style={{ fontSize: 12, fontWeight: '600', color: theme.tabActive }}>Filters ▾</Text>
       </Pressable>
     </View>
   );
 }
 
-function Chip({ children, tone }: { children: React.ReactNode; tone: 'good' | 'brand' }) {
-  const bg = tone === 'good' ? colors.statusGoodBg : colors.surfaceTertiary;
-  const fg = tone === 'good' ? colors.statusGood : colors.brand;
+function Chip({
+  children,
+  tone,
+  theme,
+}: {
+  children: React.ReactNode;
+  tone: 'good' | 'brand';
+  theme: ReturnType<typeof useThemeColors>;
+}) {
+  const bg = tone === 'good' ? theme.liveChipBg : theme.chromeMuted;
+  const fg = tone === 'good' ? theme.liveChipText : theme.tabActive;
   return (
     <View
       style={{

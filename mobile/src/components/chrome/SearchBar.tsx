@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, motion, nativeSearchBarHeight, useReducedMotion, zIndex } from '../../design-system';
 import { LANDMARKS, type Landmark } from '../../data/landmarks';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { apiBase } from '../../services/api';
 import { LogoMark } from '../common/LogoMark';
 
@@ -77,6 +78,7 @@ export function SearchBar({
   const [showEmpty, setShowEmpty] = useState(false);
   const debouncedQ = useDebouncedValue(query, 300);
   const reduced = useReducedMotion();
+  const theme = useThemeColors();
 
   const [ringState, setRingState] = useState<'pulse' | 'static' | 'none'>(
     onboardingActive ? (reduced ? 'static' : 'pulse') : 'none',
@@ -231,7 +233,9 @@ export function SearchBar({
           style={{
             height: nativeSearchBarHeight,
             borderRadius: 12,
-            backgroundColor: colors.surface,
+            backgroundColor: theme.chrome,
+            borderWidth: 1,
+            borderColor: theme.border,
             flexDirection: 'row',
             alignItems: 'center',
             shadowColor: '#000',
@@ -252,8 +256,8 @@ export function SearchBar({
             onFocus={handleFocus}
             onBlur={handleBlur}
             placeholder="Search Melbourne CBD…"
-            placeholderTextColor={colors.surfaceDarkTertiary}
-            style={{ flex: 1, minWidth: 0, fontSize: 14, color: colors.surfaceDark }}
+            placeholderTextColor={theme.textMuted}
+            style={{ flex: 1, minWidth: 0, fontSize: 14, color: theme.text }}
             returnKeyType="search"
             accessibilityLabel="Search input"
           />
@@ -263,7 +267,7 @@ export function SearchBar({
             onPress={onSettingsOpen}
             style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
           >
-            <Text style={{ fontSize: 20, color: colors.brand }}>⚙</Text>
+            <Text style={{ fontSize: 20, color: theme.tabActive }}>⚙</Text>
           </Pressable>
           {destination ? (
             <Pressable
@@ -275,7 +279,7 @@ export function SearchBar({
               }}
               style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
             >
-              <Text style={{ fontSize: 22, color: colors.surfaceDarkTertiary }}>×</Text>
+              <Text style={{ fontSize: 22, color: theme.textMuted }}>×</Text>
             </Pressable>
           ) : null}
         </View>
@@ -286,7 +290,9 @@ export function SearchBar({
           style={{
             marginTop: 6,
             borderRadius: 12,
-            backgroundColor: colors.surface,
+            backgroundColor: theme.chrome,
+            borderWidth: 1,
+            borderColor: theme.border,
             maxHeight: 360,
             shadowColor: '#000',
             shadowOpacity: 0.12,
@@ -303,7 +309,7 @@ export function SearchBar({
           ) : null}
           {!apiLoading && query.trim() && showEmpty && dropdownResults.length === 0 ? (
             <View style={{ padding: 16 }}>
-              <Text style={{ fontSize: 13, color: colors.surfaceDarkTertiary }}>
+              <Text style={{ fontSize: 13, color: theme.textSecondary }}>
                 No matches. Tip: tap a colored bay on the map to see live availability.
               </Text>
             </View>
@@ -329,7 +335,7 @@ export function SearchBar({
                     {categoryGlyph()}
                   </Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '600', color: colors.surfaceDark }} numberOfLines={1}>
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }} numberOfLines={1}>
                       {h ? (
                         <>
                           {h.before}
@@ -340,7 +346,7 @@ export function SearchBar({
                         l.name
                       )}
                     </Text>
-                    <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary }} numberOfLines={1}>
+                    <Text style={{ fontSize: 12, color: theme.textSecondary }} numberOfLines={1}>
                       {l.sub}
                     </Text>
                   </View>

@@ -1,8 +1,9 @@
-import { BottomSheetModal, BottomSheetScrollView, BottomSheetView } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { colors, sheetSnapPoints, SNAP_HALF, SNAP_FULL } from '../../design-system';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import {
   fetchBayCarbon,
   fetchBayEvaluation,
@@ -57,6 +58,7 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
     },
     ref,
   ) => {
+    const theme = useThemeColors();
     const sheetRef = useRef<BottomSheetModal>(null);
     const indexRef = useRef(-1);
     const [bay, setBay] = useState<Bay | null>(null);
@@ -65,6 +67,10 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
     const [loading, setLoading] = useState(false);
     const snaps = useMemo(() => [...sheetSnapPoints], []);
     const trapNotifiedRef = useRef<string | null>(null);
+    const onTrapDetectedRef = useRef(onTrapDetected);
+    useEffect(() => {
+      onTrapDetectedRef.current = onTrapDetected;
+    }, [onTrapDetected]);
 
     useImperativeHandle(ref, () => ({
       present: (b: Bay) => {
@@ -86,20 +92,22 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
       if (!bay?.id) {
         setEvaluation(null);
         setCarbon(null);
+        setLoading(false);
         return;
       }
+      const bayId = bay.id;
       let cancelled = false;
       setLoading(true);
       setEvaluation(null);
       setCarbon(null);
-      Promise.all([fetchBayEvaluation(bay.id, fetchOpts), fetchBayCarbon(bay.id)])
+      Promise.all([fetchBayEvaluation(bayId, fetchOpts), fetchBayCarbon(bayId)])
         .then(([ev, cb]) => {
           if (cancelled) return;
           setEvaluation(ev);
           setCarbon(cb);
-          if (ev?.warning && onTrapDetected && trapNotifiedRef.current !== bay.id) {
-            trapNotifiedRef.current = bay.id;
-            onTrapDetected(ev.warning.description);
+          if (ev?.warning && trapNotifiedRef.current !== bayId) {
+            trapNotifiedRef.current = bayId;
+            onTrapDetectedRef.current?.(ev.warning.description);
           }
         })
         .finally(() => {
@@ -108,7 +116,7 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
       return () => {
         cancelled = true;
       };
-    }, [bay?.id, fetchOpts, onTrapDetected]);
+    }, [bay?.id, fetchOpts]);
 
     const isFuturePlanningMode = ((): boolean => {
       if (!plannerArrivalIso) return false;
@@ -143,8 +151,12 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
     const occupancyDot =
       bay?.free === 1 ? colors.statusGood : bay?.free === 0 ? colors.statusAvoid : colors.statusUnknown;
 
-    const showingDate = formatMelbourneDate(plannerArrivalIso || new Date().toISOString());
-    const showingTime = formatMelbourneTime(plannerArrivalIso || new Date().toISOString());
+    const showingIso = useMemo(
+      () => plannerArrivalIso ?? new Date().toISOString(),
+      [plannerArrivalIso, bay?.id],
+    );
+    const showingDate = formatMelbourneDate(showingIso);
+    const showingTime = formatMelbourneTime(showingIso);
     const durationLabel = durationFilterLabel(durationFilter ?? null, customDuration ?? null);
     const durationMins = plannerDurationMins ?? DEFAULT_PLANNER_DURATION_MINS;
 
@@ -154,8 +166,8 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
         snapPoints={snaps}
         index={SNAP_HALF}
         enableDynamicSizing={false}
-        backgroundStyle={{ backgroundColor: colors.surface }}
-        handleIndicatorStyle={{ backgroundColor: colors.surfaceDarkTertiary, width: 32, height: 4 }}
+        backgroundStyle={{ backgroundColor: theme.sheet }}
+        handleIndicatorStyle={{ backgroundColor: theme.handle, width: 32, height: 4 }}
         onChange={(i) => {
           indexRef.current = i;
           onSheetIndexChange?.(i);
@@ -165,57 +177,82 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
           onSheetIndexChange?.(-1);
         }}
         accessibilityLabel={bay ? `Bay ${bay.id} details` : 'Bay details'}
+        activeOffsetY={[-1, 1]}
+        enableOverDrag={false}
       >
-        {/* Header strip — rendered above scroll so the close + ID stay glanceable */}
-        <BottomSheetView style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: 'rgba(0,0,0,0.08)' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.surfaceDarkTertiary, letterSpacing: 1 }}>
-              {bay ? `BAY #${bay.id}` : 'BAY'}
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: occupancyDot }} />
-                <Text style={{ fontSize: 10, fontWeight: '700', color: colors.surfaceDarkTertiary, letterSpacing: 0.8 }}>
-                  {occupancyBadge}
-                </Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Close bay details"
-                onPress={() => sheetRef.current?.dismiss()}
+        <BottomSheetScrollView
+          stickyHeaderIndices={[0]}
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
+          {/* Sticky header — in scroll tree so verdict card is not clipped underneath */}
+          <View
+            style={{
+              backgroundColor: theme.sheet,
+              paddingHorizontal: 20,
+              paddingTop: 8,
+              paddingBottom: 14,
+              borderBottomWidth: 0.5,
+              borderBottomColor: theme.border,
+              gap: 6,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <Text
+                numberOfLines={1}
                 style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
-                  backgroundColor: colors.surfaceTertiary,
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  flex: 1,
+                  flexShrink: 1,
+                  fontSize: 12,
+                  fontWeight: '700',
+                  color: theme.textMuted,
+                  letterSpacing: 1,
+                  marginRight: 8,
                 }}
-                hitSlop={6}
               >
-                <Text style={{ fontSize: 18, color: colors.surfaceDark, lineHeight: 20 }}>×</Text>
-              </Pressable>
+                {bay ? `BAY #${bay.id}` : 'BAY'}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: occupancyDot }} />
+                  <Text
+                    numberOfLines={1}
+                    style={{ fontSize: 10, fontWeight: '700', color: theme.textMuted, letterSpacing: 0.8 }}
+                  >
+                    {occupancyBadge}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close bay details"
+                  onPress={() => sheetRef.current?.dismiss()}
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: theme.chromeMuted,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  hitSlop={6}
+                >
+                  <Text style={{ fontSize: 18, color: theme.text, lineHeight: 20 }}>×</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
-          {streetLine ? (
-            <Text numberOfLines={2} style={{ marginTop: 2, fontSize: 14, fontWeight: '600', color: colors.surfaceDark }}>
-              {streetLine}
-            </Text>
-          ) : missingStreetNote ? (
-            <Text style={{ marginTop: 2, fontSize: 14, fontWeight: '500', color: colors.surfaceDarkTertiary }}>
-              {missingStreetNote}
-            </Text>
-          ) : null}
-        </BottomSheetView>
-
-        <BottomSheetScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-          {/* "Showing" planner-context strip */}
-          <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
-            <Text numberOfLines={1} style={{ fontSize: 12, color: colors.surfaceDarkTertiary }}>
+            {streetLine ? (
+              <Text numberOfLines={2} style={{ fontSize: 14, fontWeight: '600', color: theme.text, lineHeight: 20 }}>
+                {streetLine}
+              </Text>
+            ) : missingStreetNote ? (
+              <Text style={{ fontSize: 14, fontWeight: '500', color: theme.textSecondary, lineHeight: 20 }}>
+                {missingStreetNote}
+              </Text>
+            ) : null}
+            <Text numberOfLines={2} style={{ fontSize: 12, lineHeight: 18, color: theme.textSecondary }}>
               <Text style={{ fontWeight: '600' }}>Showing: </Text>
-              <Text style={{ fontWeight: '600', color: '#2E2A8A' }}>{durationLabel}</Text>
+              <Text style={{ fontWeight: '600', color: theme.tabActive }}>{durationLabel}</Text>
               <Text> · </Text>
-              <Text style={{ fontWeight: '600', color: '#2E2A8A' }}>
+              <Text style={{ fontWeight: '600', color: theme.tabActive }}>
                 {showingDate} {showingTime}
               </Text>
             </Text>
@@ -229,8 +266,8 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
                 marginTop: 12,
                 borderRadius: 12,
                 borderWidth: 1,
-                borderColor: '#bfdbfe',
-                backgroundColor: '#eff6ff',
+                borderColor: theme.border,
+                backgroundColor: theme.chromeMuted,
                 paddingHorizontal: 14,
                 paddingVertical: 10,
                 flexDirection: 'row',
@@ -239,7 +276,7 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
               }}
             >
               <Text style={{ fontSize: 14 }}>♿</Text>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#1d4ed8', letterSpacing: 1 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: theme.tabActive, letterSpacing: 1 }}>
                 DISABILITY PERMIT HOLDERS ONLY
               </Text>
             </View>

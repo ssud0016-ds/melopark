@@ -8,6 +8,15 @@ const EAST_LNG = 144.9745;
 export const DEFAULT_MAP_CENTER: [number, number] = [144.9631, -37.8136];
 export const DEFAULT_MAP_ZOOM = 13;
 export const DESTINATION_MAP_ZOOM = 16;
+/** Web ParkingMap CLUSTER_ZOOM_CUTOFF — individual bay dots at this zoom and above. */
+export const BAY_INDIVIDUAL_MIN_ZOOM = 18;
+/** Web mapGeo MELBOURNE_MAX_ZOOM — max pinch / cluster expansion zoom. */
+export const MELBOURNE_MAX_ZOOM = 19;
+/**
+ * Mapbox clusterMaxZoomLevel: points uncluster when map zoom > this value.
+ * Must be BAY_INDIVIDUAL_MIN_ZOOM - 1 (Mapbox uses strict greater-than).
+ */
+export const BAY_CLUSTER_MAX_ZOOM_LEVEL = BAY_INDIVIDUAL_MIN_ZOOM - 1;
 /** Web MapPage handleQuietStreetClick flyTo zoom. */
 export const QUIET_STREET_MAP_ZOOM = 18;
 /** Web MapPage handleQuietStreetClick flyTo duration (seconds → ms). */

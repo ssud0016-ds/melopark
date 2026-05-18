@@ -110,6 +110,10 @@ export const clusterTextFieldExpression = [
   ['get', 'sum_available'],
 ] as NonNullable<SymbolStyle['textField']>;
 
+/**
+ * Mapbox clusterProperties entries must be length-2: [reduceOperator, mapExpression].
+ * @see https://docs.mapbox.com/mapbox-gl-js/style-spec/sources/#geojson-clusterProperties
+ */
 export const BAY_CLUSTER_PROPERTIES = {
   sum_available: ['+', ['case', ['==', ['get', 'type'], 'available'], 1, 0]],
 } as const;

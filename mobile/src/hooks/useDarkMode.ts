@@ -3,6 +3,8 @@ import { useColorScheme as useNwColorScheme } from 'nativewind';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
+export const DARK_MODE_STORAGE_KEY = 'melopark-dark-mode';
+
 // Thin wrapper over nativewind's useColorScheme.
 // Plan §5: replaces web useDarkMode (localStorage + matchMedia) — nativewind
 // handles system theme + persistence + system-change listener automatically.

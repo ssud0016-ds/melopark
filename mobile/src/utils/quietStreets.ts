@@ -1,4 +1,5 @@
 import type { QuietStreet } from '../components/sheets/ParkingChanceSheet';
+import { dedupeByKey } from './dedupeByKey';
 import { QUIET_STREET_FLY_MS, QUIET_STREET_MAP_ZOOM } from './mapGeo';
 
 /** Mirrors web BusyNowPanel CHANCE_TEXT. */
@@ -52,7 +53,8 @@ export function coverageLabel(seg: Pick<PressureSegmentRow, 'has_live_bays' | 't
 /** Web MapPage quietStreets sort + slice(0, 3). */
 export function pickTopQuietStreets(segments: PressureSegmentRow[]): PressureSegmentRow[] {
   const levelScore: Record<string, number> = { low: 0, medium: 1, high: 2, unknown: 3 };
-  return [...segments]
+  const unique = dedupeByKey(segments, (s) => String(s.segment_id));
+  return [...unique]
     .sort((a, b) => {
       const liveA = a.has_live_bays === false ? 1 : 0;
       const liveB = b.has_live_bays === false ? 1 : 0;

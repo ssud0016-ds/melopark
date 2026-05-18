@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -25,8 +25,10 @@ import {
   SegmentDetailSheet,
   type SegmentDetailSheetRef,
 } from '../components/sheets/SegmentDetailSheet';
-import { colors, nativeTabBarHeight, SNAP_HALF, zIndex } from '../design-system';
+import { colors, SNAP_HALF, zIndex } from '../design-system';
+import { getTabBarStyle } from '../navigation/tabBarStyle';
 import { useMapChromeAnchor } from '../hooks/useMapChromeAnchor';
+import { useAccessibilityBays } from '../hooks/useAccessibilityBays';
 import { useBays } from '../hooks/useBays';
 import { useBusyNow } from '../hooks/useBusyNow';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
@@ -36,6 +38,7 @@ import { useLocationPermission } from '../hooks/useLocationPermission';
 import { useOnboarding } from '../hooks/useOnboarding';
 import { useDestinationAlternatives } from '../hooks/useDestinationAlternatives';
 import { useDarkMode } from '../hooks/useDarkMode';
+import { useThemeColors } from '../hooks/useThemeColors';
 import { useQuietestSegments } from '../hooks/useQuietestSegments';
 import type { TabParamList } from '../navigation/types';
 import type { PressureBounds } from '../services/apiPressure';
@@ -52,14 +55,6 @@ import { DEFAULT_CBD_BOUNDS, SEARCH_RADIUS_M } from '../utils/mapGeo';
 
 type Nav = BottomTabNavigationProp<TabParamList, 'MapTab'>;
 
-const TAB_BAR_VISIBLE = {
-  position: 'absolute' as const,
-  height: nativeTabBarHeight,
-  backgroundColor: colors.surface,
-  borderTopColor: colors.surfaceTertiary,
-  borderTopWidth: 0.5,
-  zIndex: zIndex.tabBar,
-};
 const TAB_BAR_HIDDEN = { display: 'none' as const };
 
 export function MapScreen() {
@@ -72,6 +67,16 @@ export function MapScreen() {
   const [pcSheetIndex, setPcSheetIndex] = useState(0);
   const [colorBlindMode, setColorBlindMode] = useState(false);
   const [accessibleOnly, setAccessibleOnly] = useState(false);
+  const {
+    accessibleBayIds,
+    loading: accessibilityLoading,
+    error: accessibilityError,
+  } = useAccessibilityBays(accessibleOnly);
+  const accessibleShownCount = useMemo(() => {
+    if (!accessibleOnly || !accessibleBayIds?.length) return 0;
+    const allow = new Set(accessibleBayIds);
+    return bays.filter((b) => allow.has(b.id)).length;
+  }, [accessibleOnly, accessibleBayIds, bays]);
   const [onboardingActive, setOnboardingActive] = useState(false);
   const [mapBounds, setMapBounds] = useState<PressureBounds | null>(DEFAULT_CBD_BOUNDS);
 
@@ -87,7 +92,13 @@ export function MapScreen() {
   const { state: locationState, canAskAgain, request: requestLocation } = useLocationPermission();
   const { destination, setDestination, clearDestination, altPin, setAltPin } = useDestination();
   const { dark: mapDark } = useDarkMode();
+  const theme = useThemeColors();
   const filters = useFilters();
+
+  const tabBarVisible = useMemo(
+    () => getTabBarStyle(theme, insets.bottom),
+    [theme, insets.bottom],
+  );
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300);
   const lastReportedBoundsRef = useRef<PressureBounds | null>(null);
@@ -156,6 +167,13 @@ export function MapScreen() {
     bayDetailRef.current?.present(bay);
   }, []);
 
+  const onBayTrapDetected = useCallback(
+    (msg: string) => {
+      showToast(msg, 'warning');
+    },
+    [showToast],
+  );
+
   const onSegmentPress = useCallback((segmentId: string) => {
     segmentDetailRef.current?.present(segmentId);
   }, []);
@@ -211,11 +229,15 @@ export function MapScreen() {
     [destination, setAltPin],
   );
 
+  const deepLinkBayPresentedRef = useRef<string | null>(null);
   useEffect(() => {
     const bayId = route.params?.bayId;
-    if (bayId) {
+    if (!bayId) {
+      deepLinkBayPresentedRef.current = null;
+    } else {
       const found = bays.find((b) => b.id === bayId);
-      if (found) {
+      if (found && deepLinkBayPresentedRef.current !== bayId) {
+        deepLinkBayPresentedRef.current = bayId;
         setSelectedBayId(found.id);
         bayDetailRef.current?.present(found);
       }
@@ -226,8 +248,8 @@ export function MapScreen() {
 
   useEffect(() => {
     const hide = baySheetIndex === SNAP_FULL_INDEX || pcSheetIndex === 2;
-    navigation.getParent()?.setOptions({ tabBarStyle: hide ? TAB_BAR_HIDDEN : TAB_BAR_VISIBLE });
-  }, [baySheetIndex, pcSheetIndex, navigation]);
+    navigation.getParent()?.setOptions({ tabBarStyle: hide ? TAB_BAR_HIDDEN : tabBarVisible });
+  }, [baySheetIndex, pcSheetIndex, navigation, tabBarVisible]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -262,11 +284,6 @@ export function MapScreen() {
     if (altPin && !destination) pcSheetRef.current?.snapTo(SNAP_HALF);
   }, [altPin, destination]);
 
-  const accessibilityBayIds = useMemo<string[] | undefined>(
-    () => (accessibleOnly ? bays.filter((b) => b.bayType === 'Disabled').map((b) => b.id) : undefined),
-    [accessibleOnly, bays],
-  );
-
   return (
     <View
       className="flex-1 bg-surface dark:bg-surface-dark"
@@ -288,7 +305,7 @@ export function MapScreen() {
           dimRadiusM={destination ? SEARCH_RADIUS_M : undefined}
           colorBlindMode={colorBlindMode}
           mapDark={mapDark}
-          accessibilityBayIds={accessibilityBayIds}
+          accessibilityBayIds={accessibleBayIds}
           onMapEmptyClick={() => setAltPin(null)}
           onBoundsChange={handleMapBounds}
         >
@@ -313,6 +330,33 @@ export function MapScreen() {
         onboardingActive={onboardingActive}
         variant="map"
       />
+
+      {accessibleOnly && (accessibilityLoading || accessibilityError) ? (
+        <View
+          pointerEvents="none"
+          className="absolute left-3.5 z-[510] rounded-xl border border-surface-tertiary bg-surface/95 px-3 py-2 dark:border-surface-dark-tertiary dark:bg-surface-dark/95"
+          style={{ top: insets.top + 120 }}
+        >
+          {accessibilityLoading ? (
+            <Text className="text-12 text-ink-secondary dark:text-ink-dark-secondary">
+              Loading accessible bays...
+            </Text>
+          ) : (
+            <Text className="text-12 text-trap">{accessibilityError}</Text>
+          )}
+        </View>
+      ) : null}
+
+      {accessibleOnly && !accessibilityLoading && !accessibilityError ? (
+        <View
+          pointerEvents="none"
+          className="absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-3 py-1.5 dark:border-brand-300/80 dark:bg-brand-50"
+        >
+          <Text className="text-12 font-semibold text-white dark:text-brand-900">
+            {accessibleShownCount.toLocaleString()} accessible shown
+          </Text>
+        </View>
+      ) : null}
 
       <Animated.View
         pointerEvents="box-none"
@@ -388,7 +432,7 @@ export function MapScreen() {
         plannerArrivalIso={filters.plannerArrivalIso}
         plannerDurationMins={filters.plannerDurationMins}
         onSheetIndexChange={setBaySheetIndex}
-        onTrapDetected={(msg) => showToast(msg, 'warning')}
+        onTrapDetected={onBayTrapDetected}
       />
       <SegmentDetailSheet
         ref={segmentDetailRef}

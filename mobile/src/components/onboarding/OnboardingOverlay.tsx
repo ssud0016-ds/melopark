@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, fontFamily, haptics, zIndex } from '../../design-system';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import {
   getStatusFillColor,
   PRESSURE_UNKNOWN_COLOR,
@@ -20,6 +21,7 @@ type Props = {
 
 export function OnboardingOverlay({ hasPressureData, destination, onActiveChange, onDone }: Props) {
   const insets = useSafeAreaInsets();
+  const theme = useThemeColors();
   const [step, setStep] = useState<Step>('hero');
 
   const advance = () => {
@@ -134,14 +136,14 @@ export function OnboardingOverlay({ hasPressureData, destination, onActiveChange
             paddingBottom: insets.bottom + 24,
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
-            backgroundColor: colors.surface,
+            backgroundColor: theme.sheet,
             gap: 12,
           }}
         >
-          <Text style={{ fontFamily: fontFamily.sansExtraBold, fontSize: 28, color: colors.brand }}>
+          <Text style={{ fontFamily: fontFamily.sansExtraBold, fontSize: 28, color: theme.tabActive }}>
             Where are you going?
           </Text>
-          <Text style={{ fontSize: 14, color: colors.surfaceDarkTertiary, lineHeight: 20 }}>
+          <Text style={{ fontSize: 14, color: theme.textSecondary, lineHeight: 20 }}>
             Search for your destination above to find free nearby parking bays.
           </Text>
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
@@ -150,7 +152,7 @@ export function OnboardingOverlay({ hasPressureData, destination, onActiveChange
               onPress={skip}
               style={{ flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}
             >
-              <Text style={{ color: colors.surfaceDarkTertiary, fontWeight: '600' }}>Skip, just show map</Text>
+              <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>Skip, just show map</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -160,14 +162,14 @@ export function OnboardingOverlay({ hasPressureData, destination, onActiveChange
                 flex: 1,
                 minHeight: 48,
                 borderRadius: 999,
-                backgroundColor: destination ? colors.brand : colors.surfaceTertiary,
+                backgroundColor: destination ? colors.brand : theme.chromeMuted,
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
               <Text
                 style={{
-                  color: destination ? colors.surface : colors.surfaceDarkTertiary,
+                  color: destination ? theme.brandOnBrand : theme.textMuted,
                   fontWeight: '700',
                 }}
               >

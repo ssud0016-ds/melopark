@@ -1,6 +1,6 @@
 import { Text, View } from 'react-native';
 
-import { colors } from '../../design-system';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import type { Bay, BayEvaluation } from '../../services/apiBays';
 import { formatLeaveByClock } from '../../utils/plannerTime';
 
@@ -12,6 +12,7 @@ type Props = {
 const INK = '#2E2A8A';
 
 export function BayStatusAndLimits({ bay, evaluation }: Props) {
+  const theme = useThemeColors();
   const restriction = evaluation?.active_restriction ?? null;
   const warning = evaluation?.warning ?? null;
 
@@ -35,7 +36,7 @@ export function BayStatusAndLimits({ bay, evaluation }: Props) {
 
   return (
     <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
-      <Text style={{ fontSize: 14, fontWeight: '600', color: colors.surfaceDark, marginBottom: 12 }}>
+      <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text, marginBottom: 12 }}>
         Bay Status and Limits
       </Text>
 
@@ -51,16 +52,16 @@ export function BayStatusAndLimits({ bay, evaluation }: Props) {
                   borderRadius: 6,
                   backgroundColor: t.highlight ? INK : 'transparent',
                   borderWidth: t.highlight ? 0 : 2,
-                  borderColor: colors.surfaceTertiary,
+                  borderColor: theme.chromeMuted,
                 }}
               />
               {i < items.length - 1 ? (
-                <View style={{ width: 2, flex: 1, minHeight: 12, backgroundColor: colors.surfaceTertiary, marginTop: 4 }} />
+                <View style={{ width: 2, flex: 1, minHeight: 12, backgroundColor: theme.chromeMuted, marginTop: 4 }} />
               ) : null}
             </View>
             <View style={{ flex: 1, paddingBottom: i < items.length - 1 ? 20 : 0 }}>
-              <Text style={{ fontSize: 14, fontWeight: '600', color: colors.surfaceDark }}>{t.title}</Text>
-              <Text style={{ marginTop: 2, fontSize: 11, lineHeight: 17, color: colors.surfaceDarkTertiary }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{t.title}</Text>
+              <Text style={{ marginTop: 2, fontSize: 11, lineHeight: 17, color: theme.textSecondary }}>
                 {t.desc}
               </Text>
             </View>
