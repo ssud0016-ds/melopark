@@ -89,7 +89,7 @@ export function SustainabilityBadge({ carbonData }: Props) {
   const score = carbonData?.score ?? 0;
 
   const animG = useCountUp(savedG, 1000);
-  const animPct = useCountUp(Math.round(pctAvoided * 100), 1200);
+  const animPct = useCountUp(pctAvoided, 1200);
   const animScore = useCountUp(score, 800);
 
   const pulse = useRef(new Animated.Value(0)).current;
@@ -115,14 +115,14 @@ export function SustainabilityBadge({ carbonData }: Props) {
 
   const footer =
     score >= 65
-      ? `You avoided ${Math.round(pctAvoided * 100)}% of typical Melbourne CBD cruising — great sustainability choice.`
+      ? `You avoided ${pctAvoided}% of typical Melbourne CBD cruising — great sustainability choice.`
       : score >= 35
-        ? `You skipped ${Math.round(pctAvoided * 100)}% of the typical 2.0 km Melbourne CBD search drive.`
+        ? `You skipped ${pctAvoided}% of the typical 2.0 km Melbourne CBD search drive.`
         : `MeloPark helped you find this bay, saving ${savedG}g of search emissions.`;
 
   return (
     <Animated.View
-      accessibilityLabel={`${Math.round(pctAvoided * 100)}% of Melbourne CBD cruising avoided, ${savedG}g CO2 saved, carbon score ${score} out of 100`}
+      accessibilityLabel={`${pctAvoided}% of Melbourne CBD cruising avoided, ${savedG}g CO2 saved, carbon score ${score} out of 100`}
       style={{
         borderRadius: 16,
         marginTop: 12,
