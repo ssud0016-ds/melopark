@@ -30,26 +30,23 @@ const CLUSTER_ZOOM_CUTOFF = 18
 /** Mobile cluster-mode hint (non-interactive). */
 export const MOBILE_CLUSTER_ZOOM_HINT = 'Zoom in to view individual bays'
 
-/** Bay-dot fill colours (match map legend): lime / peach / red. */
+/** Bay-dot fill colours (match map legend): lime / red. */
 const VERIFIED_FILL = {
   available: '#a3ec48',
-  trap: '#FFB382',
   occupied: '#ed6868',
 }
 const VERIFIED_FILL_COLOR_BLIND = {
   available: '#3b82f6',
-  trap: '#f59e0b',
   occupied: '#374151',
 }
 
 export function getStatusFillColor(status, colorBlindMode = false) {
   const palette = colorBlindMode ? VERIFIED_FILL_COLOR_BLIND : VERIFIED_FILL
-  if (status === 'caution' || status === 'trap' || status === 'unknown') return palette.trap
   if (status === 'occupied') return palette.occupied
   return palette.available
 }
 
-export function getClusterBadgeColors({ available, occupied, trap, total, isDark, colorBlindMode = false }) {
+export function getClusterBadgeColors({ available, total, isDark, colorBlindMode = false }) {
   const a = Number(available) || 0
   const t = Number(total) || 0
   const ratio = t > 0 ? a / t : 0
@@ -57,26 +54,20 @@ export function getClusterBadgeColors({ available, occupied, trap, total, isDark
   let bg, text
 
   if (colorBlindMode) {
-    // Color-blind palette: preserve existing accessible colors
     if (t === 0 || ratio === 0) {
       bg = getStatusFillColor('occupied', true); text = '#f3f4f6'
-    } else if (ratio >= 0.40) {
-      bg = getStatusFillColor('available', true); text = '#f3f4f6'
-    } else if (ratio >= 0.15) {
-      bg = getStatusFillColor('caution', true); text = '#512500'
     } else {
-      bg = getStatusFillColor('occupied', true); text = '#f3f4f6'
+      bg = getStatusFillColor('available', true); text = '#f3f4f6'
     }
   } else {
-    // Semantic status palette: green/amber/red by availability ratio
     if (t === 0) {
       bg = isDark ? '#374151' : '#e2e8f0'; text = isDark ? '#9ca3af' : '#64748b'
     } else if (ratio >= 0.40) {
-      bg = '#16a34a'; text = '#ffffff'  // status-good green
+      bg = '#16a34a'; text = '#ffffff'
     } else if (ratio >= 0.15) {
-      bg = '#d97706'; text = '#ffffff'  // status-caution amber
+      bg = '#d97706'; text = '#ffffff'
     } else {
-      bg = '#dc2626'; text = '#ffffff'  // status-avoid red
+      bg = '#dc2626'; text = '#ffffff'
     }
   }
 
@@ -90,8 +81,8 @@ function markerStatusFromBay(bay, plannerMapActive, verdictByBayId) {
     if (pv === 'no') return 'occupied'
     return 'unknown'
   }
-  if (bay.type === 'trap') return 'caution'
   if (bay.type === 'occupied') return 'occupied'
+  if (bay.type === 'trap') return bay.free ? 'available' : 'occupied'
   return 'available'
 }
 
@@ -118,13 +109,17 @@ function verifiedBayFillColor(bay, plannerMapActive, verdictByBayId, colorBlindM
     // Strict 3-state legend semantics: unknown maps to occupied/red (conservative).
     return getStatusFillColor('unknown', colorBlindMode)
   }
-  const status = bay.type === 'trap' ? 'caution' : bay.type === 'occupied' ? 'occupied' : 'available'
+  const status = bay.type === 'occupied' ? 'occupied'
+    : bay.type === 'trap' ? (bay.free ? 'available' : 'occupied')
+    : 'available'
   return getStatusFillColor(status, colorBlindMode)
 }
 
 /** Sensor-only bays: colour from occupancy only (same palette as verified legend). */
 function sensorOccupancyFillColor(bay, colorBlindMode = false) {
-  const status = bay.type === 'trap' ? 'caution' : bay.type === 'occupied' ? 'occupied' : 'available'
+  const status = bay.type === 'occupied' ? 'occupied'
+    : bay.type === 'trap' ? (bay.free ? 'available' : 'occupied')
+    : 'available'
   return getStatusFillColor(status, colorBlindMode)
 }
 
@@ -382,19 +377,19 @@ export default function ParkingMap({
       const prev = groups.get(key)
       if (prev) {
         prev.total += 1
-        if (bay.type === 'available') prev.available += 1
-        if (bay.type === 'occupied') prev.occupied += 1
-        if (bay.type === 'trap') prev.trap += 1
+        const isAvail = bay.type === 'available' || (bay.type === 'trap' && bay.free)
+        if (isAvail) prev.available += 1
+        else prev.occupied += 1
         if (!prev.name && bay.name) prev.name = bay.name
       } else {
+        const isAvail = bay.type === 'available' || (bay.type === 'trap' && bay.free)
         groups.set(key, {
           key,
           sampleLat: ll.lat,
           sampleLng: ll.lng,
           total: 1,
-          available: bay.type === 'available' ? 1 : 0,
-          occupied: bay.type === 'occupied' ? 1 : 0,
-          trap: bay.type === 'trap' ? 1 : 0,
+          available: isAvail ? 1 : 0,
+          occupied: isAvail ? 0 : 1,
           name: bay.name || null,
         })
       }
@@ -407,19 +402,17 @@ export default function ParkingMap({
       total: g.total,
       available: g.available,
       occupied: g.occupied,
-      trap: g.trap,
       name: g.name,
     }))
   }, [baysForClustering, zoomLevel, destination, proximityBayIdSet])
 
-  const clusterIcon = (available, occupied, trap, total) => {
+  const clusterIcon = (available, occupied, total) => {
     const a = Number(available) || 0
     const t = Number(total) || 0
     const label = String(a)
     const { bg, text } = getClusterBadgeColors({
       available,
       occupied,
-      trap,
       total,
       isDark,
       colorBlindMode,
@@ -526,7 +519,7 @@ export default function ParkingMap({
             <Marker
               key={`cluster-${c.key}`}
               position={[c.lat, c.lng]}
-              icon={clusterIcon(c.available, c.occupied, c.trap, c.total)}
+              icon={clusterIcon(c.available, c.occupied, c.total)}
               title={`${c.available} free of ${c.total} bays`}
               eventHandlers={{
                 click: (e) => {
@@ -575,7 +568,7 @@ export default function ParkingMap({
             const popup = (
               <Popup>
                 <div className="min-w-[120px] text-xs leading-snug">
-                  <div className="font-semibold text-gray-900 dark:text-gray-100">
+                  <div className="font-semibold" style={{ color: '#000000' }}>
                     Bay #{bay.id} {bay.name ? `\u00b7 ${bay.name}` : ''}
                   </div>
                   <div className="mt-1 text-gray-600 dark:text-gray-400">
@@ -629,7 +622,7 @@ export default function ParkingMap({
           const popup = (
             <Popup>
               <div className="min-w-[120px] text-xs leading-snug">
-                <div className="font-semibold text-gray-900 dark:text-gray-100">
+                <div className="font-semibold" style={{ color: '#000000' }}>
                   Bay #{bay.id} {bay.name ? `\u00b7 ${bay.name}` : ''}
                 </div>
                 <div className="mt-1 text-gray-600 dark:text-gray-400">

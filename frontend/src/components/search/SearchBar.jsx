@@ -46,7 +46,8 @@ export default function SearchBar({ destination, onPick, onClear }) {
   const debounceRef = useRef(null)
 
   useEffect(() => {
-    if (!destination) setQuery('')
+    if (destination) setQuery(destination.name || '')
+    else setQuery('')
   }, [destination])
 
   useEffect(() => {

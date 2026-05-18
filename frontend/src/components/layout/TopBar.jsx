@@ -4,33 +4,6 @@ import logoLight from '../../assets/MelOParkLogoLight.png'
 import logoDarkMode from '../../assets/MelOParkLogoDarkMode.png'
 import { LOGO_HEADER_IMG_CLASS } from '../../constants/logoMark'
 
-function SunGlyph({ className }) {
-  return (
-    <svg className={className} width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.75" />
-      <path
-        d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
-
-function MoonGlyph({ className }) {
-  return (
-    <svg className={className} width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M21 14.5A8.5 8.5 0 0 1 9.5 3 6.7 6.7 0 1 0 21 14.5Z"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
 // Chart icon for Predictions nav
 function ChartIcon({ className }) {
   return (
@@ -42,7 +15,7 @@ function ChartIcon({ className }) {
   )
 }
 
-export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark, onHelpOpen }) {
+export default function TopBar({ activePage, onNavigate, darkMode, onSettingsOpen, onHelpOpen }) {
   const time = useClock()
   const logoSrc = darkMode ? logoDarkMode : logoLight
 
@@ -140,51 +113,17 @@ export default function TopBar({ activePage, onNavigate, darkMode, onToggleDark,
           </button>
         )}
 
-        <div className="flex items-center gap-1">
-          <span
-            className={cn(
-              'flex shrink-0 text-amber-600',
-              darkMode ? 'text-amber-300' : 'opacity-100',
-            )}
-            title="Day"
-            aria-hidden
-          >
-            <SunGlyph />
-          </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={darkMode}
-            aria-label={darkMode ? 'Switch to day view' : 'Switch to night view'}
-            onClick={onToggleDark}
-            className={cn(
-              'relative inline-flex h-5 w-10 shrink-0 cursor-pointer items-center rounded-full border transition-colors',
-              'border-gray-300 bg-gray-200 hover:bg-gray-300',
-              'dark:border-brand-300/80 dark:bg-brand-100 dark:hover:bg-brand-50',
-              'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2',
-              'dark:focus-visible:ring-offset-surface-dark',
-            )}
-          >
-            <span
-              aria-hidden
-              className={cn(
-                'pointer-events-none absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow ring-1 ring-black/10 transition-transform duration-200 ease-out',
-                'dark:bg-brand-900 dark:ring-brand-800/40',
-                darkMode ? 'translate-x-5' : 'translate-x-0',
-              )}
-            />
-          </button>
-          <span
-            className={cn(
-              'flex shrink-0 text-brand',
-              darkMode ? 'text-brand-100' : 'opacity-35',
-            )}
-            title="Night"
-            aria-hidden
-          >
-            <MoonGlyph />
-          </span>
-        </div>
+        <button
+          type="button"
+          onClick={onSettingsOpen}
+          aria-label="Open settings"
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white shadow-map-float transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-surface-dark-secondary dark:hover:bg-surface-dark-secondary cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-gray-500 dark:text-gray-400">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </div>
     </nav>
   )

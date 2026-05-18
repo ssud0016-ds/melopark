@@ -13,6 +13,7 @@ export default function App() {
   const { bays, lastUpdated, error, loading, refresh } = useBays()
   const [darkMode, toggleDark, setTheme] = useDarkMode()
   const [flyTarget, setFlyTarget] = useState(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 900,
@@ -36,7 +37,7 @@ export default function App() {
           activePage={page}
           onNavigate={setPage}
           darkMode={darkMode}
-          onToggleDark={toggleDark}
+          onSettingsOpen={() => setSettingsOpen(true)}
         />
       )}
 
@@ -54,6 +55,9 @@ export default function App() {
             darkMode={darkMode}
             onToggleDark={toggleDark}
             onSetTheme={setTheme}
+            settingsOpen={settingsOpen}
+            onSettingsOpen={() => setSettingsOpen(true)}
+            onSettingsClose={() => setSettingsOpen(false)}
           />
         )}
         {page === 'predictions' && (

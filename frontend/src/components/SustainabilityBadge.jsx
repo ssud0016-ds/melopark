@@ -77,10 +77,25 @@ export default function SustainabilityBadge({ carbonData }) {
     return () => clearInterval(id);
   }, []);
 
+  const [isDark, setIsDark] = useState(
+    () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  )
+  useEffect(() => {
+    const obs = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'))
+    })
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => obs.disconnect()
+  }, [])
+
   if (!carbonData) return null; // AC 8.1.3
 
   const tier = score >= 65 ? 'high' : score >= 35 ? 'mid' : 'low';
-  const C = {
+  const C = isDark ? {
+    high: { bg: '#2E2A8A', border: '#2E2A8A', txt: '#ffffff', sub: 'rgba(255,255,255,0.75)', lbl: 'Efficient' },
+    mid:  { bg: '#2E2A8A', border: '#2E2A8A', txt: '#ffffff', sub: 'rgba(255,255,255,0.75)', lbl: 'Moderate'  },
+    low:  { bg: '#2E2A8A', border: '#2E2A8A', txt: '#ffffff', sub: 'rgba(255,255,255,0.75)', lbl: 'Low saving' },
+  }[tier] : {
     high: { bg: '#EAF3DE', border: '#3B6D11', txt: '#27500A', sub: '#4D7C1A', lbl: 'Efficient' },
     mid:  { bg: '#FAEEDA', border: '#BA7517', txt: '#633806', sub: '#8A5210', lbl: 'Moderate'  },
     low:  { bg: '#F1EFE8', border: '#888780', txt: '#444441', sub: '#6B6A65', lbl: 'Low saving' },
@@ -121,9 +136,9 @@ export default function SustainabilityBadge({ carbonData }) {
 
         {/* Ring 1 — CO₂ saved */}
         <div style={{ textAlign: 'center' }}>
-          <Ring pct={co2Pct} color="#3B6D11" trackColor="#C0DD97" size={68} strokeWidth={6}>
-            <span style={{ fontSize: 14, fontWeight: 500, color: '#27500A', lineHeight: 1 }}>{animG}</span>
-            <span style={{ fontSize: 9, color: '#3B6D11', lineHeight: 1.4 }}>g</span>
+          <Ring pct={co2Pct} color={isDark ? '#7DC843' : '#3B6D11'} trackColor={isDark ? 'rgba(255,255,255,0.2)' : '#C0DD97'} size={68} strokeWidth={6}>
+            <span style={{ fontSize: 14, fontWeight: 500, color: isDark ? '#ffffff' : '#27500A', lineHeight: 1 }}>{animG}</span>
+            <span style={{ fontSize: 9, color: isDark ? 'rgba(255,255,255,0.75)' : '#3B6D11', lineHeight: 1.4 }}>g</span>
           </Ring>
           <div style={{ fontSize: 11, color: C.sub, marginTop: 6 }}>CO₂ saved</div>
           <div style={{ fontSize: 10, color: C.sub, marginTop: 1 }}>of 387g baseline</div>
@@ -131,9 +146,9 @@ export default function SustainabilityBadge({ carbonData }) {
 
         {/* Ring 2 — Cruise avoided */}
         <div style={{ textAlign: 'center' }}>
-          <Ring pct={animPct} color="#0F6E56" trackColor="#9FE1CB" size={68} strokeWidth={6}>
-            <span style={{ fontSize: 14, fontWeight: 500, color: '#085041', lineHeight: 1 }}>{animPct}</span>
-            <span style={{ fontSize: 9, color: '#0F6E56', lineHeight: 1.4 }}>%</span>
+          <Ring pct={animPct} color={isDark ? '#4ECBA8' : '#0F6E56'} trackColor={isDark ? 'rgba(255,255,255,0.2)' : '#9FE1CB'} size={68} strokeWidth={6}>
+            <span style={{ fontSize: 14, fontWeight: 500, color: isDark ? '#ffffff' : '#085041', lineHeight: 1 }}>{animPct}</span>
+            <span style={{ fontSize: 9, color: isDark ? 'rgba(255,255,255,0.75)' : '#0F6E56', lineHeight: 1.4 }}>%</span>
           </Ring>
           <div style={{ fontSize: 11, color: C.sub, marginTop: 6 }}>cruise avoided</div>
           <div style={{ fontSize: 10, color: C.sub, marginTop: 1 }}>of 2.0 km</div>
@@ -141,7 +156,7 @@ export default function SustainabilityBadge({ carbonData }) {
 
         {/* Ring 3 — Carbon score */}
         <div style={{ textAlign: 'center' }}>
-          <Ring pct={animScore} color={C.border} trackColor={`${C.border}33`} size={68} strokeWidth={6}>
+          <Ring pct={animScore} color={isDark ? 'rgba(255,255,255,0.85)' : C.border} trackColor={isDark ? 'rgba(255,255,255,0.2)' : `${C.border}33`} size={68} strokeWidth={6}>
             <span style={{ fontSize: 14, fontWeight: 500, color: C.txt, lineHeight: 1 }}>{animScore}</span>
             <span style={{ fontSize: 9, color: C.sub, lineHeight: 1.4 }}>/100</span>
           </Ring>

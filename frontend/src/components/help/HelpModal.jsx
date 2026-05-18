@@ -54,7 +54,6 @@ function TabMap() {
     <>
       <Section title="Bay colours">
         <LegendRow left={<DotCircle color="#22c55e" />} label="Green: available" sub="Bay is free right now" />
-        <LegendRow left={<DotCircle color="#f97316" />} label="Orange: caution" sub="Tow away / loading zone risk" />
         <LegendRow left={<DotCircle color="#ef4444" />} label="Red: occupied" sub="Bay is taken" />
         <LegendRow
           left={
@@ -108,7 +107,6 @@ function TabFilters() {
         <LegendRow left={<span className="text-[11px] font-bold text-brand">All</span>} label="Show every bay" />
         <LegendRow left={<span className="text-[11px] font-bold text-green-600">Available</span>} label="Only free bays right now" />
         <LegendRow left={<span className="text-[11px] font-bold text-blue-500">Accessible</span>} label="Disabled-permit bays only" />
-        <LegendRow left={<span className="text-[11px] font-bold text-orange-500">Caution</span>} label="Tow away / loading zone risk only" />
       </Section>
       <Section title="Duration filter">
         <p>Shows only bays that are legally parkable for your chosen stay length. A 2H bay won't appear when you filter for 3H.</p>
@@ -129,7 +127,6 @@ function TabBay() {
     <>
       <Section title="Verdict card">
         <LegendRow left={<span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-800">Yes to Park</span>} label="Safe to park now" />
-        <LegendRow left={<span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800">Caution</span>} label="Check the rules carefully" />
         <LegendRow left={<span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-800">Don't Park</span>} label="Not allowed right now" />
       </Section>
       <Section title="Sign Translator">

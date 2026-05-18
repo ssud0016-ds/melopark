@@ -77,10 +77,7 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
       getIndex: () => indexRef.current,
     }));
 
-    const fetchOpts = useMemo(() => {
-      if (!plannerArrivalIso || plannerDurationMins == null) return null;
-      return { arrivalIso: plannerArrivalIso, durationMins: plannerDurationMins };
-    }, [plannerArrivalIso, plannerDurationMins]);
+    const FILTER_TO_MINS: Record<string, number> = { '15min': 15, '30min': 30, '1h': 60, '2h': 120, '3h': 180, '4h': 240 };
 
     useEffect(() => {
       if (!bay?.id) {
@@ -88,11 +85,18 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
         setCarbon(null);
         return;
       }
+      let opts: { arrivalIso: string; durationMins: number } | null = null;
+      if (plannerArrivalIso && plannerDurationMins != null) {
+        opts = { arrivalIso: plannerArrivalIso, durationMins: plannerDurationMins };
+      } else if (durationFilter) {
+        const mins = durationFilter === 'custom' ? (customDuration ?? null) : (FILTER_TO_MINS[durationFilter] ?? null);
+        if (mins) opts = { arrivalIso: new Date().toISOString(), durationMins: mins };
+      }
       let cancelled = false;
       setLoading(true);
       setEvaluation(null);
       setCarbon(null);
-      Promise.all([fetchBayEvaluation(bay.id, fetchOpts), fetchBayCarbon(bay.id)])
+      Promise.all([fetchBayEvaluation(bay.id, opts), fetchBayCarbon(bay.id)])
         .then(([ev, cb]) => {
           if (cancelled) return;
           setEvaluation(ev);
@@ -108,7 +112,7 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
       return () => {
         cancelled = true;
       };
-    }, [bay?.id, fetchOpts, onTrapDetected]);
+    }, [bay?.id, plannerArrivalIso, plannerDurationMins, durationFilter, customDuration, onTrapDetected]);
 
     const isFuturePlanningMode = ((): boolean => {
       if (!plannerArrivalIso) return false;

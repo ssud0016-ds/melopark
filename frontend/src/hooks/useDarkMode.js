@@ -18,7 +18,7 @@ export function useDarkMode() {
     if (typeof window === 'undefined') return false
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored !== null) return stored === 'true'
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
+    return false
   })
 
   useEffect(() => {
