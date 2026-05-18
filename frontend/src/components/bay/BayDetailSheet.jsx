@@ -112,13 +112,7 @@ export default function BayDetailSheet({
     }
   }, [bay?.id])
 
-  const fetchOpts = useMemo(() => {
-    if (!savedPlannerArrivalIso || savedPlannerDurationMins == null) return null
-    return {
-      arrivalIso: savedPlannerArrivalIso,
-      durationMins: savedPlannerDurationMins,
-    }
-  }, [savedPlannerArrivalIso, savedPlannerDurationMins])
+  const _FILTER_TO_MINS = { '15min': 15, '30min': 30, '1h': 60, '2h': 120, '3h': 180, '4h': 240 }
 
   useEffect(() => {
     if (!bay?.id) {
@@ -126,20 +120,28 @@ export default function BayDetailSheet({
       setEvalLoading(false)
       return
     }
+    let opts = null
+    if (savedPlannerArrivalIso && savedPlannerDurationMins != null) {
+      opts = { arrivalIso: savedPlannerArrivalIso, durationMins: savedPlannerDurationMins }
+    } else if (durationFilter) {
+      const mins = durationFilter === 'custom' ? customDuration : _FILTER_TO_MINS[durationFilter]
+      if (mins) opts = { arrivalIso: new Date().toISOString(), durationMins: mins }
+    }
     let cancelled = false
     setEvalLoading(true)
     setEvaluation(null)
-    fetchBayEvaluation(bay.id, fetchOpts).then((data) => {
-      fetchBayCarbon(bay.id).then((d) => { if (!cancelled) setCarbonData(d) })
+    fetchBayEvaluation(bay.id, opts).then((data) => {
       if (!cancelled) {
         setEvaluation(data)
         setEvalLoading(false)
       }
+    }).catch(() => {
+      if (!cancelled) setEvalLoading(false)
     })
     return () => {
       cancelled = true
     }
-  }, [bay?.id, fetchOpts])
+  }, [bay?.id, savedPlannerArrivalIso, savedPlannerDurationMins, durationFilter, customDuration])
 
   if (!bay) return null
 
@@ -251,7 +253,7 @@ export default function BayDetailSheet({
       {/* 1. Header strip: ID + close, then street short on next line */}
       <div className="sticky top-0 z-[3] bg-white dark:bg-surface-dark px-5 py-3 shrink-0 border-b border-gray-200/60 dark:border-gray-700/60">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <div className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">
             Bay #{bay.id}
           </div>
           <div className="flex items-center gap-3">
@@ -272,7 +274,7 @@ export default function BayDetailSheet({
         </div>
         {streetLine ? (
           <div
-            className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-gray-100 line-clamp-2"
+            className="mt-0.5 text-sm font-semibold text-black dark:text-black line-clamp-2"
             title={resolvedName}
           >
             {streetLine}

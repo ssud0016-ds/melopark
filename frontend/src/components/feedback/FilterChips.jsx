@@ -4,7 +4,6 @@ import { cn } from '../../utils/cn'
 const STATUS_FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'available', label: 'Available' },
-  { id: 'trap', label: 'Caution' },
 ]
 
 const DURATION_FILTERS = [
@@ -147,8 +146,6 @@ export default function FilterChips({
             <span>{accessibleOn ? 'Accessible · on' : 'Accessible'}</span>
           </button>
         )}
-
-        {renderStatusChip(STATUS_FILTERS[2])}
       </div>
 
       <span className={subheading}>Duration</span>

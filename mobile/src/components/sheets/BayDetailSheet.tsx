@@ -83,10 +83,7 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
       getIndex: () => indexRef.current,
     }));
 
-    const fetchOpts = useMemo(() => {
-      if (!plannerArrivalIso || plannerDurationMins == null) return null;
-      return { arrivalIso: plannerArrivalIso, durationMins: plannerDurationMins };
-    }, [plannerArrivalIso, plannerDurationMins]);
+    const FILTER_TO_MINS: Record<string, number> = { '15min': 15, '30min': 30, '1h': 60, '2h': 120, '3h': 180, '4h': 240 };
 
     useEffect(() => {
       if (!bay?.id) {

@@ -13,8 +13,8 @@ type Palette = { bg: string; border: string; txt: string; sub: string; lbl: stri
 
 const TIER: Record<Tier, Palette> = {
   high: { bg: '#EAF3DE', border: '#3B6D11', txt: '#27500A', sub: '#4D7C1A', lbl: 'Efficient' },
-  mid: { bg: '#FAEEDA', border: '#BA7517', txt: '#633806', sub: '#8A5210', lbl: 'Moderate' },
-  low: { bg: '#F1EFE8', border: '#888780', txt: '#444441', sub: '#6B6A65', lbl: 'Low saving' },
+  mid:  { bg: '#FAEEDA', border: '#BA7517', txt: '#633806', sub: '#8A5210', lbl: 'Moderate' },
+  low:  { bg: '#F1EFE8', border: '#888780', txt: '#444441', sub: '#6B6A65', lbl: 'Low saving' },
 };
 
 function useCountUp(target: number, duration = 1000): number {

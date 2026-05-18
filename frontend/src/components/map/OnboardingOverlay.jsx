@@ -11,9 +11,13 @@ import { useState, useEffect } from 'react'
  *   passes down — no ring logic needed here.
  * Step 2 (legend / "pressure"): unchanged from round 2.
  */
-export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest }) {
+export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest, onStepChange }) {
   const [step, setStep] = useState('hero')
   const [localDestination, setLocalDestination] = useState(null)
+
+  useEffect(() => {
+    onStepChange?.(step)
+  }, [step, onStepChange])
 
   // Register setter so MapPage can push picked destination into this component
   useEffect(() => {

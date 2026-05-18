@@ -71,7 +71,7 @@ function isSignificantBoundsChange(prev, next) {
   return Math.abs(nextArea - prevArea) / denom >= BOUNDS_AREA_EPS_RATIO
 }
 
-export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry, flyTarget, onNavigate, darkMode, onToggleDark, onSetTheme }) {
+export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry, flyTarget, onNavigate, darkMode, onToggleDark, onSetTheme, settingsOpen = false, onSettingsOpen, onSettingsClose }) {
   const mapRef = useRef(null)
   const lastReportedBoundsRef = useRef(null)
 
@@ -313,6 +313,7 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     if (typeof window === 'undefined') return false
     return !window.sessionStorage.getItem('melopark.onboarded')
   })
+  const [onboardingStep, setOnboardingStep] = useState('hero')
   const [coachTipOpen, setCoachTipOpen] = useState(false)
 
   const dismissOnboarding = useCallback(() => {
@@ -322,25 +323,15 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     setShowOnboarding(false)
   }, [])
 
-  const handleOnboardingPick = useCallback((lm, arrivalIso = null, opts = null) => {
+  const handleOnboardingPick = useCallback((lm, arrivalIso = null) => {
     pickDestination(lm)
-    const accessible = opts?.accessible || false
-    const sf = accessible ? 'all' : (opts?.statusFilter || 'all')
-    const df = opts?.durationFilter || null
-    const cd = opts?.customDuration || 60
-    setStatusFilter(sf)
-    setDurationFilter(df)
-    if (df === 'custom') setCustomDuration(cd)
-    setAccessibilityMode(accessible)
-    setAccessibilityAvailableOnly(accessible)
-    // Sync arrival time → filterDate/filterTime (via plannerArrivalIso useEffect)
     if (arrivalIso) {
       setPlannerArrivalIso(arrivalIso)
       setPlannerDurationMins(DEFAULT_PLANNER_DURATION_MINS)
       setMapBaysAtPlannedTime(true)
     }
     dismissOnboarding()
-  }, [pickDestination, dismissOnboarding, setStatusFilter, setDurationFilter, setCustomDuration, setAccessibilityMode])
+  }, [pickDestination, dismissOnboarding])
 
   const [mapBounds, setMapBounds] = useState(null)
   const [bulkVerdictById, setBulkVerdictById] = useState({})
@@ -590,29 +581,18 @@ export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRet
     // hasRules === parking API has_restriction_data (CoM cache); not evaluate coverage.
     const verified = mapVisibleBays.filter((b) => b.hasRules)
     const limited = mapVisibleBays.filter((b) => !b.hasRules)
-    const proxVerified = mapProximityBays.filter((b) => b.hasRules)
-    const proxLimited = mapProximityBays.filter((b) => !b.hasRules)
-
-    const proxLive = mapProximityBays.filter((b) => b.source === 'live')
-    const proxLiveAvailable = proxLive.filter((b) => b.type === 'available')
+    const proxAvailable = mapVisibleBays.filter((b) => b.type === 'available')
 
     return {
       verifiedCount: verified.length,
       limitedCount: limited.length,
-      proxFreeSpots: showLimitedBays
-        ? proxVerified.reduce((a, b) => a + (b.type === 'available' ? b.free : 0), 0)
-        : proxLiveAvailable.reduce((a, b) => a + (b.free || 0), 0),
-      proxFreeBays: showLimitedBays ? proxVerified.filter((b) => b.type === 'available').length : proxLiveAvailable.length,
-      proxLimitedCount: proxLimited.length,
+      proxFreeBays: proxAvailable.length,
+      proxFreeSpots: proxAvailable.reduce((a, b) => a + (b.free || 0), 0),
     }
-  }, [mapVisibleBays, mapProximityBays, showLimitedBays])
+  }, [mapVisibleBays])
 
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [legendOpen, setLegendOpen] = useState(false)
-  useEffect(() => {
-    if (!isMobile) setLegendOpen(true)
-    else setLegendOpen(false)
-  }, [isMobile])
+  const [totalBaysHovered, setTotalBaysHovered] = useState(false)
 
   useEffect(() => {
     if (!isMobile) return
@@ -665,7 +645,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
   const _scopeIsDefault = _isStatusDefault && _isDurationDefault && _isTimeDefault && _isAccessibleDefault
 
   const _durLabels = { '15min': '15 min', '30min': '30 min', '1h': '1H', '2h': '2H', '3h': '3H', '4h': '4H' }
-  const _statusLabel = statusFilter === 'available' ? 'Available' : statusFilter === 'trap' ? 'Caution' : null
+  const _statusLabel = statusFilter === 'available' ? 'Available' : null
   const _durationLabel = durationFilter
     ? (durationFilter === 'custom' && customDuration ? `${customDuration} min` : (_durLabels[durationFilter] || durationFilter))
     : null
@@ -687,7 +667,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
       ) : (
         <>
           {_activePills.slice(0, 2).map((pill) => (
-            <span key={pill} className="inline-flex items-center rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-[11px] font-semibold text-brand dark:border-brand-light/30 dark:bg-brand/20 dark:text-brand-light">
+            <span key={pill} className="inline-flex items-center rounded-full border border-brand/30 bg-brand/10 px-2.5 py-0.5 text-[11px] font-semibold text-white dark:border-brand-light/30 dark:bg-brand/20 dark:text-white">
               {pill}
             </span>
           ))}
@@ -854,14 +834,11 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
       <div className="rounded-lg bg-white/85 backdrop-blur-md px-2.5 py-1 border border-slate-200/50 shadow-sm dark:bg-surface-dark-secondary/85 dark:border-slate-600/40">
         {scopeStrip}
       </div>
-      {destination && (proxFreeBays > 0 || proxLimitedCount > 0) && (
+      {destination && proxFreeBays > 0 && (
         <div className="rounded-lg bg-white/85 backdrop-blur-md px-2.5 py-1.5 border border-slate-200/50 shadow-sm text-[11px] font-medium text-gray-700 dark:bg-surface-dark-secondary/85 dark:border-slate-600/40 dark:text-gray-200">
           {proxFreeSpots === proxFreeBays
             ? `${proxFreeBays} free bay${proxFreeBays !== 1 ? 's' : ''} within ${SEARCH_RADIUS_M} m`
             : `${proxFreeSpots} free spot${proxFreeSpots !== 1 ? 's' : ''} across ${proxFreeBays} bay${proxFreeBays !== 1 ? 's' : ''} within ${SEARCH_RADIUS_M} m`}
-          {!showLimitedBays && proxLimitedCount > 0 && (
-            <span className="ml-1 text-gray-400 dark:text-gray-500">+{proxLimitedCount} without CoM data</span>
-          )}
         </div>
       )}
     </>
@@ -947,7 +924,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               destination={destination}
               onPick={handlePickLandmark}
               onClear={clearDestination}
-              onSettingsOpen={() => setSettingsOpen(true)}
+              onSettingsOpen={onSettingsOpen}
               onboardingActive={showOnboarding}
             />
 
@@ -998,7 +975,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           <>
             <div
               data-testid="map-toolbar-desktop"
-              className="absolute top-3.5 flex flex-col items-center gap-2.5 z-[500] pointer-events-none"
+              className={`absolute top-3.5 flex flex-col items-center gap-2.5 pointer-events-none ${showOnboarding && onboardingStep === 'destination' ? 'z-[900]' : showOnboarding && onboardingStep === 'pressure' ? 'z-[0] invisible' : 'z-[500]'}`}
               style={
                 desktopSheetReservePx
                   ? {
@@ -1077,8 +1054,10 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
 
         {!isMobile && (
         <div
-          className="group absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-2.5 py-1 sm:px-3.5 sm:py-1.5 shadow-overlay dark:border-brand-300/80 dark:bg-brand-50 flex flex-col cursor-help max-w-[45vw] sm:max-w-none"
+          className="group absolute bottom-3.5 left-3.5 z-[500] rounded-xl border border-brand bg-brand px-2.5 py-1 sm:px-3.5 sm:py-1.5 shadow-overlay dark:border-[#2E2A8A] dark:bg-[#2E2A8A] flex flex-col cursor-help max-w-[45vw] sm:max-w-none"
           aria-label="Total parking bays on the live feed"
+          onMouseEnter={() => setTotalBaysHovered(true)}
+          onMouseLeave={() => setTotalBaysHovered(false)}
         >
           <div className="pointer-events-none absolute bottom-full left-0 mb-2 hidden w-64 rounded-lg border border-brand-800/80 bg-brand px-3 py-2.5 text-xs text-white shadow-card-lg group-hover:block dark:border-brand-300/70 dark:bg-surface-dark-secondary dark:text-gray-100">
             <div className="font-semibold text-white dark:text-white">Total parking bays</div>
@@ -1089,11 +1068,11 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               )}
             </div>
           </div>
-          <span className="text-xs sm:text-sm font-semibold text-white dark:text-brand-900 whitespace-nowrap">
+          <span className="text-xs sm:text-sm font-semibold text-white dark:text-white whitespace-nowrap">
             {(bays?.length ?? 0).toLocaleString()} total bay{(bays?.length ?? 0) !== 1 ? 's' : ''}
           </span>
           {accessibilityAvailableOnly && (
-            <span className="text-[10px] sm:text-xs font-semibold text-white/90 dark:text-brand-900 whitespace-nowrap">
+            <span className="text-[10px] sm:text-xs font-semibold text-white/90 dark:text-white/90 whitespace-nowrap">
               {accessibleShownCount.toLocaleString()} accessible shown
             </span>
           )}
@@ -1102,20 +1081,14 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
 
         {(() => {
           const availableColor = getStatusFillColor('available', colorBlindMode)
-          const cautionColor = getStatusFillColor('caution', colorBlindMode)
           const occupiedColor = getStatusFillColor('occupied', colorBlindMode)
+          const busyStreetColor = colorBlindMode ? '#f59e0b' : '#f97316'
           const rows = [
             {
               dotClass: '',
               color: availableColor,
               label: 'Available parking spots',
               symbolClass: 'legend-symbol-available',
-            },
-            {
-              dotClass: '',
-              color: cautionColor,
-              label: 'Caution: Tow Away / Loading Zone',
-              symbolClass: 'legend-symbol-caution',
             },
             {
               dotClass: '',
@@ -1126,7 +1099,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           ]
           const streetRows = [
             { color: availableColor, label: 'Good chance street', symbolClass: 'legend-street-good' },
-            { color: cautionColor, label: 'Getting busy street', symbolClass: 'legend-street-busy' },
+            { color: busyStreetColor, label: 'Getting busy street', symbolClass: 'legend-street-busy' },
             { color: occupiedColor, label: 'Hard to park street', symbolClass: 'legend-street-hard' },
             { color: colorBlindMode ? '#9ca3af' : '#cbd5e1', label: 'No live estimate', symbolClass: 'legend-street-unknown' },
           ]
@@ -1141,14 +1114,14 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               }}
             >
             <div
-              className="rounded-xl border border-brand bg-brand shadow-overlay dark:border-brand-300/80 dark:bg-brand-50"
+              className="rounded-xl shadow-overlay border border-brand bg-brand dark:border-slate-900 dark:bg-slate-900"
             >
               {!legendOpen ? (
                 <button
                   type="button"
                   onClick={() => setLegendOpen(true)}
                   aria-label="Show legend"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 cursor-pointer text-white dark:text-white"
                 >
                   {rows.map(({ dotClass, symbolClass, color }) => (
                     <span
@@ -1157,27 +1130,27 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                       style={{ backgroundColor: color }}
                     />
                   ))}
-                  <span className="ml-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/85 dark:text-brand-800/90">
+                  <span className="ml-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/85 dark:text-white/85">
                     Legend
                   </span>
                 </button>
               ) : (
                 <div className="p-2.5 max-w-[88vw] sm:max-w-none">
                   <div className="mb-1.5 flex items-center justify-between gap-3">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-white/80">
                       Verified bays
                     </span>
                     <button
                       type="button"
                       onClick={() => setLegendOpen(false)}
                       aria-label="Hide legend"
-                      className="text-white/80 hover:text-white dark:text-brand-800/90 dark:hover:text-brand-900 cursor-pointer text-base leading-none"
+                      className="text-white/80 hover:text-white dark:text-white/80 dark:hover:text-white cursor-pointer text-base leading-none"
                     >
                       ×
                     </button>
                   </div>
                   {rows.map(({ dotClass, label, symbolClass, color }) => (
-                    <div key={label} className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
+                    <div key={label} className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white dark:text-white">
                       <div
                         className={`${dotClass} ${symbolClass} h-3.5 w-3.5 shrink-0 rounded-full`}
                         style={{ backgroundColor: color }}
@@ -1185,7 +1158,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                       <span className="truncate">{label}</span>
                     </div>
                   ))}
-                  <div className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
+                  <div className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white dark:text-white">
                     <div className="relative h-3.5 w-3.5 shrink-0">
                       <svg viewBox="0 0 24 24" className="absolute inset-0 h-full w-full">
                         <circle cx="12" cy="12" r="12" fill="#60a5fa"/>
@@ -1194,11 +1167,11 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                     </div>
                     <span className="truncate">Accessible bays</span>
                   </div>
-                  <div className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-brand-800/90">
+                  <div className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/80 dark:text-white/80">
                     Street parking chance
                   </div>
                   {streetRows.map(({ label, symbolClass, color }) => (
-                    <div key={label} className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white/95 dark:text-brand-900">
+                    <div key={label} className="mb-1 flex items-center gap-1.5 text-[11px] sm:text-xs text-white dark:text-white">
                       <div
                         className={`${symbolClass} h-1.5 w-5 shrink-0 rounded-full`}
                         style={{ backgroundColor: color }}
@@ -1212,7 +1185,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                         type="button"
                         onClick={() => setCoachTipOpen((v) => !v)}
                         aria-label="About street parking chance"
-                        className="flex items-center gap-1 text-[10px] text-white/70 hover:text-white/95 dark:text-brand-700 dark:hover:text-brand-900 transition-colors cursor-pointer"
+                        className="flex items-center gap-1 text-[10px] text-white/70 hover:text-white/95 dark:text-white/70 dark:hover:text-white transition-colors cursor-pointer"
                       >
                         <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white/40 text-[9px] font-bold" aria-hidden>?</span>
                         About parking chance
@@ -1291,7 +1264,10 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
               </div>
             </BottomSheet>
           ) : (
-            <div className="absolute bottom-28 left-3.5 z-[510] flex max-w-[min(320px,calc(100vw-28px))] flex-col gap-2 sm:bottom-20">
+            <div
+              className="absolute left-3.5 z-[510] flex max-w-[min(320px,calc(100vw-28px))] flex-col gap-2 transition-all duration-300"
+              style={{ bottom: totalBaysHovered ? 'calc(5rem + 100px)' : '5rem' }}
+            >
               {altPinPos && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/95 p-2.5 shadow-card backdrop-blur-sm dark:border-emerald-800/60 dark:bg-emerald-950/80">
                   <div className="flex items-start justify-between gap-2">
@@ -1370,6 +1346,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
             onPick={handleOnboardingPick}
             onSkip={dismissOnboarding}
             busyNowManifest={busyNowManifest}
+            onStepChange={setOnboardingStep}
           />
         )}
 
@@ -1400,20 +1377,18 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           />
         )}
 
-        {isMobile && (
-          <SettingsSheet
-            open={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
-            darkMode={darkMode}
-            onSetTheme={onSetTheme}
-            colorBlindMode={colorBlindMode}
-            onToggleColorBlind={() => setColorBlindMode((v) => !v)}
-            accessibleOnly={accessibilityAvailableOnly}
-            onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)}
-            onNavigate={onNavigate}
-            onHelpOpen={() => { setShowOnboarding(true) }}
-          />
-        )}
+        <SettingsSheet
+          open={settingsOpen}
+          onClose={onSettingsClose}
+          darkMode={darkMode}
+          onSetTheme={onSetTheme}
+          colorBlindMode={colorBlindMode}
+          onToggleColorBlind={() => setColorBlindMode((v) => !v)}
+          accessibleOnly={accessibilityAvailableOnly}
+          onToggleAccessible={() => setAccessibilityAvailableOnly((v) => !v)}
+          onNavigate={onNavigate}
+          onHelpOpen={() => { setShowOnboarding(true) }}
+        />
       </div>
     </div>
   )
