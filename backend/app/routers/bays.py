@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -56,6 +56,7 @@ def _parse_query_arrival_iso(arrival_iso: str) -> datetime:
 @limiter.limit("30/minute")
 def evaluate_bay(
     request: Request,
+    response: Response,
     bay_id: str,
     arrival_iso: Optional[str] = Query(
         default=None,
@@ -79,6 +80,10 @@ def evaluate_bay(
     arrival = datetime.now(_MELBOURNE_TZ)
     if arrival_iso is not None:
         arrival = _parse_query_arrival_iso(arrival_iso)
+    else:
+        # Live (no future arrival) → CDN can hold briefly. SWR lets Cloudflare
+        # serve stale instantly while revalidating in background.
+        response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=60"
 
     return evaluate_bay_at(bay_id, arrival, duration_mins, db)
 
@@ -86,11 +91,13 @@ def evaluate_bay(
 @router.get(
     "/evaluate-bulk",
     response_model=list[BayVerdictBrief],
+    response_model_exclude_none=True,
     summary="Bulk-evaluate all bays within a bounding box",
 )
 @limiter.limit("15/minute")
 def evaluate_bulk(
     request: Request,
+    response: Response,
     bbox: str = Query(
         ...,
         description="Bounding box as south,west,north,east (e.g. -37.82,144.95,-37.80,144.97).",
@@ -133,4 +140,41 @@ def evaluate_bulk(
     if arrival_iso is not None:
         arrival = _parse_query_arrival_iso(arrival_iso)
 
+    # Bulk verdicts are derived from current sensor + rules: same SWR window as
+    # the single-bay live evaluate. Frontend re-fetches on map pan anyway.
+    response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=60"
     return evaluate_bays_in_bbox(south, west, north, east, arrival, duration_mins, db)
+
+
+@router.get("/{bay_id}/carbon", summary="Carbon saving score for a bay")
+@limiter.limit("30/minute")
+def get_carbon(request: Request, response: Response, bay_id: str):
+    # Carbon score is hour-of-day + occupancy based; safe to cache briefly.
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
+    try:
+        import duckdb
+        from datetime import datetime
+        EF = 193.7
+        BASELINE_KM = 2.0
+        BASELINE_G = BASELINE_KM * EF
+        hour = datetime.now().hour
+        peak = (7 <= hour <= 9) or (17 <= hour <= 19)
+        factor = 1.35 if peak else 1.0
+        try:
+            con = duckdb.connect("melopark.duckdb", read_only=True)
+            row = con.execute(
+                "SELECT occ_pct FROM bay_occupancy WHERE bay_id = ?",
+                [str(bay_id)]
+            ).fetchone()
+            con.close()
+            occ_pct = row[0] if (row and row[0] is not None) else 54
+        except Exception:
+            occ_pct = 54
+        search_km = min(BASELINE_KM, (0.05 + (occ_pct / 100) * 1.95) * factor)
+        saved_g = (BASELINE_KM - search_km) * EF
+        saved_g = max(saved_g, BASELINE_G * 0.10)
+        pct = round((saved_g / BASELINE_G) * 100)
+        score = min(100, round((saved_g / BASELINE_G * 0.75 + (occ_pct / 100) * 0.25) * 100))
+        return {"saved_g": round(saved_g), "pct_avoided": pct, "score": score}
+    except Exception:
+        return {"saved_g": 39, "pct_avoided": 10, "score": 25}

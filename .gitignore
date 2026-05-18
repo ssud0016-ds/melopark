@@ -40,9 +40,17 @@ Thumbs.db
 # IDE / editors
 .idea/
 .claude/
+.cursor/
 *.swp
 *.swo
 *~
+
+# Local-only planning/reference docs
+.local-docs/
+local-docs/
+
+# Expo local state / export caches
+mobile/.expo/
 
 # Logs
 *.log

@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
 import { DEFAULT_PLANNER_DURATION_MINS } from '../../utils/plannerTime'
 import { bayHeading, bayMissingStreetNote, streetShort } from '../../utils/bayLabels'
 import { cn } from '../../utils/cn'
-import { fetchBayEvaluation } from '../../services/apiBays'
+import { fetchBayEvaluation, fetchBayCarbon } from '../../services/apiBays'
 import ParkingVerdictPanel from './ParkingVerdictPanel'
 import BayStatusAndLimits from './BayStatusAndLimits'
 import ParkingSignTranslator from './ParkingSignTranslator'
 import BayDetailNavActions from './BayDetailNavActions'
+import SustainabilityBadge from '../SustainabilityBadge'
 
 import { listFocusable } from '../../utils/focusTrap'
 
@@ -29,6 +30,13 @@ export default function BayDetailSheet({
   customDuration = 60,
 }) {
   const [evaluation, setEvaluation] = useState(null)
+  const [carbonData, setCarbonData] = useState(null)
+  useEffect(() => {
+    if (!bay?.id) { setCarbonData(null); return }
+    let cancelled = false
+    fetchBayCarbon(bay.id).then((d) => { if (!cancelled) setCarbonData(d) })
+    return () => { cancelled = true }
+  }, [bay?.id])
   const [evalLoading, setEvalLoading] = useState(false)
   const durationMins = savedPlannerDurationMins ?? DEFAULT_PLANNER_DURATION_MINS
 
@@ -122,6 +130,7 @@ export default function BayDetailSheet({
     setEvalLoading(true)
     setEvaluation(null)
     fetchBayEvaluation(bay.id, fetchOpts).then((data) => {
+      fetchBayCarbon(bay.id).then((d) => { if (!cancelled) setCarbonData(d) })
       if (!cancelled) {
         setEvaluation(data)
         setEvalLoading(false)
@@ -310,6 +319,11 @@ export default function BayDetailSheet({
 
       {/* 7. Navigate / Walk CTAs (Epic 7) */}
       <BayDetailNavActions bay={bay} destination={destination} isMobile={isMobile} />
+
+      {/* 8. Sustainability — Epic 8 */}
+      <div className="px-5 pb-5">
+        <SustainabilityBadge carbonData={carbonData} />
+      </div>
     </div>
   )
 }

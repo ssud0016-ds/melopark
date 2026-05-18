@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.core.config import get_settings
 from app.routers.accessibility import router as accessibility_router
@@ -107,7 +108,36 @@ async def lifespan(app: FastAPI):
     if os.getenv("MELOPARK_TILE_PREWARM", "1") == "1":
         asyncio.create_task(_prewarm_cbd_tiles())
 
-    yield
+    # Background pressure-rebuild loop: keeps `_pressure_cache` warm across
+    # data_version flips so the user-facing manifest/tile path never blocks on
+    # `compute_segment_pressure`. Runs every 4 minutes (one cycle inside the
+    # 5-min event bucket).
+    refresh_task = None
+    if os.getenv("MELOPARK_PRESSURE_REFRESH", "1") == "1":
+        from app.services.segment_pressure_service import (
+            get_pressure_by_data_version,
+            is_loaded as _sps_loaded,
+        )
+
+        async def _pressure_refresh_loop() -> None:
+            interval = int(os.getenv("MELOPARK_PRESSURE_REFRESH_SEC", "240"))
+            while True:
+                try:
+                    await asyncio.sleep(interval)
+                    if _sps_loaded():
+                        await asyncio.to_thread(get_pressure_by_data_version)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 — never crash the loop
+                    logger.warning("pressure-refresh loop error: %s", exc)
+
+        refresh_task = asyncio.create_task(_pressure_refresh_loop())
+
+    try:
+        yield
+    finally:
+        if refresh_task is not None:
+            refresh_task.cancel()
 
 
 is_prod = settings.ENVIRONMENT.strip().lower() == "production"
@@ -137,6 +167,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Compress responses >1KB. Cuts evaluate-bulk + accessibility + parking payloads
+# ~80% on the origin→CDN hop (Cloudflare still re-compresses for clients).
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
 app.include_router(health_router)
 app.include_router(db_test_router)

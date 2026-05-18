@@ -227,12 +227,14 @@ def get_zones_geojson(request: Request):
     "/tiles/manifest.json",
     summary="Tile manifest with current minute_bucket and data sources",
 )
-@limiter.limit("30/minute")
-def get_tile_manifest(request: Request, response: Response):
+def get_tile_manifest(response: Response):
     if not sps.is_loaded():
         raise HTTPException(status_code=503, detail="Segment pressure data not loaded yet")
 
     bucket, rows, active_event_count = sps.get_pressure_by_data_version()
+    # Manifest changes when data_version flips (~5 min). SWR lets CF serve the
+    # previous manifest instantly while it refetches in the background, which
+    # also keeps tile URLs stable across the flip boundary for that brief moment.
     response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=120"
     now_melb = datetime.now(MELB_TZ)
     return {
@@ -273,7 +275,11 @@ def get_tile(request: Request, z: int, x: int, y: int, response: Response):
         content=body,
         media_type="application/vnd.mapbox-vector-tile",
         headers={
-            "Cache-Control": "public, max-age=60, stale-while-revalidate=600",
+            # Tile URL bursts to a new `?v=` on each data_version flip, so a long
+            # max-age is safe — within a version, the bytes are immutable. SWR
+            # lets CF serve the previous response instantly during a worker
+            # restart / cold rebuild.
+            "Cache-Control": "public, max-age=300, stale-while-revalidate=600",
             "ETag": f'"{etag}"',
             "X-Attribution": DATA_ATTRIBUTION_HTML,
             "X-Tile-Cache": str(meta["cache"]),
