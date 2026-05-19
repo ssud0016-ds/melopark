@@ -5,12 +5,21 @@ export type TabParamList = {
   PredictionsTab: undefined;
 };
 
+export type MapsProviderChooserParams = {
+  pendingMode?: 'drive' | 'walk';
+  bayLat: number;
+  bayLng: number;
+  bayLabel?: string;
+  destLat?: number;
+  destLng?: number;
+};
+
 export type RootStackParamList = {
   Tabs: NavigatorScreenParams<TabParamList>;
   About: undefined;
   Attribution: undefined;
   Terms: undefined;
-  MapsProviderChooser: undefined;
+  MapsProviderChooser: MapsProviderChooserParams | undefined;
   MapSpike: undefined; // dev-only
 };
 
