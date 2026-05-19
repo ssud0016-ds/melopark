@@ -114,7 +114,15 @@ export const SettingsSheet = forwardRef<SettingsSheetRef, Props>((props, ref) =>
         </Section>
 
         <Section title="Help & About" theme={palette}>
-          <LinkRow theme={palette} label="Help & How to use" onPress={() => { sheetRef.current?.dismiss(); setTimeout(props.onOpenHelp, 120); }} />
+          <LinkRow
+            theme={palette}
+            label="Help & How to use"
+            hint="Map guide and feature reference"
+            onPress={() => {
+              sheetRef.current?.dismiss();
+              setTimeout(props.onOpenHelp, 120);
+            }}
+          />
           <LinkRow theme={palette} label="Attribution" onPress={() => goto('Attribution')} />
           <LinkRow theme={palette} label="Terms of Use" onPress={() => goto('Terms')} />
           <LinkRow theme={palette} label="About MelOPark" onPress={() => goto('About')} />
@@ -202,7 +210,17 @@ function ToggleRow({
   );
 }
 
-function LinkRow({ label, onPress, theme }: { label: string; onPress: () => void; theme: ThemeColors }) {
+function LinkRow({
+  label,
+  hint,
+  onPress,
+  theme,
+}: {
+  label: string;
+  hint?: string;
+  onPress: () => void;
+  theme: ThemeColors;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -212,9 +230,13 @@ function LinkRow({ label, onPress, theme }: { label: string; onPress: () => void
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: 8,
       }}
     >
-      <Text style={{ fontSize: 14, color: theme.text }}>{label}</Text>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={{ fontSize: 14, color: theme.text }}>{label}</Text>
+        {hint ? <Text style={{ fontSize: 11, color: theme.textMuted }}>{hint}</Text> : null}
+      </View>
       <Text style={{ fontSize: 16, color: theme.textMuted }}>›</Text>
     </Pressable>
   );

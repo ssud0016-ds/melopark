@@ -7,6 +7,7 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import {
   fetchBayCarbon,
   fetchBayEvaluation,
+  type AccessibilityBayRow,
   type Bay,
   type BayCarbon,
   type BayEvaluation,
@@ -15,12 +16,15 @@ import type { Landmark } from '../../data/landmarks';
 import { bayMissingStreetNote, streetShort } from '../../utils/bayLabels';
 import {
   DEFAULT_PLANNER_DURATION_MINS,
+  DURATION_FILTER_TO_MINS,
   durationFilterLabel,
   formatMelbourneDate,
   formatMelbourneTime,
+  isFuturePlanningArrival,
 } from '../../utils/plannerTime';
 
 import { BayDetailNavActions } from '../bay/BayDetailNavActions';
+import { FuturePlanningBanner } from '../bay/FuturePlanningBanner';
 import { BayStatusAndLimits } from '../bay/BayStatusAndLimits';
 import { ParkingSignTranslator } from '../bay/ParkingSignTranslator';
 import { ParkingVerdictPanel, type VerdictVariant } from '../bay/ParkingVerdictPanel';
@@ -41,6 +45,7 @@ type Props = {
   customDuration?: number | null;
   plannerArrivalIso?: string | null;
   plannerDurationMins?: number | null;
+  accessibleRulesByBayId?: Record<string, AccessibilityBayRow>;
   onSheetIndexChange?: (index: number) => void;
   onTrapDetected?: (msg: string) => void;
 };
@@ -53,6 +58,7 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
       customDuration = null,
       plannerArrivalIso = null,
       plannerDurationMins = null,
+      accessibleRulesByBayId = {},
       onSheetIndexChange,
       onTrapDetected,
     },
@@ -83,18 +89,55 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
       getIndex: () => indexRef.current,
     }));
 
-    const FILTER_TO_MINS: Record<string, number> = { '15min': 15, '30min': 30, '1h': 60, '2h': 120, '3h': 180, '4h': 240 };
     const fetchOpts = useMemo(() => {
       if (plannerArrivalIso && plannerDurationMins != null) {
         return { arrivalIso: plannerArrivalIso, durationMins: plannerDurationMins };
       }
       if (durationFilter) {
         const mins =
-          durationFilter === 'custom' ? customDuration : FILTER_TO_MINS[durationFilter];
+          durationFilter === 'custom' ? customDuration : DURATION_FILTER_TO_MINS[durationFilter];
         if (mins) return { arrivalIso: new Date().toISOString(), durationMins: mins };
       }
       return null;
     }, [plannerArrivalIso, plannerDurationMins, durationFilter, customDuration]);
+
+    const accessibilityRuleFallback = bay?.id
+      ? accessibleRulesByBayId[String(bay.id)] ?? null
+      : null;
+
+    const renderEvaluation = useMemo((): BayEvaluation | null => {
+      if (loading && !evaluation) return null;
+      if (evaluation?.translator_rules?.length) return evaluation;
+
+      const plainEnglish = accessibilityRuleFallback?.plain_english;
+      const typedesc = accessibilityRuleFallback?.typedesc;
+      if (!plainEnglish && !typedesc) return evaluation;
+
+      const heading = typedesc ? `Rule: ${typedesc}` : 'Accessible bay rule';
+      const body = plainEnglish || 'Accessibility rule is available for this bay.';
+      return {
+        ...(evaluation || {
+          bay_id: bay?.id ?? '',
+          verdict: 'unknown',
+          reason: '',
+          data_source: 'unknown',
+        }),
+        active_restriction: {
+          ...(evaluation?.active_restriction || {}),
+          typedesc: typedesc || evaluation?.active_restriction?.typedesc || null,
+          plain_english: plainEnglish || evaluation?.active_restriction?.plain_english || null,
+          rule_category: evaluation?.active_restriction?.rule_category || 'disabled',
+        },
+        translator_rules: [
+          {
+            heading,
+            body,
+            state: 'current',
+            banner: null,
+          },
+        ],
+      } as BayEvaluation;
+    }, [loading, evaluation, accessibilityRuleFallback, bay?.id]);
 
     useEffect(() => {
       if (!bay?.id) {
@@ -126,32 +169,32 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
       };
     }, [bay?.id, fetchOpts]);
 
-    const isFuturePlanningMode = ((): boolean => {
-      if (!plannerArrivalIso) return false;
-      const planned = new Date(plannerArrivalIso);
-      if (Number.isNaN(planned.getTime())) return false;
-      return planned.getTime() > Date.now() + 60_000;
-    })();
+    const isFuturePlanningMode = isFuturePlanningArrival(plannerArrivalIso);
 
     const isTowAwayOrLoading = ((): boolean => {
-      const cat = (evaluation?.warning?.type || evaluation?.active_restriction?.rule_category || '').toLowerCase();
+      const cat = (
+        renderEvaluation?.warning?.type ||
+        renderEvaluation?.active_restriction?.rule_category ||
+        ''
+      ).toLowerCase();
       return cat === 'clearway' || cat === 'loading' || cat === 'no_standing';
     })();
 
     const verdictVariant: VerdictVariant | null = ((): VerdictVariant | null => {
       if (!isFuturePlanningMode && bay?.free === 0) return 'no';
-      if (!evaluation || loading) return null;
-      if (evaluation.verdict === 'no') return 'no';
-      if (evaluation.verdict === 'yes' && evaluation.warning && isTowAwayOrLoading) return 'caution';
-      if (evaluation.verdict === 'yes') return 'yes';
+      if (!renderEvaluation || loading) return null;
+      if (renderEvaluation.verdict === 'no') return 'no';
+      if (renderEvaluation.verdict === 'yes' && renderEvaluation.warning && isTowAwayOrLoading)
+        return 'caution';
+      if (renderEvaluation.verdict === 'yes') return 'yes';
       return 'no';
     })();
 
     const permitOnly =
-      (evaluation?.warning?.type || '').toLowerCase() === 'disabled' ||
-      (evaluation?.active_restriction?.rule_category || '').toLowerCase() === 'disabled';
+      (renderEvaluation?.warning?.type || '').toLowerCase() === 'disabled' ||
+      (renderEvaluation?.active_restriction?.rule_category || '').toLowerCase() === 'disabled';
 
-    const resolvedName = bay?.name?.trim() || evaluation?.street_name || null;
+    const resolvedName = bay?.name?.trim() || renderEvaluation?.street_name || null;
     const missingStreetNote = resolvedName ? null : bayMissingStreetNote(bay);
     const streetLine = resolvedName ? streetShort(resolvedName) : null;
 
@@ -266,6 +309,8 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
             </Text>
           </View>
 
+          {isFuturePlanningMode ? <FuturePlanningBanner /> : null}
+
           {/* Disability permit banner */}
           {permitOnly ? (
             <View
@@ -297,12 +342,16 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
           ) : (
             <>
               {verdictVariant ? (
-                <ParkingVerdictPanel variant={verdictVariant} durationMins={durationMins} evaluation={evaluation} />
+                <ParkingVerdictPanel
+                  variant={verdictVariant}
+                  durationMins={durationMins}
+                  evaluation={renderEvaluation}
+                />
               ) : null}
 
-              <BayStatusAndLimits bay={bay} evaluation={evaluation} />
+              <BayStatusAndLimits bay={bay} evaluation={renderEvaluation} />
 
-              <ParkingSignTranslator evaluation={evaluation} />
+              <ParkingSignTranslator evaluation={renderEvaluation} />
 
               <BayDetailNavActions bay={bay} destination={destination} />
 

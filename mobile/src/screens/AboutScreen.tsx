@@ -1,25 +1,51 @@
-import { ScrollView, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCallback, useRef, useState } from 'react';
+import { ScrollView, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { colors, fontFamily } from '../design-system';
-import { LogoMark } from '../components/common/LogoMark';
+import { AboutCtaBand } from '../components/about/AboutCtaBand';
+import { AboutFixSection } from '../components/about/AboutFixSection';
+import { AboutFooter } from '../components/about/AboutFooter';
+import { AboutHero } from '../components/about/AboutHero';
+import { AboutPainSection } from '../components/about/AboutPainSection';
+import type { RootStackParamList } from '../navigation/types';
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function AboutScreen() {
-  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<Nav>();
+  const scrollRef = useRef<ScrollView>(null);
+  const [problemY, setProblemY] = useState(0);
+
+  const goMap = useCallback(() => {
+    navigation.navigate('Tabs', { screen: 'MapTab' });
+  }, [navigation]);
+
+  const scrollToProblem = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: problemY, animated: true });
+  }, [problemY]);
+
+  const scrollToTop = useCallback(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, []);
+
   return (
-    <View className="flex-1 bg-surface dark:bg-surface-dark" style={{ paddingTop: insets.top }}>
-      <ScrollView contentContainerStyle={{ padding: 24, gap: 16, alignItems: 'center' }}>
-        <LogoMark size={96} />
-        <Text style={{ fontFamily: fontFamily.sansExtraBold, fontSize: 32, color: colors.brand }}>
-          MelOPark
-        </Text>
-        <Text style={{ fontSize: 14, color: colors.surfaceDarkTertiary, textAlign: 'center' }}>
-          Find a parking bay near your destination in Melbourne CBD.
-        </Text>
-        <Text style={{ fontSize: 12, color: colors.surfaceDarkTertiary, textAlign: 'center', marginTop: 24 }}>
-          Version 1.0 · Data: City of Melbourne open data + VicRoads.
-        </Text>
-      </ScrollView>
-    </View>
+    <ScrollView
+      ref={scrollRef}
+      className="flex-1 bg-surface dark:bg-surface-dark"
+      contentContainerStyle={{ flexGrow: 1 }}
+    >
+      <AboutHero onFindParking={goMap} onLearnMore={scrollToProblem} />
+      <View
+        onLayout={(e) => {
+          setProblemY(e.nativeEvent.layout.y);
+        }}
+      >
+        <AboutPainSection />
+        <AboutFixSection onCardPress={goMap} />
+        <AboutCtaBand onPress={goMap} />
+        <AboutFooter navigation={navigation} onGoMap={goMap} onScrollToTop={scrollToTop} />
+      </View>
+    </ScrollView>
   );
 }

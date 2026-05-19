@@ -22,12 +22,18 @@ describe('app.config.js', () => {
     expect(appConfig.expo.androidStatusBar.translucent).toBe(true);
   });
 
-  // Phase 3 review gate: permissions exactly [FINE, COARSE]. No notifications, no extras.
-  test('permissions list is exactly [FINE, COARSE]', () => {
-    expect(appConfig.expo.android.permissions).toEqual([
-      'ACCESS_FINE_LOCATION',
-      'ACCESS_COARSE_LOCATION',
-    ]);
+  test('does not declare location permissions', () => {
+    const perms =
+      (appConfig.expo.android as { permissions?: string[] }).permissions ?? [];
+    expect(perms).not.toContain('ACCESS_FINE_LOCATION');
+    expect(perms).not.toContain('ACCESS_COARSE_LOCATION');
+  });
+
+  test('expo-location plugin is not registered', () => {
+    const pluginNames = appConfig.expo.plugins.map((p) =>
+      typeof p === 'string' ? p : p[0],
+    );
+    expect(pluginNames).not.toContain('expo-location');
   });
 
   test('App Links autoVerify on melopark.app', () => {

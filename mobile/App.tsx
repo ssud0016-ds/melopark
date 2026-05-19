@@ -11,7 +11,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Mapbox from '@rnmapbox/maps';
 
-import { LocationPermissionBanner } from './src/components/common/LocationPermissionBanner';
 import { OfflineBanner } from './src/components/common/OfflineBanner';
 import { ToastProvider } from './src/components/common/Toast';
 import { colors, interFontMap, rootStyle } from './src/design-system';
@@ -87,7 +86,6 @@ export default function App() {
               <MapFlyTargetProvider>
                 <RootNavigator />
                 <OfflineBanner />
-                <LocationPermissionBanner />
               </MapFlyTargetProvider>
             </DestinationProvider>
           </FiltersProvider>

@@ -19,7 +19,17 @@ export function RootNavigator() {
       <BottomSheetModalProvider>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Tabs" component={BottomTabs} />
-        <Stack.Screen name="About" component={AboutScreen} options={{ headerShown: true, title: 'About' }} />
+        <Stack.Screen
+          name="About"
+          component={AboutScreen}
+          options={{
+            headerShown: true,
+            title: 'About Us',
+            headerTransparent: true,
+            headerTintColor: '#ffffff',
+            headerTitleStyle: { color: '#ffffff', fontWeight: '600' },
+          }}
+        />
         <Stack.Screen
           name="Attribution"
           component={AttributionScreen}

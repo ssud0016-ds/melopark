@@ -92,6 +92,8 @@ type Props = {
   /** When true, use Mapbox Navigation Night basemap. */
   mapDark?: boolean;
   accessibilityBayIds?: string[];
+  plannerMapActive?: boolean;
+  verdictByBayId?: Record<string, string>;
   onMapEmptyClick?: () => void;
   onBoundsChange?: (bounds: PressureBounds) => void;
   children?: ReactNode;
@@ -136,6 +138,8 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
     colorBlindMode = false,
     mapDark = false,
     accessibilityBayIds,
+    plannerMapActive = false,
+    verdictByBayId,
     onMapEmptyClick,
     onBoundsChange,
     children,
@@ -143,8 +147,12 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
   ref,
 ) {
   const bayShape = useMemo(
-    () => buildMapBayShape(bays, colorBlindMode, accessibilityBayIds),
-    [bays, colorBlindMode, accessibilityBayIds],
+    () =>
+      buildMapBayShape(bays, colorBlindMode, accessibilityBayIds, {
+        plannerMapActive,
+        verdictByBayId,
+      }),
+    [bays, colorBlindMode, accessibilityBayIds, plannerMapActive, verdictByBayId],
   );
   const styleURL = useMemo(() => mapBasemapStyleUrl(mapDark), [mapDark]);
   const clusterCircleColor = useMemo(

@@ -1,10 +1,20 @@
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, Text, View } from 'react-native';
 
 import { colors, haptics, sheetSnapPoints } from '../../design-system';
 import { useFilters, type DurationFilter, type StatusFilter } from '../../hooks/useFilters';
 import { useThemeColors, type ThemeColors } from '../../hooks/useThemeColors';
+import {
+  formatArrivalDateChipLabel,
+  formatMelbourneTime,
+  formatRelativeDate,
+  melbourneAwareIsoFromDateTimeLocal,
+  melbourneAwareIsoFromNowOffset,
+  melbourneWallClockToAwareIso,
+  splitMelbourneDateTimeParts,
+} from '../../utils/plannerTime';
 
 export type FilterSheetRef = {
   present: () => void;
@@ -26,16 +36,89 @@ const DURATIONS: { value: DurationFilter; label: string }[] = [
   { value: '4h', label: '4H' },
 ];
 
+type PickerMode = 'date' | 'time' | null;
+
+function isoToPickerDate(iso: string | null): Date {
+  if (iso) {
+    const d = new Date(iso);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return new Date();
+}
+
 export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
   const sheetRef = useRef<BottomSheetModal>(null);
   const filters = useFilters();
   const theme = useThemeColors();
   const snaps = useMemo(() => [...sheetSnapPoints], []);
+  const [pickerMode, setPickerMode] = useState<PickerMode>(null);
+
+  const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(filters.plannerArrivalIso);
+  const arrivalSummary = filters.plannerArrivalIso
+    ? formatRelativeDate(filters.plannerArrivalIso)
+    : 'Live now (no arrival set)';
 
   useImperativeHandle(ref, () => ({
     present: () => sheetRef.current?.present(),
     dismiss: () => sheetRef.current?.dismiss(),
   }));
+
+  const updateArriveBy = (nextDate: string, nextTime: string) => {
+    if (!nextDate || !nextTime) return;
+    const iso = melbourneAwareIsoFromDateTimeLocal(`${nextDate}T${nextTime}`);
+    if (iso) filters.setArrival(iso);
+  };
+
+  const onPickerChange = (event: DateTimePickerEvent, selected?: Date) => {
+    if (event.type === 'dismissed') {
+      setPickerMode(null);
+      return;
+    }
+    if (!selected || !pickerMode) return;
+
+    if (pickerMode === 'date') {
+      const iso = melbourneWallClockToAwareIso(
+        selected.getFullYear(),
+        selected.getMonth() + 1,
+        selected.getDate(),
+        Number((arriveTime || '09:00').split(':')[0]),
+        Number((arriveTime || '09:00').split(':')[1] || 0),
+        0,
+      );
+      filters.setArrival(iso);
+      if (Platform.OS === 'ios') setPickerMode(null);
+      else setPickerMode('time');
+      return;
+    }
+
+    const [ys, mos, ds] = (arriveDate || '').split('-').map(Number);
+    const iso = melbourneWallClockToAwareIso(
+      ys || selected.getFullYear(),
+      mos || selected.getMonth() + 1,
+      ds || selected.getDate(),
+      selected.getHours(),
+      selected.getMinutes(),
+      0,
+    );
+    filters.setArrival(iso);
+    setPickerMode(null);
+  };
+
+  const openDatePicker = () => {
+    haptics.selection();
+    if (!filters.plannerArrivalIso) {
+      filters.setArrival(melbourneAwareIsoFromNowOffset(30));
+    }
+    setPickerMode('date');
+  };
+
+  const openTimePicker = () => {
+    haptics.selection();
+    if (!filters.plannerArrivalIso) {
+      filters.setArrival(melbourneAwareIsoFromNowOffset(30));
+    }
+    setPickerMode('time');
+  };
 
   return (
     <BottomSheetModal
@@ -108,27 +191,25 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
         </Group>
 
         <Group title="Arrive by" theme={theme}>
-          <Text style={{ fontSize: 12, color: theme.textSecondary }}>
-            {filters.plannerArrivalIso ? `Arriving ${filters.plannerArrivalIso}` : 'Live now (no arrival set)'}
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Text style={{ fontSize: 12, color: theme.textSecondary }}>{arrivalSummary}</Text>
+          <ChipRow>
             <Chip
               theme={theme}
               active={filters.plannerArrivalIso == null}
               onPress={() => {
                 haptics.selection();
                 filters.setArrival(null);
+                setPickerMode(null);
               }}
             >
               Live now
             </Chip>
             <Chip
               theme={theme}
-              active={!!filters.plannerArrivalIso}
+              active={false}
               onPress={() => {
                 haptics.selection();
-                const d = new Date(Date.now() + 30 * 60_000);
-                filters.setArrival(d.toISOString());
+                filters.setArrival(melbourneAwareIsoFromNowOffset(30));
               }}
             >
               +30 min
@@ -138,13 +219,33 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
               active={false}
               onPress={() => {
                 haptics.selection();
-                const d = new Date(Date.now() + 60 * 60_000);
-                filters.setArrival(d.toISOString());
+                filters.setArrival(melbourneAwareIsoFromNowOffset(60));
               }}
             >
               +1 hr
             </Chip>
-          </View>
+          </ChipRow>
+          <ChipRow>
+            <Chip theme={theme} active={!!filters.plannerArrivalIso} onPress={openDatePicker}>
+              {filters.plannerArrivalIso ? formatArrivalDateChipLabel(filters.plannerArrivalIso) : 'Date'}
+            </Chip>
+            <Chip theme={theme} active={!!filters.plannerArrivalIso} onPress={openTimePicker}>
+              {filters.plannerArrivalIso ? formatMelbourneTime(filters.plannerArrivalIso) : 'Time'}
+            </Chip>
+            {filters.plannerArrivalIso ? (
+              <Chip
+                theme={theme}
+                active={false}
+                onPress={() => {
+                  haptics.selection();
+                  filters.setArrival(null);
+                  setPickerMode(null);
+                }}
+              >
+                Clear
+              </Chip>
+            ) : null}
+          </ChipRow>
         </Group>
 
         {!filters.isDefault ? (
@@ -153,6 +254,7 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
             onPress={() => {
               haptics.selection();
               filters.reset();
+              setPickerMode(null);
             }}
             style={{
               minHeight: 44,
@@ -167,6 +269,15 @@ export const FilterSheet = forwardRef<FilterSheetRef>((_props, ref) => {
           </Pressable>
         ) : null}
       </BottomSheetScrollView>
+
+      {pickerMode ? (
+        <DateTimePicker
+          value={isoToPickerDate(filters.plannerArrivalIso)}
+          mode={pickerMode}
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onPickerChange}
+        />
+      ) : null}
     </BottomSheetModal>
   );
 });

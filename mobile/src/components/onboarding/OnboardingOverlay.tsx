@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, fontFamily, haptics, zIndex } from '../../design-system';
+import { colors, fontFamily, haptics, nativeTabBarHeight, zIndex } from '../../design-system';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import {
   getStatusFillColor,
@@ -133,11 +133,16 @@ export function OnboardingOverlay({ hasPressureData, destination, onActiveChange
             bottom: 0,
             paddingTop: 24,
             paddingHorizontal: 24,
-            paddingBottom: insets.bottom + 24,
+            paddingBottom: insets.bottom + nativeTabBarHeight + 28,
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
             backgroundColor: theme.sheet,
             gap: 12,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.12,
+            shadowRadius: 12,
+            elevation: 12,
           }}
         >
           <Text style={{ fontFamily: fontFamily.sansExtraBold, fontSize: 28, color: theme.tabActive }}>

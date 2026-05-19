@@ -20,13 +20,6 @@ const plugins = [
       RNMapboxMapsDownloadToken: mapboxDownloadToken,
     },
   ],
-  [
-    'expo-location',
-    {
-      locationAlwaysAndWhenInUsePermission:
-        'Allow MelOPark to use your location to find parking bays near you.',
-    },
-  ],
   'expo-navigation-bar',
 ];
 
@@ -51,6 +44,9 @@ module.exports = {
     userInterfaceStyle: 'automatic',
     extra: {
       mapboxPublicToken,
+      eas: {
+        projectId: '2be96c44-4371-4fe2-8971-5b6198773420',
+      },
     },
     androidStatusBar: {
       translucent: true,
@@ -65,8 +61,6 @@ module.exports = {
     android: {
       package: 'app.melopark',
       minSdkVersion: 26,
-      // Plan §Phase 3 review gate: exactly [FINE, COARSE]. No notifications.
-      permissions: ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'],
       adaptiveIcon: {
         backgroundColor: '#35338c',
         foregroundImage: './assets/images/icon.png',

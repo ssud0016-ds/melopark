@@ -35,7 +35,6 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useDestination } from '../hooks/useDestination';
 import { useMapFlyTarget } from '../hooks/useMapFlyTarget';
 import { useFilters } from '../hooks/useFilters';
-import { useLocationPermission } from '../hooks/useLocationPermission';
 import { useOnboarding } from '../hooks/useOnboarding';
 import { useDestinationAlternatives } from '../hooks/useDestinationAlternatives';
 import { useDarkMode } from '../hooks/useDarkMode';
@@ -43,7 +42,8 @@ import { useThemeColors } from '../hooks/useThemeColors';
 import { useQuietestSegments } from '../hooks/useQuietestSegments';
 import type { TabParamList } from '../navigation/types';
 import type { PressureBounds } from '../services/apiPressure';
-import type { Bay } from '../services/apiBays';
+import { fetchEvaluateBulk, type Bay } from '../services/apiBays';
+import { useDebouncedPlannerParams } from '../hooks/useDebouncedPlannerParams';
 import { boundsToKey, isSignificantBoundsChange } from '../utils/mapBounds';
 import { buildQuietStreetSelection, mapSegmentsToQuietStreets } from '../utils/quietStreets';
 import { frameMapToAlternative } from '../utils/alternativeNavigation';
@@ -70,6 +70,7 @@ export function MapScreen() {
   const [accessibleOnly, setAccessibleOnly] = useState(false);
   const {
     accessibleBayIds,
+    accessibleRulesByBayId,
     loading: accessibilityLoading,
     error: accessibilityError,
   } = useAccessibilityBays(accessibleOnly);
@@ -88,9 +89,8 @@ export function MapScreen() {
     (manifest.total_segments ?? 0) > 0;
   const parkingSheetVisible = busyNowStatus !== 'idle';
   const { animatedPosition, anchorStyle, onMapLayout } = useMapChromeAnchor(parkingSheetVisible);
-  const { needsOnboarding, complete: completeOnboarding } = useOnboarding();
+  const { needsOnboarding, complete: completeOnboarding, reset: resetOnboarding } = useOnboarding();
   const { show: showToast } = useToast();
-  const { state: locationState, canAskAgain, request: requestLocation } = useLocationPermission();
   const { destination, setDestination, clearDestination, altPin, setAltPin } = useDestination();
   const { consumeFlyTarget } = useMapFlyTarget();
   const { dark: mapDark } = useDarkMode();
@@ -105,6 +105,34 @@ export function MapScreen() {
   const debouncedBounds = useDebouncedValue(mapBounds, 300);
   const lastReportedBoundsRef = useRef<PressureBounds | null>(null);
   const mapRef = useRef<ParkingMapRef>(null);
+
+  const plannerParams = useMemo(() => {
+    if (!filters.plannerArrivalIso || filters.plannerDurationMins == null) return null;
+    return { arrivalIso: filters.plannerArrivalIso, durationMins: filters.plannerDurationMins };
+  }, [filters.plannerArrivalIso, filters.plannerDurationMins]);
+
+  const debouncedPlanner = useDebouncedPlannerParams(plannerParams, 300);
+  const [bulkVerdictById, setBulkVerdictById] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!debouncedPlanner || !debouncedBounds) {
+      setBulkVerdictById({});
+      return;
+    }
+    let cancelled = false;
+    const bbox = `${debouncedBounds.south},${debouncedBounds.west},${debouncedBounds.north},${debouncedBounds.east}`;
+    fetchEvaluateBulk(bbox, debouncedPlanner).then((rows) => {
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      for (const r of rows) {
+        if (r?.bay_id != null) next[String(r.bay_id)] = r.verdict;
+      }
+      setBulkVerdictById(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedPlanner, debouncedBounds]);
 
   // Navigate from Predictions: fly to selected zone (web MapPage flyTarget).
   useFocusEffect(
@@ -167,10 +195,6 @@ export function MapScreen() {
     altPin?.source === 'quiet-street' || altPin?.segmentId != null ? altPin?.segmentId ?? null : null;
   const selectedZoneId =
     altPin?.source === 'alternative' && altPin?.zoneId != null ? altPin.zoneId : null;
-
-  useEffect(() => {
-    if (locationState === 'never-asked' && canAskAgain) requestLocation();
-  }, [locationState, canAskAgain, requestLocation]);
 
   const bayDetailRef = useRef<BayDetailSheetRef>(null);
   const segmentDetailRef = useRef<SegmentDetailSheetRef>(null);
@@ -264,9 +288,10 @@ export function MapScreen() {
   }, [route.params?.bayId, route.params?.segmentId, bays]);
 
   useEffect(() => {
-    const hide = baySheetIndex === SNAP_FULL_INDEX || pcSheetIndex === 2;
+    const hide =
+      needsOnboarding === true || baySheetIndex === SNAP_FULL_INDEX || pcSheetIndex === 2;
     navigation.getParent()?.setOptions({ tabBarStyle: hide ? TAB_BAR_HIDDEN : tabBarVisible });
-  }, [baySheetIndex, pcSheetIndex, navigation, tabBarVisible]);
+  }, [needsOnboarding, baySheetIndex, pcSheetIndex, navigation, tabBarVisible]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -323,6 +348,8 @@ export function MapScreen() {
           colorBlindMode={colorBlindMode}
           mapDark={mapDark}
           accessibilityBayIds={accessibleBayIds}
+          plannerMapActive={Boolean(filters.plannerArrivalIso)}
+          verdictByBayId={bulkVerdictById}
           onMapEmptyClick={() => setAltPin(null)}
           onBoundsChange={handleMapBounds}
         >
@@ -439,7 +466,13 @@ export function MapScreen() {
         onToggleAccessible={setAccessibleOnly}
         onOpenHelp={() => helpRef.current?.present()}
       />
-      <HelpModal ref={helpRef} />
+      <HelpModal
+        ref={helpRef}
+        onReplayOnboarding={() => {
+          helpRef.current?.dismiss();
+          void resetOnboarding();
+        }}
+      />
 
       <BayDetailSheet
         ref={bayDetailRef}
@@ -448,6 +481,7 @@ export function MapScreen() {
         customDuration={filters.customDurationMins}
         plannerArrivalIso={filters.plannerArrivalIso}
         plannerDurationMins={filters.plannerDurationMins}
+        accessibleRulesByBayId={accessibleRulesByBayId}
         onSheetIndexChange={setBaySheetIndex}
         onTrapDetected={onBayTrapDetected}
       />
