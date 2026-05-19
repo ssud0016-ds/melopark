@@ -31,7 +31,7 @@ export const SettingsSheet = forwardRef<SettingsSheetRef, Props>((props, ref) =>
   const sheetRef = useRef<BottomSheetModal>(null);
   const snaps = useMemo(() => [...sheetSnapPoints], []);
   const { colorScheme, setColorScheme } = useColorScheme();
-  const { provider, setProvider } = useMapsProvider();
+  const { provider, setProvider, clearProvider } = useMapsProvider();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const palette = useThemeColors();
   const [themeMode, setThemeMode] = useState<ThemeMode>((colorScheme as ThemeMode) ?? 'system');
@@ -96,8 +96,11 @@ export const SettingsSheet = forwardRef<SettingsSheetRef, Props>((props, ref) =>
         </Section>
 
         <Section title="Navigation" theme={palette}>
+          <Text style={{ fontSize: 13, color: palette.textSecondary, marginBottom: 4 }}>
+            Open directions in
+          </Text>
           <ChipRow>
-            {(['google', 'web'] as MapsProvider[]).map((p) => (
+            {(['google', 'waze', 'web'] as MapsProvider[]).map((p) => (
               <Chip
                 key={p}
                 theme={palette}
@@ -107,10 +110,22 @@ export const SettingsSheet = forwardRef<SettingsSheetRef, Props>((props, ref) =>
                   setProvider(p);
                 }}
               >
-                {p === 'google' ? 'Google Maps' : 'Browser'}
+                {p === 'google' ? 'Google Maps' : p === 'waze' ? 'Waze' : 'Browser'}
               </Chip>
             ))}
           </ChipRow>
+          {provider ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                haptics.selection();
+                clearProvider();
+              }}
+              style={{ minHeight: 44, justifyContent: 'center', marginTop: 4 }}
+            >
+              <Text style={{ fontSize: 13, color: palette.textMuted }}>Clear maps preference</Text>
+            </Pressable>
+          ) : null}
         </Section>
 
         <Section title="Help & About" theme={palette}>

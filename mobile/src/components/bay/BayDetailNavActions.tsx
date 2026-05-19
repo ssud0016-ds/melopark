@@ -9,6 +9,7 @@ import { useMapsProvider } from '../../hooks/useMapsProvider';
 import type { Bay } from '../../services/apiBays';
 import type { Landmark } from '../../data/landmarks';
 import { launchMaps } from '../maps/launchMaps';
+import { buildMapsLaunchArgs } from '../../utils/mapsLaunchArgs';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = {
@@ -18,9 +19,20 @@ type Props = {
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+const COORDS_ERROR =
+  'Location for this bay is unavailable. Navigation cannot be opened.';
+
+const FALLBACK_NOTICE =
+  "Couldn't open the chosen maps app. Opened Google Maps web instead.";
+
 function isValidLatLng(v: { lat?: number; lng?: number } | null | undefined): boolean {
   if (!v) return false;
-  return typeof v.lat === 'number' && typeof v.lng === 'number' && Number.isFinite(v.lat) && Number.isFinite(v.lng);
+  return (
+    typeof v.lat === 'number' &&
+    typeof v.lng === 'number' &&
+    Number.isFinite(v.lat) &&
+    Number.isFinite(v.lng)
+  );
 }
 
 export function BayDetailNavActions({ bay, destination }: Props) {
@@ -28,32 +40,63 @@ export function BayDetailNavActions({ bay, destination }: Props) {
   const { provider } = useMapsProvider();
   const navigation = useNavigation<Nav>();
   const [notice, setNotice] = useState<string | null>(null);
+  const [coordsError, setCoordsError] = useState<string | null>(null);
 
-  if (!isValidLatLng(bay)) return null;
+  const validBay = bay != null && isValidLatLng(bay);
+  const canWalk = isValidLatLng(destination);
+
+  const onFallback = () => setNotice(FALLBACK_NOTICE);
+
+  const runLaunch = async (chosen: NonNullable<typeof provider>, mode: 'drive' | 'walk') => {
+    if (!bay || !validBay) return;
+    haptics.medium();
+    const walkEnd =
+      mode === 'walk' && canWalk ? { lat: destination!.lat, lng: destination!.lng } : null;
+    const args = buildMapsLaunchArgs(chosen, mode, bay, walkEnd, onFallback);
+    const ok = await launchMaps(args);
+    if (!ok) setNotice(FALLBACK_NOTICE);
+  };
 
   const start = async (mode: 'drive' | 'walk') => {
     setNotice(null);
-    if (!provider) {
-      navigation.navigate('MapsProviderChooser');
+    if (!validBay || !bay) {
+      setCoordsError(COORDS_ERROR);
       return;
     }
-    haptics.medium();
-    const args = {
-      provider,
-      lat: bay!.lat,
-      lng: bay!.lng,
-      label: bay!.name ?? `Bay ${bay!.id}`,
-      mode,
-      origin: mode === 'walk' && isValidLatLng(destination) ? { lat: destination!.lat, lng: destination!.lng } : undefined,
-    };
-    const ok = await launchMaps(args);
-    if (!ok) setNotice("Couldn't open the chosen maps app. Opened Google Maps web instead.");
+    setCoordsError(null);
+    if (!provider) {
+      navigation.navigate('MapsProviderChooser', {
+        pendingMode: mode,
+        bayLat: bay.lat,
+        bayLng: bay.lng,
+        bayLabel: bay.name ?? `Bay ${bay.id}`,
+        ...(mode === 'walk' && canWalk
+          ? { destLat: destination!.lat, destLng: destination!.lng }
+          : {}),
+      });
+      return;
+    }
+    await runLaunch(provider, mode);
   };
-
-  const canWalk = isValidLatLng(destination);
 
   return (
     <View style={{ paddingHorizontal: 20, paddingVertical: 16, gap: 8 }}>
+      {coordsError ? (
+        <View
+          accessibilityRole="alert"
+          style={{
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: theme.statusAvoidBg,
+            backgroundColor: theme.statusAvoidBg,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+          }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: '500', color: colors.statusAvoid }}>{coordsError}</Text>
+        </View>
+      ) : null}
+
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Navigate to bay"
@@ -75,6 +118,7 @@ export function BayDetailNavActions({ bay, destination }: Props) {
           accessibilityRole="button"
           accessibilityLabel="Walk to destination"
           onPress={() => start('walk')}
+          disabled={!validBay}
           style={{
             minHeight: 48,
             borderRadius: 10,
@@ -83,6 +127,7 @@ export function BayDetailNavActions({ bay, destination }: Props) {
             alignItems: 'center',
             justifyContent: 'center',
             paddingHorizontal: 16,
+            opacity: validBay ? 1 : 0.5,
           }}
         >
           <Text style={{ color: colors.brand, fontSize: 14, fontWeight: '600' }}>Walk to destination</Text>

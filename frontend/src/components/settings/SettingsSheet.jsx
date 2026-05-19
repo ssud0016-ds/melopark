@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import MapsProviderChooser, { MAPS_PROVIDER_LABELS } from '../maps/MapsProviderChooser'
-import { useMapsProvider } from '../../hooks/useMapsProvider'
+import MapsProviderSettingRow from './MapsProviderSettingRow'
 
 const STORAGE_KEY = 'melopark-dark-mode'
 
@@ -100,8 +99,6 @@ export default function SettingsSheet({
   onHelpOpen,
 }) {
   const [themeMode, setThemeMode] = useState(deriveThemeMode)
-  const [mapsOpen, setMapsOpen] = useState(false)
-  const { provider, setProvider, clearProvider } = useMapsProvider()
 
   const applyTheme = (mode) => {
     setThemeMode(mode)
@@ -194,20 +191,7 @@ export default function SettingsSheet({
 
           {/* NAVIGATION */}
           <SectionHeading label="Navigation" />
-          <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Open directions in</div>
-          <div className="flex gap-2 mb-2">
-            {['apple', 'google'].map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setProvider(p)}
-                aria-pressed={provider === p}
-                className={`${chipBase} ${provider === p ? chipActive : chipIdle}`}
-              >
-                {MAPS_PROVIDER_LABELS[p] ?? (p === 'apple' ? 'Apple Maps' : 'Google Maps')}
-              </button>
-            ))}
-          </div>
+          <MapsProviderSettingRow />
 
           <Divider />
 

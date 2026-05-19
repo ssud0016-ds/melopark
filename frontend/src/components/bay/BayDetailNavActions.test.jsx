@@ -25,11 +25,12 @@ afterEach(() => {
 })
 
 describe('BayDetailNavActions', () => {
-  it('renders nothing when bay coords invalid (AC 7.1.4)', () => {
-    const { container } = render(
-      <BayDetailNavActions bay={BAY_NO_COORDS} destination={null} />,
-    )
-    expect(container.firstChild).toBe(null)
+  it('shows inline error on Navigate tap when bay coords invalid (AC 7.1.3)', () => {
+    render(<BayDetailNavActions bay={BAY_NO_COORDS} destination={null} />)
+    expect(screen.getByRole('button', { name: /Navigate to bay/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Navigate to bay/ }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/unavailable/i)
+    expect(openSpy).not.toHaveBeenCalled()
   })
 
   it('renders Navigate when coords valid', () => {
@@ -58,7 +59,6 @@ describe('BayDetailNavActions', () => {
     fireEvent.click(screen.getByRole('button', { name: /Navigate to bay/ }))
     expect(openSpy).toHaveBeenCalled()
     expect(getCounters()['nav.navigate.tap']).toBe(1)
-    // chooser should not appear
     expect(screen.queryByText(/Choose your maps app/)).not.toBeInTheDocument()
   })
 
@@ -81,12 +81,15 @@ describe('BayDetailNavActions', () => {
     )
   })
 
-  it('Walk + saved provider → fires nav.walk.tap', () => {
+  it('Walk + saved provider → fires nav.walk.tap with bay origin', () => {
     window.localStorage.setItem(MAPS_PROVIDER_STORAGE_KEY, 'web')
     render(<BayDetailNavActions bay={BAY} destination={DEST} />)
     fireEvent.click(screen.getByRole('button', { name: /Walk to destination/ }))
     expect(getCounters()['nav.walk.tap']).toBe(1)
-    expect(openSpy.mock.calls[0][0]).toContain('travelmode=walking')
+    const url = openSpy.mock.calls[0][0]
+    expect(url).toContain('travelmode=walking')
+    expect(url).toContain(`origin=${encodeURIComponent('-37.8136,144.9631')}`)
+    expect(url).toContain(`destination=${encodeURIComponent('-37.81,144.97')}`)
   })
 
   it('chooser cancel does not fire counter', () => {

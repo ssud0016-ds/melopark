@@ -14,6 +14,9 @@ const PLATFORM_DEFAULT = {
   desktop: 'google',
 }
 
+const COORDS_ERROR =
+  'Location for this bay is unavailable. Navigation cannot be opened.'
+
 /**
  * Navigate + Walk CTAs for BayDetailSheet.
  *
@@ -28,6 +31,7 @@ export default function BayDetailNavActions({ bay, destination }) {
   const [chooserOpen, setChooserOpen] = useState(false)
   const [pendingMode, setPendingMode] = useState(null)
   const [notice, setNotice] = useState(null)
+  const [coordsError, setCoordsError] = useState(null)
 
   const hasBayCoords =
     bay &&
@@ -43,10 +47,13 @@ export default function BayDetailNavActions({ bay, destination }) {
   const validBay = isValidLatLng(bayLL)
   const validDest = isValidLatLng(destLL)
 
-  if (!validBay) return null
-
   const start = (mode) => {
     setNotice(null)
+    if (!validBay) {
+      setCoordsError(COORDS_ERROR)
+      return
+    }
+    setCoordsError(null)
     if (provider) {
       runLaunch(provider, mode)
       return
@@ -88,22 +95,29 @@ export default function BayDetailNavActions({ bay, destination }) {
 
   return (
     <div className="px-5 py-4 flex flex-col gap-2">
+      {coordsError ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-200"
+        >
+          {coordsError}
+        </div>
+      ) : null}
+
       <button
         type="button"
-        onClick={() => {
-          start('drive')
-        }
-        }
+        onClick={() => start('drive')}
         className="min-h-[44px] w-full rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 cursor-pointer"
       >
         Navigate to bay
-      </button>       
+      </button>
 
       {validDest ? (
         <button
           type="button"
           onClick={() => start('walk')}
-          className="min-h-[44px] w-full rounded-lg border border-brand bg-transparent px-4 text-sm font-semibold text-brand hover:bg-brand-50 dark:border-brand-300 dark:text-brand-100 dark:hover:bg-brand-900/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 cursor-pointer"
+          disabled={!validBay}
+          className="min-h-[44px] w-full rounded-lg border border-brand bg-transparent px-4 text-sm font-semibold text-brand hover:bg-brand-50 dark:border-brand-300 dark:text-brand-100 dark:hover:bg-brand-900/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         >
           Walk to destination
         </button>
@@ -113,7 +127,7 @@ export default function BayDetailNavActions({ bay, destination }) {
         </p>
       )}
 
-      {notice && (
+      {notice ? (
         <div
           role="status"
           className="mt-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-800/50 dark:bg-amber-900/20 dark:text-amber-200 flex items-start gap-2"
@@ -136,7 +150,7 @@ export default function BayDetailNavActions({ bay, destination }) {
           </svg>
           <span>{notice.message}</span>
         </div>
-      )}
+      ) : null}
 
       <MapsProviderChooser
         open={chooserOpen}
