@@ -15,6 +15,7 @@ import { useToast } from '../components/common/Toast';
 import { BusyNowLayer } from '../components/maps/BusyNowLayer';
 import { ParkingMap, type ParkingMapRef } from '../components/maps/ParkingMap';
 import { MapLegend } from '../components/map/MapLegend';
+import { isMapZoomHintVisible, MapZoomHintPill } from '../components/map/MapZoomHint';
 import { OnboardingOverlay } from '../components/onboarding/OnboardingOverlay';
 import { SearchBar } from '../components/chrome/SearchBar';
 import { ScopeStrip } from '../components/chrome/ScopeStrip';
@@ -33,7 +34,8 @@ import {
 } from '../components/sheets/SegmentDetailSheet';
 import { colors, SNAP_HALF, zIndex } from '../design-system';
 import { getTabBarStyle } from '../navigation/tabBarStyle';
-import { useMapChromeAnchor } from '../hooks/useMapChromeAnchor';
+import { useAccessibility } from '../hooks/useAccessibility';
+import { useMapChromeAnchor, MAP_ZOOM_HINT_GAP } from '../hooks/useMapChromeAnchor';
 import { useAccessibilityBays } from '../hooks/useAccessibilityBays';
 import { useBays } from '../hooks/useBays';
 import { useBusyNow } from '../hooks/useBusyNow';
@@ -59,7 +61,11 @@ import {
   displayAlternativeLabel,
 } from '../utils/destinationPressure';
 import type { PressureAlternativeZone } from '../types/pressureAlternatives';
-import { DESTINATION_MAP_ZOOM, QUIET_STREET_FLY_MS, SEARCH_RADIUS_M } from '../utils/mapGeo';
+import { DESTINATION_MAP_ZOOM, DEFAULT_MAP_ZOOM, QUIET_STREET_FLY_MS, SEARCH_RADIUS_M } from '../utils/mapGeo';
+import {
+  formatProximityDetailLabel,
+  proximityFreeCounts,
+} from '../utils/proximityBays';
 
 type Nav = BottomTabNavigationProp<TabParamList, 'MapTab'>;
 
@@ -90,6 +96,7 @@ export function MapScreen() {
   const [onboardingActive, setOnboardingActive] = useState(false);
   /** Web MapPage: null until map reports bounds (quiet segments / planner wait for first viewport). */
   const [mapBounds, setMapBounds] = useState<PressureBounds | null>(null);
+  const [mapZoom, setMapZoom] = useState(DEFAULT_MAP_ZOOM);
 
   const { manifest, status: busyNowStatus } = useBusyNow(true);
   const parkingChanceActive =
@@ -97,7 +104,9 @@ export function MapScreen() {
     manifest != null &&
     (manifest.total_segments ?? 0) > 0;
   const parkingSheetVisible = busyNowStatus !== 'idle';
-  const { animatedPosition, anchorStyle, onMapLayout } = useMapChromeAnchor(parkingSheetVisible);
+  const { animatedPosition, anchorStyle, onMapLayout } =
+    useMapChromeAnchor(parkingSheetVisible);
+  const { announce } = useAccessibility();
   const { needsOnboarding, complete: completeOnboarding, reset: resetOnboarding } = useOnboarding();
   const { show: showToast } = useToast();
   const { destination, setDestination, clearDestination, altPin, setAltPin } = useDestination();
@@ -200,15 +209,41 @@ export function MapScreen() {
     [quietSegmentsAll],
   );
 
+  const proximityCounts = useMemo(
+    () => proximityFreeCounts(bays, destination),
+    [bays, destination],
+  );
+
   const parkingChanceSheetTitle = useMemo(() => {
     if (destination) return `Near ${destination.name}`;
     return 'Parking chance nearby';
   }, [destination]);
 
   const parkingChanceSheetSubtitle = useMemo(() => {
-    if (destination) return `${SEARCH_RADIUS_M} m radius · live now`;
-    return 'Quiet streets around current map view';
-  }, [destination]);
+    if (!destination) return 'Quiet streets around current map view';
+    const detail = formatProximityDetailLabel(proximityCounts);
+    if (!detail) return `${SEARCH_RADIUS_M} m radius · live now`;
+    return `${detail} · live now`;
+  }, [destination, proximityCounts]);
+
+  const mapZoomHintVisible = isMapZoomHintVisible({
+    mapZoom,
+    onboardingActive,
+    baySheetFull: baySheetIndex === SNAP_FULL_INDEX,
+  });
+
+  const proximityAnnouncedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!destination) {
+      proximityAnnouncedRef.current = null;
+      return;
+    }
+    const key = `${destination.lat},${destination.lng},${proximityCounts.proxFreeBays}`;
+    if (proximityAnnouncedRef.current === key) return;
+    proximityAnnouncedRef.current = key;
+    const detail = formatProximityDetailLabel(proximityCounts);
+    if (detail) announce(`${detail} near ${destination.name}`);
+  }, [destination, proximityCounts, announce]);
 
   const selectedSegmentId =
     altPin?.source === 'quiet-street' || altPin?.segmentId != null ? altPin?.segmentId ?? null : null;
@@ -388,6 +423,7 @@ export function MapScreen() {
           verdictByBayId={bulkVerdictById}
           onMapEmptyClick={handleMapEmptyClick}
           onBoundsChange={handleMapBounds}
+          onZoomChange={setMapZoom}
         >
           {busyNowLayer}
         </ParkingMap>
@@ -443,7 +479,28 @@ export function MapScreen() {
           anchorStyle,
         ]}
       >
-        <ScopeStrip onOpenFilters={() => filterSheetRef.current?.present()} />
+        <View pointerEvents="box-none" style={{ position: 'relative', width: '100%' }}>
+          {mapZoomHintVisible ? (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: 0,
+                bottom: '100%',
+                marginBottom: MAP_ZOOM_HINT_GAP,
+                maxWidth: '72%',
+                zIndex: zIndex.mapHint,
+              }}
+            >
+              <MapZoomHintPill />
+            </View>
+          ) : null}
+          <ScopeStrip
+            onOpenFilters={() => filterSheetRef.current?.present()}
+            proxFreeBays={proximityCounts.proxFreeBays}
+            proxFreeSpots={proximityCounts.proxFreeSpots}
+          />
+        </View>
       </Animated.View>
 
       <Animated.View

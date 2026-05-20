@@ -20,7 +20,7 @@ import { useMapState } from '../../hooks/useMapState'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { useDebouncedPlannerParams } from '../../hooks/useDebouncedPlannerParams'
 import { fetchAccessibilityNearby, fetchAccessibilityAll, fetchEvaluateBulk } from '../../services/apiBays'
-import { destinationLatLng, SEARCH_RADIUS_M } from '../../utils/mapGeo'
+import { destinationLatLng, formatProximityFreeBaysLabel, getMobileClusterHintBottomCss, SEARCH_RADIUS_M } from '../../utils/mapGeo'
 import {
   DEFAULT_PLANNER_DURATION_MINS,
   melbourneWallClockToAwareIso,
@@ -798,6 +798,26 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
     </>
   )
 
+  const proximityFreeBaysLabel = destination
+    ? formatProximityFreeBaysLabel(proxFreeBays, proxFreeSpots)
+    : null
+  const mobileClusterHintBottom = useMemo(() => {
+    if (!isMobile) return null
+    return getMobileClusterHintBottomCss({
+      tabBarPx: TAB_BAR_HEIGHT,
+      snapPeek: SNAP_PEEK,
+      mobileProxChipVisible: Boolean(proximityFreeBaysLabel),
+    })
+  }, [isMobile, proximityFreeBaysLabel])
+  const proximityFreeBaysChip = proximityFreeBaysLabel ? (
+    <div
+      data-testid="map-proximity-free-bays"
+      className="rounded-lg bg-white/85 backdrop-blur-md px-2.5 py-1.5 border border-slate-200/50 shadow-sm text-[11px] font-medium text-gray-700 dark:bg-surface-dark-secondary/85 dark:border-slate-600/40 dark:text-gray-200"
+    >
+      {proximityFreeBaysLabel}
+    </div>
+  ) : null
+
   const filterInnerContent = (
     <>
       <div className="w-full rounded-xl overflow-hidden bg-white/85 backdrop-blur-md border border-slate-200/70 shadow-sm dark:bg-surface-dark-secondary/85 dark:border-slate-600/50">
@@ -837,13 +857,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
       <div className="rounded-lg bg-white/85 backdrop-blur-md px-2.5 py-1 border border-slate-200/50 shadow-sm dark:bg-surface-dark-secondary/85 dark:border-slate-600/40">
         {scopeStrip}
       </div>
-      {destination && proxFreeBays > 0 && (
-        <div className="rounded-lg bg-white/85 backdrop-blur-md px-2.5 py-1.5 border border-slate-200/50 shadow-sm text-[11px] font-medium text-gray-700 dark:bg-surface-dark-secondary/85 dark:border-slate-600/40 dark:text-gray-200">
-          {proxFreeSpots === proxFreeBays
-            ? `${proxFreeBays} free bay${proxFreeBays !== 1 ? 's' : ''} within ${SEARCH_RADIUS_M} m`
-            : `${proxFreeSpots} free spot${proxFreeSpots !== 1 ? 's' : ''} across ${proxFreeBays} bay${proxFreeBays !== 1 ? 's' : ''} within ${SEARCH_RADIUS_M} m`}
-        </div>
-      )}
+      {proximityFreeBaysChip}
     </>
   )
 
@@ -877,6 +891,8 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
           destZoom={destinationMapZoom}
           isMobile={isMobile}
           hideHint={isMobile && legendOpen}
+          mobileProxChipVisible={isMobile && Boolean(proximityFreeBaysLabel)}
+          mobileClusterHintBottom={mobileClusterHintBottom}
           busyNow={parkingChanceActive}
           busyNowManifest={busyNowManifest}
           busyNowQuietSegments={parkingChanceActive ? quietSegmentsAll : undefined}
@@ -972,6 +988,7 @@ const { date: arriveDate, time: arriveTime } = splitMelbourneDateTimeParts(plann
                 ))}
               </div>
             </div>
+            {proximityFreeBaysChip}
           </div>
           </>
         ) : (

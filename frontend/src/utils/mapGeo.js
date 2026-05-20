@@ -90,6 +90,33 @@ export function walkingMinutesFromMeters(m) {
   return Math.max(1, Math.ceil(m / 80))
 }
 
+/** Web MapPage proximity chip copy; null when no free bays. */
+export function formatProximityFreeBaysLabel(proxFreeBays, proxFreeSpots, radiusM = SEARCH_RADIUS_M) {
+  if (!proxFreeBays || proxFreeBays <= 0) return null
+  if (proxFreeSpots === proxFreeBays) {
+    return `${proxFreeBays} free bay${proxFreeBays !== 1 ? 's' : ''} within ${radiusM} m`
+  }
+  return `${proxFreeSpots} free spot${proxFreeSpots !== 1 ? 's' : ''} across ${proxFreeBays} bay${proxFreeBays !== 1 ? 's' : ''} within ${radiusM} m`
+}
+
+/** Clearance above mobile toolbar stack (px): gap + scope row + hint gap [+ proximity row]. */
+export const MOBILE_CLUSTER_HINT_TOOLBAR_CLEARANCE = {
+  default: 64,
+  withProxChip: 108,
+}
+
+/** CSS bottom for mobile cluster hint — clears sheet peek + tab bar + toolbar stack. */
+export function getMobileClusterHintBottomCss({
+  tabBarPx = 56,
+  snapPeek = 0.15,
+  mobileProxChipVisible = false,
+} = {}) {
+  const clearance = mobileProxChipVisible
+    ? MOBILE_CLUSTER_HINT_TOOLBAR_CLEARANCE.withProxChip
+    : MOBILE_CLUSTER_HINT_TOOLBAR_CLEARANCE.default
+  return `calc(${tabBarPx}px + ${snapPeek * 100}dvh + ${clearance}px)`
+}
+
 /** Default map view – CBD overview. */
 export const DEFAULT_MAP_CENTER = toLatLngTuple(normToLatLng(0.52, 0.66))
 export const DEFAULT_MAP_ZOOM = 15

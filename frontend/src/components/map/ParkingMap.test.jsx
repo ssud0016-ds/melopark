@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getMobileClusterHintBottomCss,
+  MOBILE_CLUSTER_HINT_TOOLBAR_CLEARANCE,
+} from '../../utils/mapGeo'
+import {
   getBayMarkerPathOptions,
   getClusterBadgeColors,
   getStatusFillColor,
@@ -11,6 +15,15 @@ describe('ParkingMap map hints', () => {
   it('uses clear mobile cluster-mode zoom copy', () => {
     expect(MOBILE_CLUSTER_ZOOM_HINT).toBe('Zoom in to view individual bays')
     expect(MOBILE_CLUSTER_ZOOM_HINT).not.toMatch(/for bays\b/i)
+  })
+
+  it('positions mobile hint above toolbar stack using sheet peek clearance', () => {
+    expect(getMobileClusterHintBottomCss()).toBe(
+      `calc(56px + 15dvh + ${MOBILE_CLUSTER_HINT_TOOLBAR_CLEARANCE.default}px)`,
+    )
+    expect(getMobileClusterHintBottomCss({ mobileProxChipVisible: true })).toBe(
+      `calc(56px + 15dvh + ${MOBILE_CLUSTER_HINT_TOOLBAR_CLEARANCE.withProxChip}px)`,
+    )
   })
 })
 
