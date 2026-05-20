@@ -16,7 +16,16 @@ export const MELBOURNE_MAX_BOUNDS = {
 /** Web mapGeo MELBOURNE_MIN_ZOOM — prevents zooming out past CBD overview. */
 export const MELBOURNE_MIN_ZOOM = 13;
 
-export const DEFAULT_MAP_CENTER: [number, number] = [144.9631, -37.8136];
+/** Web mapGeo: normalised x,y in [0,1] (west→east, north→south) → WGS84. */
+export function normToLatLng(x: number, y: number): { lat: number; lng: number } {
+  const lat = NORTH_LAT + y * (SOUTH_LAT - NORTH_LAT);
+  const lng = WEST_LNG + x * (EAST_LNG - WEST_LNG);
+  return { lat, lng };
+}
+
+/** Web mapGeo DEFAULT_MAP_CENTER — normToLatLng(0.52, 0.66) as Mapbox [lng, lat]. */
+const _defaultMapCenterNorm = normToLatLng(0.52, 0.66);
+export const DEFAULT_MAP_CENTER: [number, number] = [_defaultMapCenterNorm.lng, _defaultMapCenterNorm.lat];
 /** Web mapGeo DEFAULT_MAP_ZOOM. */
 export const DEFAULT_MAP_ZOOM = 15;
 /** Web mapGeo DESTINATION_MAP_ZOOM. */

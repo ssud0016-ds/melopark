@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  memo,
   type ComponentProps,
   type ReactNode,
   useCallback,
@@ -8,6 +9,7 @@ import {
   useMemo,
   useRef,
 } from 'react';
+import { Platform } from 'react-native';
 import Mapbox, {
   Camera,
   CircleLayer,
@@ -61,6 +63,9 @@ type LayerFilter = NonNullable<ComponentProps<typeof CircleLayer>['filter']>;
 const BAY_POINT: LayerFilter = ['!', ['has', 'point_count']];
 const BAY_REGULAR: LayerFilter = ['all', BAY_POINT, ['==', ['get', 'isAccessible'], 'no']];
 const BAY_ACCESSIBLE: LayerFilter = ['all', BAY_POINT, ['==', ['get', 'isAccessible'], 'yes']];
+
+/** Match web Leaflet: map stays north-up, flat (no bearing / tilt). */
+const FLAT_NORTH_UP = { heading: 0, pitch: 0 } as const;
 
 export type FlyToOptions = {
   zoom?: number;
@@ -125,7 +130,7 @@ function altPinGeoJson(a: AltPin): GeoJSON.FeatureCollection {
   };
 }
 
-export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
+export const ParkingMap = memo(forwardRef<ParkingMapRef, Props>(function ParkingMap(
   {
     bays,
     selectedBayId,
@@ -154,6 +159,11 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
       }),
     [bays, colorBlindMode, accessibilityBayIds, plannerMapActive, verdictByBayId],
   );
+  const bayById = useMemo(() => {
+    const m = new Map<string, Bay>();
+    for (const b of bays) m.set(b.id, b);
+    return m;
+  }, [bays]);
   const styleURL = useMemo(() => mapBasemapStyleUrl(mapDark), [mapDark]);
   const clusterCircleColor = useMemo(
     () => clusterCircleColorExpression(colorBlindMode, mapDark),
@@ -198,6 +208,7 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
           centerCoordinate: [lng, lat],
           zoomLevel: opts?.zoom ?? DESTINATION_MAP_ZOOM,
           animationDuration: opts?.durationMs ?? 600,
+          ...FLAT_NORTH_UP,
         });
       },
       fitBounds(points, opts) {
@@ -250,9 +261,25 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
         centerCoordinate: [destination.lng, destination.lat],
         zoomLevel: DESTINATION_MAP_ZOOM,
         animationDuration: 600,
+        ...FLAT_NORTH_UP,
       });
     }
   }, [destination]);
+
+  const androidMapProps =
+    Platform.OS === 'android'
+      ? ({
+          surfaceView: true,
+          preferredFramesPerSecond: 60,
+          requestDisallowInterceptTouchEvent: true,
+          gestureSettings: {
+            pitchEnabled: false,
+            rotateEnabled: false,
+            pinchZoomDecelerationEnabled: false,
+            panDecelerationFactor: 0,
+          },
+        } as const)
+      : {};
 
   return (
     <MapView
@@ -264,15 +291,22 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
       logoEnabled
       compassEnabled={false}
       scaleBarEnabled={false}
+      pitchEnabled={false}
+      rotateEnabled={false}
       onPress={() => onMapEmptyClick?.()}
       onMapIdle={reportBoundsFromState}
       onDidFinishLoadingMap={() => {
         void reportVisibleBounds();
       }}
+      {...androidMapProps}
     >
       <Camera
         ref={cameraRef}
-        defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: initialZoom }}
+        defaultSettings={{
+          centerCoordinate: initialCenter,
+          zoomLevel: initialZoom,
+          ...FLAT_NORTH_UP,
+        }}
         minZoomLevel={MELBOURNE_MIN_ZOOM}
         maxZoomLevel={MELBOURNE_MAX_ZOOM}
         maxBounds={MELBOURNE_MAX_BOUNDS}
@@ -349,12 +383,13 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
                 centerCoordinate: [lng, lat],
                 zoomLevel: nextZoom,
                 animationDuration: 400,
+                ...FLAT_NORTH_UP,
               });
             }
             return;
           }
           const bayId = props?.bayId;
-          const bay = bays.find((b) => b.id === bayId);
+          const bay = bayId ? bayById.get(bayId) : undefined;
           if (bay) {
             haptics.light();
             onSelectBay(bay);
@@ -461,4 +496,4 @@ export const ParkingMap = forwardRef<ParkingMapRef, Props>(function ParkingMap(
       ) : null}
     </MapView>
   );
-});
+}));

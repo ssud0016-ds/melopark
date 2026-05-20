@@ -43,7 +43,7 @@ export function BusyNowLayer({
 
   return (
     <VectorSource
-      key={`busynow-${mapStyleKey}-${manifest.minute_bucket ?? manifest.data_version ?? 'v'}`}
+      key={`busynow-${mapStyleKey}`}
       id="melopark-busynow-src"
       tileUrlTemplates={[tileUrl]}
       minZoomLevel={manifest.min_zoom ?? 13}

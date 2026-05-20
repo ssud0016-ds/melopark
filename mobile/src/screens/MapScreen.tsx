@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useIsFocused,
+  useNavigation,
+  useRoute,
+  type RouteProp,
+} from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -44,7 +50,8 @@ import type { TabParamList } from '../navigation/types';
 import type { PressureBounds } from '../services/apiPressure';
 import { fetchEvaluateBulk, type Bay } from '../services/apiBays';
 import { useDebouncedPlannerParams } from '../hooks/useDebouncedPlannerParams';
-import { boundsToKey, isSignificantBoundsChange } from '../utils/mapBounds';
+import { boundsToKey, cullBaysToBounds, isSignificantBoundsChange } from '../utils/mapBounds';
+import { verdictMapFingerprint } from '../utils/verdictMapFingerprint';
 import { buildQuietStreetSelection, mapSegmentsToQuietStreets } from '../utils/quietStreets';
 import { frameMapToAlternative } from '../utils/alternativeNavigation';
 import {
@@ -52,7 +59,7 @@ import {
   displayAlternativeLabel,
 } from '../utils/destinationPressure';
 import type { PressureAlternativeZone } from '../types/pressureAlternatives';
-import { DEFAULT_CBD_BOUNDS, DESTINATION_MAP_ZOOM, QUIET_STREET_FLY_MS, SEARCH_RADIUS_M } from '../utils/mapGeo';
+import { DESTINATION_MAP_ZOOM, QUIET_STREET_FLY_MS, SEARCH_RADIUS_M } from '../utils/mapGeo';
 
 type Nav = BottomTabNavigationProp<TabParamList, 'MapTab'>;
 
@@ -61,6 +68,7 @@ const TAB_BAR_HIDDEN = { display: 'none' as const };
 export function MapScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteProp<TabParamList, 'MapTab'>>();
+  const isMapTabFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { bays, loading } = useBays();
   const [selectedBayId, setSelectedBayId] = useState<string | null>(null);
@@ -80,7 +88,8 @@ export function MapScreen() {
     return bays.filter((b) => allow.has(b.id)).length;
   }, [accessibleOnly, accessibleBayIds, bays]);
   const [onboardingActive, setOnboardingActive] = useState(false);
-  const [mapBounds, setMapBounds] = useState<PressureBounds | null>(DEFAULT_CBD_BOUNDS);
+  /** Web MapPage: null until map reports bounds (quiet segments / planner wait for first viewport). */
+  const [mapBounds, setMapBounds] = useState<PressureBounds | null>(null);
 
   const { manifest, status: busyNowStatus } = useBusyNow(true);
   const parkingChanceActive =
@@ -103,6 +112,11 @@ export function MapScreen() {
   );
 
   const debouncedBounds = useDebouncedValue(mapBounds, 300);
+
+  const viewportBays = useMemo(
+    () => cullBaysToBounds(bays, debouncedBounds),
+    [bays, debouncedBounds],
+  );
   const lastReportedBoundsRef = useRef<PressureBounds | null>(null);
   const mapRef = useRef<ParkingMapRef>(null);
 
@@ -113,10 +127,12 @@ export function MapScreen() {
 
   const debouncedPlanner = useDebouncedPlannerParams(plannerParams, 300);
   const [bulkVerdictById, setBulkVerdictById] = useState<Record<string, string>>({});
+  const bulkVerdictFpRef = useRef<string>('');
 
   useEffect(() => {
     if (!debouncedPlanner || !debouncedBounds) {
-      setBulkVerdictById({});
+      bulkVerdictFpRef.current = '';
+      setBulkVerdictById((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       return;
     }
     let cancelled = false;
@@ -127,6 +143,9 @@ export function MapScreen() {
       for (const r of rows) {
         if (r?.bay_id != null) next[String(r.bay_id)] = r.verdict;
       }
+      const fp = verdictMapFingerprint(next);
+      if (fp === bulkVerdictFpRef.current) return;
+      bulkVerdictFpRef.current = fp;
       setBulkVerdictById(next);
     });
     return () => {
@@ -156,7 +175,7 @@ export function MapScreen() {
     loading: quietSegmentsLoading,
     error: quietSegmentsError,
   } = useQuietestSegments({
-    bounds: debouncedBounds,
+    bounds: mapBounds,
     enabled: quietSegmentsEnabled,
   });
 
@@ -224,6 +243,8 @@ export function MapScreen() {
     lastReportedBoundsRef.current = b;
     setMapBounds((prev) => (boundsToKey(prev) === boundsToKey(b) ? prev : b));
   }, []);
+
+  const handleMapEmptyClick = useCallback(() => setAltPin(null), [setAltPin]);
 
   const handleQuietStreetClick = useCallback(
     (street: ReturnType<typeof mapSegmentsToQuietStreets>[number]) => {
@@ -326,6 +347,21 @@ export function MapScreen() {
     if (altPin && !destination) pcSheetRef.current?.snapTo(SNAP_HALF);
   }, [altPin, destination]);
 
+  const busyNowLayer = useMemo(
+    () =>
+      parkingChanceActive && manifest ? (
+        <BusyNowLayer
+          manifest={manifest}
+          mapStyleKey={mapDark ? 'dark' : 'light'}
+          colorBlindMode={colorBlindMode}
+          destination={destination}
+          dimRadiusM={destination ? SEARCH_RADIUS_M : undefined}
+          onSegmentPress={onSegmentPress}
+        />
+      ) : null,
+    [parkingChanceActive, manifest, mapDark, colorBlindMode, destination, onSegmentPress],
+  );
+
   return (
     <View
       className="flex-1 bg-surface dark:bg-surface-dark"
@@ -336,10 +372,10 @@ export function MapScreen() {
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color={colors.brand} />
         </View>
-      ) : (
+      ) : isMapTabFocused ? (
         <ParkingMap
           ref={mapRef}
-          bays={bays}
+          bays={viewportBays}
           selectedBayId={selectedBayId}
           onSelectBay={onSelectBay}
           destination={destination}
@@ -350,20 +386,13 @@ export function MapScreen() {
           accessibilityBayIds={accessibleBayIds}
           plannerMapActive={Boolean(filters.plannerArrivalIso)}
           verdictByBayId={bulkVerdictById}
-          onMapEmptyClick={() => setAltPin(null)}
+          onMapEmptyClick={handleMapEmptyClick}
           onBoundsChange={handleMapBounds}
         >
-          {parkingChanceActive && manifest ? (
-            <BusyNowLayer
-              manifest={manifest}
-              mapStyleKey={mapDark ? 'dark' : 'light'}
-              colorBlindMode={colorBlindMode}
-              destination={destination}
-              dimRadiusM={destination ? SEARCH_RADIUS_M : undefined}
-              onSegmentPress={onSegmentPress}
-            />
-          ) : null}
+          {busyNowLayer}
         </ParkingMap>
+      ) : (
+        <View className="flex-1 bg-surface dark:bg-surface-dark" />
       )}
 
       <SearchBar

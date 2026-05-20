@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { fetchParkingBays, type Bay } from '../services/apiBays';
+import { baysMapFingerprint } from '../utils/baysMapFingerprint';
 import { useAppFocus } from './useAppFocus';
 
 const POLL_MS = 10_000;
@@ -10,12 +11,17 @@ export function useBays() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mapFingerprintRef = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       const raw = await fetchParkingBays();
-      setBays(raw);
-      setLastUpdated(new Date());
+      const fp = baysMapFingerprint(raw);
+      if (fp !== mapFingerprintRef.current) {
+        mapFingerprintRef.current = fp;
+        setBays(raw);
+        setLastUpdated(new Date());
+      }
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load parking data');

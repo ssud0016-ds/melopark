@@ -1,4 +1,4 @@
-import { boundsFromLatLngs } from '../mapGeo';
+import { boundsFromLatLngs, DEFAULT_MAP_CENTER, normToLatLng } from '../mapGeo';
 
 describe('mapGeo boundsFromLatLngs', () => {
   test('wraps two CBD points with non-zero span', () => {
@@ -24,5 +24,13 @@ describe('mapGeo boundsFromLatLngs', () => {
 
   test('returns null for empty input', () => {
     expect(boundsFromLatLngs([])).toBeNull();
+  });
+});
+
+describe('normToLatLng / DEFAULT_MAP_CENTER', () => {
+  test('DEFAULT_MAP_CENTER is Mapbox lng,lat from web norm 0.52, 0.66', () => {
+    const ll = normToLatLng(0.52, 0.66);
+    expect(DEFAULT_MAP_CENTER[0]).toBeCloseTo(ll.lng, 10);
+    expect(DEFAULT_MAP_CENTER[1]).toBeCloseTo(ll.lat, 10);
   });
 });
