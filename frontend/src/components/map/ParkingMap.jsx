@@ -14,6 +14,7 @@ import L from 'leaflet'
 import {
   bayLatLng,
   destinationLatLng,
+  getMobileClusterHintBottomCss,
   SEARCH_RADIUS_M,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
@@ -298,6 +299,8 @@ export default function ParkingMap({
   destZoom = DESTINATION_MAP_ZOOM,
   isMobile = false,
   hideHint = false,
+  mobileProxChipVisible = false,
+  mobileClusterHintBottom = null,
   busyNow = false,
   busyNowManifest = null,
   busyNowQuietSegments = undefined,
@@ -704,12 +707,14 @@ export default function ParkingMap({
 
         {zoomLevel < CLUSTER_ZOOM_CUTOFF && !hideHint && (
           <div
-            className="pointer-events-none absolute z-[450] rounded-xl border border-brand bg-white/95 px-3 py-1.5 text-xs font-semibold text-brand shadow-card text-center dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
+            className="pointer-events-none absolute z-[510] rounded-xl border border-brand bg-white/95 px-3 py-1.5 text-xs font-semibold text-brand shadow-card text-center dark:border-brand-300/70 dark:bg-surface-dark-secondary/95 dark:text-brand-100"
             style={
               isMobile
                 ? {
                     left: '14px',
-                    bottom: destination ? '108px' : '86px',
+                    bottom:
+                      mobileClusterHintBottom ??
+                      getMobileClusterHintBottomCss({ mobileProxChipVisible }),
                     width: 'max-content',
                     maxWidth: 'calc(100% - 144px)',
                     whiteSpace: showLimitedBays ? 'nowrap' : 'normal',

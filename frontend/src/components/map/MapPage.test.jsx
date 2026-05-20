@@ -176,6 +176,27 @@ describe('MapPage toolbar layout', () => {
     expect(screen.queryByRole('button', { name: /accessibility mode/i })).not.toBeInTheDocument()
   })
 
+  it('shows proximity free bays chip on mobile when destination has available bays nearby', () => {
+    mockMapState.destination = { lat: -37.81, lng: 144.96, name: 'RMIT' }
+    setViewportWidth(414)
+    const bays = [
+      { id: 'b1', type: 'available', lat: -37.81, lng: 144.96, free: 1, hasRules: true },
+      { id: 'b2', type: 'available', lat: -37.8102, lng: 144.9602, free: 1, hasRules: true },
+    ]
+    render(<MapPage bays={bays} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    expect(screen.getByTestId('map-proximity-free-bays')).toHaveTextContent('2 free bays within 400 m')
+    const mapProps = mockParkingMap.mock.calls.at(-1)?.[0]
+    expect(mapProps?.mobileProxChipVisible).toBe(true)
+  })
+
+  it('hides proximity free bays chip on mobile without destination', () => {
+    setViewportWidth(414)
+    const bays = [{ id: 'b1', type: 'available', lat: -37.81, lng: 144.96, free: 1, hasRules: true }]
+    render(<MapPage bays={bays} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)
+    expect(screen.queryByTestId('map-proximity-free-bays')).not.toBeInTheDocument()
+    expect(mockParkingMap.mock.calls.at(-1)?.[0]?.mobileProxChipVisible).toBe(false)
+  })
+
   it('uses a single filter summary on mobile and opens filters in a bottom sheet', () => {
     setViewportWidth(414)
     render(<MapPage bays={[]} lastUpdated={null} apiError={null} apiLoading={false} onRetry={undefined} />)

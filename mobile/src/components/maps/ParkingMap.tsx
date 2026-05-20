@@ -101,6 +101,7 @@ type Props = {
   verdictByBayId?: Record<string, string>;
   onMapEmptyClick?: () => void;
   onBoundsChange?: (bounds: PressureBounds) => void;
+  onZoomChange?: (zoom: number) => void;
   children?: ReactNode;
 };
 
@@ -147,6 +148,7 @@ export const ParkingMap = memo(forwardRef<ParkingMapRef, Props>(function Parking
     verdictByBayId,
     onMapEmptyClick,
     onBoundsChange,
+    onZoomChange,
     children,
   },
   ref,
@@ -188,7 +190,10 @@ export const ParkingMap = memo(forwardRef<ParkingMapRef, Props>(function Parking
   const reportBoundsFromState = useCallback(
     (state: MapState) => {
       const z = state?.properties?.zoom;
-      if (typeof z === 'number') zoomRef.current = z;
+      if (typeof z === 'number') {
+        zoomRef.current = z;
+        onZoomChange?.(z);
+      }
       if (!onBoundsChange) return;
       const b = state?.properties?.bounds;
       if (b?.ne && b?.sw) {
@@ -197,7 +202,7 @@ export const ParkingMap = memo(forwardRef<ParkingMapRef, Props>(function Parking
       }
       void reportVisibleBounds();
     },
-    [onBoundsChange, reportVisibleBounds],
+    [onBoundsChange, onZoomChange, reportVisibleBounds],
   );
 
   useImperativeHandle(
@@ -295,6 +300,7 @@ export const ParkingMap = memo(forwardRef<ParkingMapRef, Props>(function Parking
       rotateEnabled={false}
       onPress={() => onMapEmptyClick?.()}
       onMapIdle={reportBoundsFromState}
+      onCameraChanged={reportBoundsFromState}
       onDidFinishLoadingMap={() => {
         void reportVisibleBounds();
       }}

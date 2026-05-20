@@ -12,6 +12,12 @@ export const MAP_CHROME_SHEET_GAP = 12;
 /** ScopeStrip / MapLegend row height (min touch target). */
 export const MAP_CHROME_PILL_HEIGHT = 44;
 
+/** MapZoomHint pill height (padding + single line). */
+export const MAP_ZOOM_HINT_HEIGHT = 34;
+
+/** Gap between zoom hint and ScopeStrip row. */
+export const MAP_ZOOM_HINT_GAP = 8;
+
 /** Pure helpers for unit tests. */
 export function chromeTranslateYFromSheetTop(
   sheetTopY: number,
@@ -28,6 +34,28 @@ export function chromeTranslateYWithoutSheet(
   gap = MAP_CHROME_SHEET_GAP,
 ): number {
   return layoutHeight - tabBarOffset - pillHeight - gap;
+}
+
+/** Zoom hint sits above the ScopeStrip / MapLegend row. */
+export function chromeHintTranslateYFromSheetTop(
+  sheetTopY: number,
+  pillHeight = MAP_CHROME_PILL_HEIGHT,
+  sheetGap = MAP_CHROME_SHEET_GAP,
+  hintGap = MAP_ZOOM_HINT_GAP,
+  hintHeight = MAP_ZOOM_HINT_HEIGHT,
+): number {
+  return sheetTopY - pillHeight - sheetGap - hintGap - hintHeight;
+}
+
+export function chromeHintTranslateYWithoutSheet(
+  layoutHeight: number,
+  tabBarOffset: number,
+  pillHeight = MAP_CHROME_PILL_HEIGHT,
+  sheetGap = MAP_CHROME_SHEET_GAP,
+  hintGap = MAP_ZOOM_HINT_GAP,
+  hintHeight = MAP_ZOOM_HINT_HEIGHT,
+): number {
+  return layoutHeight - tabBarOffset - pillHeight - sheetGap - hintGap - hintHeight;
 }
 
 /**
@@ -67,10 +95,11 @@ export function useMapChromeAnchor(sheetActive: boolean) {
   return useMemo(
     () => ({
       animatedPosition,
+      layoutHeight,
       anchorStyle,
       tabBarOffset,
       onMapLayout,
     }),
-    [animatedPosition, anchorStyle, tabBarOffset, onMapLayout],
+    [animatedPosition, layoutHeight, anchorStyle, tabBarOffset, onMapLayout],
   );
 }
