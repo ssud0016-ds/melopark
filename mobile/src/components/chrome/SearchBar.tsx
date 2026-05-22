@@ -1,6 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
+  Keyboard,
   Pressable,
   ScrollView,
   Text,
@@ -11,6 +21,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, motion, nativeSearchBarHeight, useReducedMotion, zIndex } from '../../design-system';
+import { MAP_SEARCH_COPY } from '../../content/searchCopy';
 import { LANDMARKS, type Landmark } from '../../data/landmarks';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -18,6 +29,10 @@ import { apiBase } from '../../services/api';
 import { LogoMark } from '../common/LogoMark';
 
 export type SearchBarVariant = 'map' | 'predictions';
+
+export type SearchBarRef = {
+  dismiss: () => void;
+};
 
 type Props = {
   destination: Landmark | null;
@@ -28,6 +43,7 @@ type Props = {
   variant?: SearchBarVariant;
   onboardingActive?: boolean;
   onFirstTap?: () => void;
+  onFocusChange?: (focused: boolean) => void;
 };
 
 type LandmarkApiResult = {
@@ -44,7 +60,6 @@ function truncate(s: string, n = 26) {
 }
 
 function categoryGlyph(): string {
-  // Placeholder dot until SVG glyph set ships. Avoid emoji per MASTER anti-pattern.
   return '•';
 }
 
@@ -59,16 +74,20 @@ function highlight(text: string, q: string): { match: string; before: string; af
   };
 }
 
-export function SearchBar({
-  destination,
-  onPick,
-  onClear,
-  onSettingsOpen,
-  onNavTrigger,
-  variant = 'map',
-  onboardingActive = false,
-  onFirstTap,
-}: Props) {
+export const SearchBar = forwardRef<SearchBarRef, Props>(function SearchBar(
+  {
+    destination,
+    onPick,
+    onClear,
+    onSettingsOpen,
+    onNavTrigger,
+    variant = 'map',
+    onboardingActive = false,
+    onFirstTap,
+    onFocusChange,
+  },
+  ref,
+) {
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
@@ -79,6 +98,31 @@ export function SearchBar({
   const debouncedQ = useDebouncedValue(query, 300);
   const reduced = useReducedMotion();
   const theme = useThemeColors();
+
+  const setFocusedState = useCallback(
+    (next: boolean) => {
+      setFocused(next);
+      onFocusChange?.(next);
+    },
+    [onFocusChange],
+  );
+
+  const dismissSearch = useCallback(() => {
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+    setFocusedState(false);
+  }, [setFocusedState]);
+
+  useImperativeHandle(ref, () => ({ dismiss: dismissSearch }), [dismissSearch]);
+
+  useEffect(() => {
+    if (!focused) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      dismissSearch();
+      return true;
+    });
+    return () => sub.remove();
+  }, [focused, dismissSearch]);
 
   const [ringState, setRingState] = useState<'pulse' | 'static' | 'none'>(
     onboardingActive ? (reduced ? 'static' : 'pulse') : 'none',
@@ -113,7 +157,6 @@ export function SearchBar({
 
   const ringStyle = useAnimatedStyle(() => ({ opacity: ringOpacity.value, transform: [{ scale: ringScale.value }] }));
 
-  // API search
   useEffect(() => {
     const q = debouncedQ.trim();
     if (!q) {
@@ -154,7 +197,6 @@ export function SearchBar({
     };
   }, [debouncedQ]);
 
-  // 250ms delay before "No matches"
   useEffect(() => {
     if (!query.trim() || apiLoading) {
       setShowEmpty(false);
@@ -177,9 +219,10 @@ export function SearchBar({
 
   const showDropdown = focused && variant === 'map';
   const inputValue = destination ? truncate(destination.name) : query;
+  const showCancel = focused && !destination;
 
   const handleFocus = () => {
-    setFocused(true);
+    setFocusedState(true);
     if (onboardingActive && ringState === 'pulse') {
       setRingState('static');
       onFirstTap?.();
@@ -188,14 +231,14 @@ export function SearchBar({
   };
 
   const handleBlur = () => {
-    // Defer slightly so row tap fires first
-    setTimeout(() => setFocused(false), 120);
+    setTimeout(() => setFocusedState(false), 120);
   };
 
   const handlePick = (l: Landmark) => {
     setQuery('');
-    setFocused(false);
     inputRef.current?.blur();
+    Keyboard.dismiss();
+    setFocusedState(false);
     onPick(l);
   };
 
@@ -229,7 +272,9 @@ export function SearchBar({
         />
         <View
           accessibilityRole="search"
-          accessibilityLabel={destination ? `Destination ${destination.name}` : 'Search Melbourne CBD'}
+          accessibilityLabel={
+            destination ? `Destination ${destination.name}` : MAP_SEARCH_COPY.accessibilityLabelEmpty
+          }
           style={{
             height: nativeSearchBarHeight,
             borderRadius: 12,
@@ -255,7 +300,8 @@ export function SearchBar({
             onChangeText={setQuery}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            placeholder="Search Melbourne CBD…"
+            onSubmitEditing={dismissSearch}
+            placeholder={MAP_SEARCH_COPY.placeholder}
             placeholderTextColor={theme.textMuted}
             style={{ flex: 1, minWidth: 0, fontSize: 14, color: theme.text }}
             returnKeyType="search"
@@ -269,6 +315,16 @@ export function SearchBar({
           >
             <Text style={{ fontSize: 20, color: theme.tabActive }}>⚙</Text>
           </Pressable>
+          {showCancel ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close search"
+              onPress={dismissSearch}
+              style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Text style={{ fontSize: 22, color: theme.textMuted }}>×</Text>
+            </Pressable>
+          ) : null}
           {destination ? (
             <Pressable
               accessibilityRole="button"
@@ -309,8 +365,21 @@ export function SearchBar({
           ) : null}
           {!apiLoading && query.trim() && showEmpty && dropdownResults.length === 0 ? (
             <View style={{ padding: 16 }}>
-              <Text style={{ fontSize: 13, color: theme.textSecondary }}>
-                No matches. Tip: tap a colored bay on the map to see live availability.
+              <Text style={{ fontSize: 13, color: theme.textSecondary }}>{MAP_SEARCH_COPY.emptyHint}</Text>
+            </View>
+          ) : null}
+          {!query.trim() ? (
+            <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4 }}>
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: '700',
+                  letterSpacing: 0.5,
+                  textTransform: 'uppercase',
+                  color: theme.textMuted,
+                }}
+              >
+                {MAP_SEARCH_COPY.dropdownSection}
               </Text>
             </View>
           ) : null}
@@ -358,4 +427,4 @@ export function SearchBar({
       ) : null}
     </View>
   );
-}
+});

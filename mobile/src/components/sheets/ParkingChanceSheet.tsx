@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DataSourcesSection } from './DataSourcesSection';
 import { DestinationPressureBlock } from './DestinationPressureBlock';
 import {
   colors,
@@ -17,6 +18,7 @@ import type { AltPin } from '../../hooks/useDestination';
 import type { BusyNowStatus } from '../../hooks/useBusyNow';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useTabBarLayout } from '../../navigation/tabBarStyle';
+import type { PressureManifest } from '../../services/apiPressure';
 import type { AlternativesResponse, PressureAlternativeZone } from '../../types/pressureAlternatives';
 import { CHANCE_TEXT } from '../../utils/quietStreets';
 
@@ -63,6 +65,8 @@ type Props = {
   selectedZoneId?: string | number | null;
   onAlternativePress?: (alt: PressureAlternativeZone) => void;
   colorBlindMode?: boolean;
+  /** Tile manifest — drives bottom data sources dropdown (web BusyNowPanel). */
+  manifest?: PressureManifest | null;
   /** Drives ScopeStrip / MapLegend anchor while dragging. */
   animatedPosition?: SharedValue<number>;
 };
@@ -109,6 +113,7 @@ export const ParkingChanceSheet = forwardRef<ParkingChanceSheetRef, Props>((prop
     selectedZoneId = null,
     onAlternativePress,
     colorBlindMode = false,
+    manifest = null,
     animatedPosition,
   } = props;
 
@@ -272,6 +277,8 @@ export const ParkingChanceSheet = forwardRef<ParkingChanceSheetRef, Props>((prop
             onStreetClick={onStreetClick}
           />
         )}
+
+        {manifest ? <DataSourcesSection manifest={manifest} /> : null}
       </BottomSheetScrollView>
     </BottomSheet>
   );

@@ -1,6 +1,7 @@
 import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, sheetSnapPoints, SNAP_HALF, SNAP_FULL } from '../../design-system';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -65,6 +66,7 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
     ref,
   ) => {
     const theme = useThemeColors();
+    const insets = useSafeAreaInsets();
     const sheetRef = useRef<BottomSheetModal>(null);
     const indexRef = useRef(-1);
     const [bay, setBay] = useState<Bay | null>(null);
@@ -231,9 +233,11 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
         activeOffsetY={[-1, 1]}
         enableOverDrag={false}
       >
+        <View style={{ flex: 1 }}>
         <BottomSheetScrollView
           stickyHeaderIndices={[0]}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={{ paddingBottom: 16 }}
+          style={{ flex: 1 }}
         >
           {/* Sticky header — in scroll tree so verdict card is not clipped underneath */}
           <View
@@ -353,14 +357,24 @@ export const BayDetailSheet = forwardRef<BayDetailSheetRef, Props>(
 
               <ParkingSignTranslator evaluation={renderEvaluation} />
 
-              <BayDetailNavActions bay={bay} destination={destination} />
-
               <View style={{ paddingHorizontal: 20, paddingBottom: 20 }}>
                 <SustainabilityBadge carbonData={carbon} />
               </View>
             </>
           )}
         </BottomSheetScrollView>
+
+        <View
+          style={{
+            borderTopWidth: 0.5,
+            borderTopColor: theme.border,
+            backgroundColor: theme.sheet,
+            paddingBottom: Math.max(insets.bottom, 8),
+          }}
+        >
+          <BayDetailNavActions bay={bay} destination={destination} />
+        </View>
+        </View>
       </BottomSheetModal>
     );
   },

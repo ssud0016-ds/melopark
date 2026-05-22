@@ -3,6 +3,11 @@ import { apiBase, buildUrl, fetchJson } from './api';
 const MANIFEST_TTL_MS = 180_000;
 const SEGMENT_DETAIL_TTL_MS = 60_000;
 
+export type DataSourceStatus = {
+  status: string;
+  detail?: string;
+};
+
 export type PressureManifest = {
   data_version?: string;
   minute_bucket?: string;
@@ -11,6 +16,9 @@ export type PressureManifest = {
   min_zoom?: number;
   max_zoom?: number;
   attribution?: string;
+  generated_at?: string;
+  data_sources?: Record<string, DataSourceStatus>;
+  events?: { active_count?: number };
 };
 
 export function buildTileUrlTemplate(manifest: PressureManifest | null | undefined): string | null {

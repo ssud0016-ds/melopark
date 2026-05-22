@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react-native';
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { BayDetailSheet, type BayDetailSheetRef } from '../BayDetailSheet';
 import type { Bay, BayEvaluation } from '../../../services/apiBays';
@@ -15,10 +16,6 @@ jest.mock('../../../services/apiBays', () => ({
 
 jest.mock('../../../hooks/useMapsProvider', () => ({
   useMapsProvider: () => ({ provider: 'google', setProvider: jest.fn(), clearProvider: jest.fn() }),
-}));
-
-jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: jest.fn() }),
 }));
 
 jest.mock('@gorhom/bottom-sheet', () => {
@@ -93,17 +90,24 @@ const SheetHost = forwardRef<BayDetailSheetRef, SheetProps>(function SheetHost(p
   return <BayDetailSheet ref={innerRef} {...props} />;
 });
 
+const safeAreaMetrics = {
+  insets: { top: 0, left: 0, right: 0, bottom: 0 },
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+};
+
 function renderSheet(overrides: Partial<SheetProps> = {}) {
   return render(
-    <SheetHost
-      destination={null}
-      durationFilter="1h"
-      customDuration={60}
-      plannerArrivalIso={null}
-      plannerDurationMins={60}
-      accessibleRulesByBayId={{}}
-      {...overrides}
-    />,
+    <SafeAreaProvider initialMetrics={safeAreaMetrics}>
+      <SheetHost
+        destination={null}
+        durationFilter="1h"
+        customDuration={60}
+        plannerArrivalIso={null}
+        plannerDurationMins={60}
+        accessibleRulesByBayId={{}}
+        {...overrides}
+      />
+    </SafeAreaProvider>,
   );
 }
 

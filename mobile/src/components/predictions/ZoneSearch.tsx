@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
+import { PREDICTIONS_SEARCH_COPY } from '../../content/searchCopy';
 import { colors, haptics } from '../../design-system';
 import type { ForecastWarning } from '../../services/apiForecasts';
 import { useDarkMode } from '../../hooks/useDarkMode';
@@ -40,7 +41,7 @@ export function ZoneSearch({ warnings, value, onChangeQuery, onPick, variant = '
     <View style={{ zIndex: 20 }}>
       <TextInput
         accessibilityLabel="Search parking zones"
-        placeholder={header ? 'Search a street or suburb to find parking' : 'Search a zone…'}
+        placeholder={PREDICTIONS_SEARCH_COPY.placeholder}
         placeholderTextColor={header ? 'rgba(255,255,255,0.45)' : theme.textSecondary}
         value={value}
         onChangeText={(t) => {

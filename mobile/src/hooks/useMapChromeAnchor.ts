@@ -18,6 +18,9 @@ export const MAP_ZOOM_HINT_HEIGHT = 34;
 /** Gap between zoom hint and ScopeStrip row. */
 export const MAP_ZOOM_HINT_GAP = 8;
 
+/** Legend bottom clearance above sheet top — parity with web MapPage mobile legend (+60px). */
+export const MAP_LEGEND_SHEET_CLEARANCE = 60;
+
 /** Pure helpers for unit tests. */
 export function chromeTranslateYFromSheetTop(
   sheetTopY: number,
@@ -58,8 +61,26 @@ export function chromeHintTranslateYWithoutSheet(
   return layoutHeight - tabBarOffset - pillHeight - sheetGap - hintGap - hintHeight;
 }
 
+/** MapLegend bottom offset when sheet tracks animatedPosition (grows upward from bottom). */
+export function legendBottomFromSheetTop(
+  layoutHeight: number,
+  sheetTopY: number,
+  clearance = MAP_LEGEND_SHEET_CLEARANCE,
+): number {
+  return layoutHeight - sheetTopY + clearance;
+}
+
+/** MapLegend bottom offset when parking sheet hidden (idle chrome). */
+export function legendBottomWithoutSheet(
+  tabBarOffset: number,
+  clearance = MAP_LEGEND_SHEET_CLEARANCE,
+): number {
+  return tabBarOffset + clearance;
+}
+
 /**
- * Anchors ScopeStrip + MapLegend to the parking sheet top (gorhom translateY pattern).
+ * Anchors ScopeStrip to the parking sheet top (gorhom translateY pattern).
+ * MapLegend uses legendAnchorStyle (bottom-pinned, web mobile parity).
  */
 export function useMapChromeAnchor(sheetActive: boolean) {
   const { height: windowHeight } = useWindowDimensions();
@@ -92,14 +113,24 @@ export function useMapChromeAnchor(sheetActive: boolean) {
     };
   }, [sheetActive, tabBarOffset]);
 
+  const legendAnchorStyle = useAnimatedStyle(() => {
+    'worklet';
+    const clearance = MAP_LEGEND_SHEET_CLEARANCE;
+    const bottom = sheetActive
+      ? layoutHeight.value - animatedPosition.value + clearance
+      : tabBarOffset + clearance;
+    return { bottom };
+  }, [sheetActive, tabBarOffset]);
+
   return useMemo(
     () => ({
       animatedPosition,
       layoutHeight,
       anchorStyle,
+      legendAnchorStyle,
       tabBarOffset,
       onMapLayout,
     }),
-    [animatedPosition, layoutHeight, anchorStyle, tabBarOffset, onMapLayout],
+    [animatedPosition, layoutHeight, anchorStyle, legendAnchorStyle, tabBarOffset, onMapLayout],
   );
 }

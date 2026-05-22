@@ -25,6 +25,7 @@ import type { MapState } from '@rnmapbox/maps';
 import { colors } from '../../design-system';
 import { haptics } from '../../design-system/haptics';
 import type { Landmark } from '../../data/landmarks';
+import { shouldFlyBackToDefaultOnDestinationClear } from '../../utils/parkingMapCamera';
 import type { AltPin } from '../../hooks/useDestination';
 import type { PressureBounds } from '../../services/apiPressure';
 import {
@@ -174,6 +175,38 @@ export const ParkingMap = memo(forwardRef<ParkingMapRef, Props>(function Parking
   const cameraRef = useRef<Camera>(null);
   const mapViewRef = useRef<MapView>(null);
   const zoomRef = useRef(initialZoom);
+  const prevDestinationRef = useRef<Landmark | null>(null);
+  const hasAppliedInitialCameraRef = useRef(false);
+
+  const applyDefaultMapCamera = useCallback(
+    (durationMs = 0) => {
+      if (!cameraRef.current) return;
+      cameraRef.current.setCamera({
+        centerCoordinate: initialCenter,
+        zoomLevel: initialZoom,
+        animationDuration: durationMs,
+        ...FLAT_NORTH_UP,
+      });
+      zoomRef.current = initialZoom;
+      onZoomChange?.(initialZoom);
+    },
+    [initialCenter, initialZoom, onZoomChange],
+  );
+
+  const applyDestinationCamera = useCallback(
+    (d: Landmark, durationMs = 600) => {
+      if (!cameraRef.current) return;
+      cameraRef.current.setCamera({
+        centerCoordinate: [d.lng, d.lat],
+        zoomLevel: DESTINATION_MAP_ZOOM,
+        animationDuration: durationMs,
+        ...FLAT_NORTH_UP,
+      });
+      zoomRef.current = DESTINATION_MAP_ZOOM;
+      onZoomChange?.(DESTINATION_MAP_ZOOM);
+    },
+    [onZoomChange],
+  );
 
   const reportVisibleBounds = useCallback(async () => {
     if (!onBoundsChange) return;
@@ -261,15 +294,28 @@ export const ParkingMap = memo(forwardRef<ParkingMapRef, Props>(function Parking
   }, [destination, altPin]);
 
   useEffect(() => {
-    if (destination && cameraRef.current) {
-      cameraRef.current.setCamera({
-        centerCoordinate: [destination.lng, destination.lat],
-        zoomLevel: DESTINATION_MAP_ZOOM,
-        animationDuration: 600,
-        ...FLAT_NORTH_UP,
-      });
+    if (!hasAppliedInitialCameraRef.current) return;
+    const prev = prevDestinationRef.current;
+    if (destination) {
+      applyDestinationCamera(destination);
+    } else if (shouldFlyBackToDefaultOnDestinationClear(prev, destination)) {
+      applyDefaultMapCamera(600);
     }
-  }, [destination]);
+    prevDestinationRef.current = destination;
+  }, [destination, applyDestinationCamera, applyDefaultMapCamera]);
+
+  const handleMapReady = useCallback(() => {
+    if (!hasAppliedInitialCameraRef.current) {
+      hasAppliedInitialCameraRef.current = true;
+      if (destination) {
+        applyDestinationCamera(destination, 0);
+      } else {
+        applyDefaultMapCamera(0);
+      }
+      prevDestinationRef.current = destination;
+    }
+    void reportVisibleBounds();
+  }, [destination, applyDestinationCamera, applyDefaultMapCamera, reportVisibleBounds]);
 
   const androidMapProps =
     Platform.OS === 'android'
@@ -301,9 +347,7 @@ export const ParkingMap = memo(forwardRef<ParkingMapRef, Props>(function Parking
       onPress={() => onMapEmptyClick?.()}
       onMapIdle={reportBoundsFromState}
       onCameraChanged={reportBoundsFromState}
-      onDidFinishLoadingMap={() => {
-        void reportVisibleBounds();
-      }}
+      onDidFinishLoadingMap={handleMapReady}
       {...androidMapProps}
     >
       <Camera
