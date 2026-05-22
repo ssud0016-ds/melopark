@@ -19,6 +19,16 @@ describe('MapLegend', () => {
     expect(screen.getByText('About parking chance')).toBeTruthy();
   });
 
+  it('shows full coach copy when About parking chance is opened', () => {
+    render(<MapLegend colorBlindMode={false} parkingChanceActive />);
+    fireEvent.press(screen.getByLabelText('Show legend'));
+    fireEvent.press(screen.getByLabelText('About street parking chance'));
+    expect(
+      screen.getByText('Green streets are easier to find parking. Tap any coloured street to see live data.'),
+    ).toBeTruthy();
+    expect(screen.getByLabelText('Dismiss parking chance tip')).toBeTruthy();
+  });
+
   it('collapses when hide is pressed', () => {
     render(<MapLegend colorBlindMode={false} />);
     fireEvent.press(screen.getByLabelText('Show legend'));

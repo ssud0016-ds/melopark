@@ -1,23 +1,19 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { colors, haptics } from '../../design-system';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { useMapsProvider } from '../../hooks/useMapsProvider';
+import { useMapsProvider, type MapsProvider } from '../../hooks/useMapsProvider';
 import type { Bay } from '../../services/apiBays';
 import type { Landmark } from '../../data/landmarks';
 import { launchMaps } from '../maps/launchMaps';
+import { MapsProviderChooserModal } from '../maps/MapsProviderChooserModal';
 import { buildMapsLaunchArgs } from '../../utils/mapsLaunchArgs';
-import type { RootStackParamList } from '../../navigation/types';
 
 type Props = {
   bay: Bay | null;
   destination: Landmark | null;
 };
-
-type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const COORDS_ERROR =
   'Location for this bay is unavailable. Navigation cannot be opened.';
@@ -37,17 +33,18 @@ function isValidLatLng(v: { lat?: number; lng?: number } | null | undefined): bo
 
 export function BayDetailNavActions({ bay, destination }: Props) {
   const theme = useThemeColors();
-  const { provider } = useMapsProvider();
-  const navigation = useNavigation<Nav>();
+  const { provider, setProvider } = useMapsProvider();
   const [notice, setNotice] = useState<string | null>(null);
   const [coordsError, setCoordsError] = useState<string | null>(null);
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [pendingMode, setPendingMode] = useState<'drive' | 'walk' | null>(null);
 
   const validBay = bay != null && isValidLatLng(bay);
   const canWalk = isValidLatLng(destination);
 
   const onFallback = () => setNotice(FALLBACK_NOTICE);
 
-  const runLaunch = async (chosen: NonNullable<typeof provider>, mode: 'drive' | 'walk') => {
+  const runLaunch = async (chosen: MapsProvider, mode: 'drive' | 'walk') => {
     if (!bay || !validBay) return;
     haptics.medium();
     const walkEnd =
@@ -57,26 +54,32 @@ export function BayDetailNavActions({ bay, destination }: Props) {
     if (!ok) setNotice(FALLBACK_NOTICE);
   };
 
-  const start = async (mode: 'drive' | 'walk') => {
+  const start = (mode: 'drive' | 'walk') => {
     setNotice(null);
     if (!validBay || !bay) {
       setCoordsError(COORDS_ERROR);
       return;
     }
     setCoordsError(null);
-    if (!provider) {
-      navigation.navigate('MapsProviderChooser', {
-        pendingMode: mode,
-        bayLat: bay.lat,
-        bayLng: bay.lng,
-        bayLabel: bay.name ?? `Bay ${bay.id}`,
-        ...(mode === 'walk' && canWalk
-          ? { destLat: destination!.lat, destLng: destination!.lng }
-          : {}),
-      });
+    if (provider) {
+      void runLaunch(provider, mode);
       return;
     }
-    await runLaunch(provider, mode);
+    setPendingMode(mode);
+    setChooserOpen(true);
+  };
+
+  const handleConfirm = (chosen: MapsProvider, remember: boolean) => {
+    if (remember) setProvider(chosen);
+    setChooserOpen(false);
+    const mode = pendingMode;
+    setPendingMode(null);
+    if (mode) void runLaunch(chosen, mode);
+  };
+
+  const handleCloseChooser = () => {
+    setChooserOpen(false);
+    setPendingMode(null);
   };
 
   return (
@@ -154,6 +157,13 @@ export function BayDetailNavActions({ bay, destination }: Props) {
           <Text style={{ fontSize: 12, fontWeight: '500', color: theme.textSecondary }}>{notice}</Text>
         </View>
       ) : null}
+
+      <MapsProviderChooserModal
+        visible={chooserOpen}
+        initialProvider={provider ?? 'google'}
+        onConfirm={handleConfirm}
+        onClose={handleCloseChooser}
+      />
     </View>
   );
 }

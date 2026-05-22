@@ -95,3 +95,28 @@ describe('ParkingChanceSheet quiet street chips', () => {
     expect(onStreetClick).not.toHaveBeenCalled();
   });
 });
+
+describe('ParkingChanceSheet data sources', () => {
+  const manifest = {
+    tile_url_template: '/api/pressure/tiles/{z}/{x}/{y}.mvt',
+    generated_at: new Date().toISOString(),
+    events: { active_count: 1 },
+  };
+
+  test('shows data sources footer when manifest provided', () => {
+    renderSheet(
+      <ParkingChanceSheet
+        destination={null}
+        altPin={null}
+        quietStreets={[]}
+        busyNowStatus="ready"
+        sheetTitle="Parking chance nearby"
+        sheetSubtitle="Quiet streets around current map view"
+        onClearSelectedSuggestion={jest.fn()}
+        manifest={manifest}
+      />,
+    );
+    fireEvent.press(screen.getByLabelText('Data sources'));
+    expect(screen.getByText(/SCATS/i)).toBeTruthy();
+  });
+});

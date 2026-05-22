@@ -52,6 +52,7 @@ export function MapLegend({ colorBlindMode, parkingChanceActive = false }: Props
           borderWidth: 1,
           borderColor: colors.brand,
           backgroundColor: colors.brand,
+          overflow: 'visible',
           shadowColor: '#000',
           shadowOpacity: 0.2,
           shadowRadius: 10,
@@ -93,7 +94,7 @@ export function MapLegend({ colorBlindMode, parkingChanceActive = false }: Props
             </Text>
           </Pressable>
         ) : (
-          <View style={{ padding: 10, maxWidth: 320 }}>
+          <View style={{ paddingHorizontal: 10, paddingTop: 10, paddingBottom: 12, maxWidth: 320 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
               <Text
                 style={{
@@ -147,12 +148,20 @@ export function MapLegend({ colorBlindMode, parkingChanceActive = false }: Props
               <LegendLineRow key={label} color={color} label={label} />
             ))}
             {parkingChanceActive ? (
-              <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 8 }}>
+              <View
+                style={{
+                  marginTop: 8,
+                  borderTopWidth: 1,
+                  borderTopColor: 'rgba(255,255,255,0.2)',
+                  paddingTop: 8,
+                  paddingBottom: 2,
+                }}
+              >
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="About street parking chance"
                   onPress={() => setCoachOpen((v) => !v)}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 }}
                 >
                   <View
                     style={{
@@ -167,7 +176,15 @@ export function MapLegend({ colorBlindMode, parkingChanceActive = false }: Props
                   >
                     <Text style={{ fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.7)' }}>?</Text>
                   </View>
-                  <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>About parking chance</Text>
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      lineHeight: 15,
+                      color: 'rgba(255,255,255,0.7)',
+                    }}
+                  >
+                    About parking chance
+                  </Text>
                 </Pressable>
                 {coachOpen ? (
                   <View
@@ -175,18 +192,24 @@ export function MapLegend({ colorBlindMode, parkingChanceActive = false }: Props
                       marginTop: 6,
                       borderRadius: 8,
                       backgroundColor: 'rgba(255,255,255,0.1)',
-                      padding: 8,
+                      paddingHorizontal: 8,
+                      paddingTop: 8,
+                      paddingBottom: 10,
+                      overflow: 'visible',
                     }}
                   >
-                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.9)', lineHeight: 14 }}>
-                      Green streets are easier to find parking. Tap any coloured street to see live data.{' '}
-                      <Text
-                        onPress={() => setCoachOpen(false)}
-                        style={{ fontWeight: '700', textDecorationLine: 'underline' }}
-                      >
-                        Got it
-                      </Text>
+                    <Text style={coachBodyStyle}>
+                      Green streets are easier to find parking. Tap any coloured street to see live data.
                     </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Dismiss parking chance tip"
+                      onPress={() => setCoachOpen(false)}
+                      hitSlop={4}
+                      style={{ alignSelf: 'flex-start', marginTop: 4 }}
+                    >
+                      <Text style={coachDismissStyle}>Got it</Text>
+                    </Pressable>
                   </View>
                 ) : null}
               </View>
@@ -202,6 +225,21 @@ const legendLabelStyle = {
   flex: 1,
   fontSize: 11,
   color: 'rgba(255,255,255,0.95)',
+} as const;
+
+const coachBodyStyle = {
+  fontSize: 10,
+  lineHeight: 16,
+  color: 'rgba(255,255,255,0.9)',
+} as const;
+
+const coachDismissStyle = {
+  fontSize: 10,
+  lineHeight: 16,
+  fontFamily: fontFamily.sansSemiBold,
+  fontWeight: '700',
+  textDecorationLine: 'underline',
+  color: 'rgba(255,255,255,0.9)',
 } as const;
 
 function LegendDotRow({ color, label }: { color: string; label: string }) {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import {
   useFocusEffect,
@@ -17,7 +17,7 @@ import { ParkingMap, type ParkingMapRef } from '../components/maps/ParkingMap';
 import { MapLegend } from '../components/map/MapLegend';
 import { isMapZoomHintVisible, MapZoomHintPill } from '../components/map/MapZoomHint';
 import { OnboardingOverlay } from '../components/onboarding/OnboardingOverlay';
-import { SearchBar } from '../components/chrome/SearchBar';
+import { SearchBar, type SearchBarRef } from '../components/chrome/SearchBar';
 import { ScopeStrip } from '../components/chrome/ScopeStrip';
 import { ParkingChanceSheet, type ParkingChanceSheetRef } from '../components/sheets/ParkingChanceSheet';
 import { FilterSheet, type FilterSheetRef } from '../components/sheets/FilterSheet';
@@ -61,7 +61,13 @@ import {
   displayAlternativeLabel,
 } from '../utils/destinationPressure';
 import type { PressureAlternativeZone } from '../types/pressureAlternatives';
-import { DESTINATION_MAP_ZOOM, DEFAULT_MAP_ZOOM, QUIET_STREET_FLY_MS, SEARCH_RADIUS_M } from '../utils/mapGeo';
+import {
+  DEFAULT_MAP_CENTER,
+  DEFAULT_MAP_ZOOM,
+  DESTINATION_MAP_ZOOM,
+  QUIET_STREET_FLY_MS,
+  SEARCH_RADIUS_M,
+} from '../utils/mapGeo';
 import {
   formatProximityDetailLabel,
   proximityFreeCounts,
@@ -104,7 +110,7 @@ export function MapScreen() {
     manifest != null &&
     (manifest.total_segments ?? 0) > 0;
   const parkingSheetVisible = busyNowStatus !== 'idle';
-  const { animatedPosition, anchorStyle, onMapLayout } =
+  const { animatedPosition, anchorStyle, legendAnchorStyle, onMapLayout } =
     useMapChromeAnchor(parkingSheetVisible);
   const { announce } = useAccessibility();
   const { needsOnboarding, complete: completeOnboarding, reset: resetOnboarding } = useOnboarding();
@@ -250,6 +256,8 @@ export function MapScreen() {
   const selectedZoneId =
     altPin?.source === 'alternative' && altPin?.zoneId != null ? altPin.zoneId : null;
 
+  const searchBarRef = useRef<SearchBarRef>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
   const bayDetailRef = useRef<BayDetailSheetRef>(null);
   const segmentDetailRef = useRef<SegmentDetailSheetRef>(null);
   const pcSheetRef = useRef<ParkingChanceSheetRef>(null);
@@ -279,7 +287,10 @@ export function MapScreen() {
     setMapBounds((prev) => (boundsToKey(prev) === boundsToKey(b) ? prev : b));
   }, []);
 
-  const handleMapEmptyClick = useCallback(() => setAltPin(null), [setAltPin]);
+  const handleMapEmptyClick = useCallback(() => {
+    searchBarRef.current?.dismiss();
+    setAltPin(null);
+  }, [setAltPin]);
 
   const handleQuietStreetClick = useCallback(
     (street: ReturnType<typeof mapSegmentsToQuietStreets>[number]) => {
@@ -410,6 +421,8 @@ export function MapScreen() {
       ) : isMapTabFocused ? (
         <ParkingMap
           ref={mapRef}
+          initialCenter={DEFAULT_MAP_CENTER}
+          initialZoom={DEFAULT_MAP_ZOOM}
           bays={viewportBays}
           selectedBayId={selectedBayId}
           onSelectBay={onSelectBay}
@@ -431,11 +444,22 @@ export function MapScreen() {
         <View className="flex-1 bg-surface dark:bg-surface-dark" />
       )}
 
+      {searchFocused ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss search"
+          onPress={() => searchBarRef.current?.dismiss()}
+          style={[StyleSheet.absoluteFillObject, { zIndex: zIndex.searchDismiss }]}
+        />
+      ) : null}
+
       <SearchBar
+        ref={searchBarRef}
         destination={destination}
         onPick={(l) => setDestination(l)}
         onClear={() => clearDestination()}
         onSettingsOpen={() => settingsSheetRef.current?.present()}
+        onFocusChange={setSearchFocused}
         onboardingActive={onboardingActive}
         variant="map"
       />
@@ -508,12 +532,13 @@ export function MapScreen() {
         style={[
           {
             position: 'absolute',
-            left: 14,
+            left: 0,
             right: 14 + insets.right,
             zIndex: zIndex.mapChrome,
             alignItems: 'flex-end',
+            overflow: 'visible',
           },
-          anchorStyle,
+          legendAnchorStyle,
         ]}
       >
         <MapLegend colorBlindMode={colorBlindMode} parkingChanceActive={parkingChanceActive} />
@@ -541,6 +566,7 @@ export function MapScreen() {
         selectedZoneId={selectedZoneId}
         onAlternativePress={handleAlternativeClick}
         colorBlindMode={colorBlindMode}
+        manifest={manifest}
       />
 
       <FilterSheet ref={filterSheetRef} />

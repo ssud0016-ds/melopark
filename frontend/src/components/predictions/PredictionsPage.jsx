@@ -3,6 +3,7 @@
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import * as d3 from 'd3'
+import { PREDICTIONS_SEARCH_COPY } from '../../content/searchCopy'
 import BottomTabBar from '../nav/BottomTabBar'
 
 const BRAND='#2E2A8A', TEAL='#1D9E75', GMAPS='#1a73e8'
@@ -405,7 +406,7 @@ export default function PredictionsPage({onNavigateToMap,onNavigate,darkMode}){
             value={q}
             onChange={e=>{setQ(e.target.value);setDrop(true)}}
             onFocus={()=>setDrop(true)}
-            placeholder="Search a street or suburb to find parking"
+            placeholder={PREDICTIONS_SEARCH_COPY.placeholder}
             className="w-full py-3.5 pr-10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30"
             style={{paddingLeft:'2.75rem',background:'rgba(255,255,255,0.13)',border:'1.5px solid rgba(255,255,255,0.2)'}}
           />

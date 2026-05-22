@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { MAP_SEARCH_COPY } from '../../content/searchCopy'
 import { LANDMARKS } from '../../data/mapData'
 import LogoMark from '../common/LogoMark'
 import { useReducedMotion } from '../../hooks/useReducedMotion'
@@ -196,7 +197,7 @@ export default function ChromeSearchBar({
             <LogoMark size={24} />
           </span>
           <span className="flex-1 min-w-0 text-left text-sm text-gray-400 truncate">
-            Search Melbourne CBD...
+            {MAP_SEARCH_COPY.placeholder}
           </span>
           <span className="shrink-0 flex items-center justify-center w-11 h-11" aria-hidden>
             <SettingsIcon className="text-gray-400" />
@@ -243,8 +244,8 @@ export default function ChromeSearchBar({
             onKeyDown={handleKeyDown}
             onFocus={handleFocus}
             onBlur={() => setTimeout(() => setShowDrop(false), 150)}
-            placeholder="Search Melbourne CBD..."
-            aria-label="Search for a destination in Melbourne CBD"
+            placeholder={MAP_SEARCH_COPY.placeholder}
+            aria-label={MAP_SEARCH_COPY.accessibilityLabelEmpty}
             aria-autocomplete="list"
             className="flex-1 min-w-0 border-none bg-transparent outline-none focus-visible:outline-none text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
           />
@@ -282,7 +283,7 @@ export default function ChromeSearchBar({
         >
           {query.trim().length < 2 && (
             <div className="px-4 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-              Popular places
+              {MAP_SEARCH_COPY.dropdownSection}
             </div>
           )}
           {displayMatches.map((item, i) => (
@@ -311,8 +312,8 @@ export default function ChromeSearchBar({
       {showDrop && query.trim().length >= 2 && !destination && matches.length === 0 && !loading && (
         <div className="absolute left-3.5 right-3.5 top-[calc(100%+4px)] bg-white dark:bg-surface-dark-secondary rounded-xl z-50 shadow-card-lg border border-gray-200/60 dark:border-gray-700/60 px-4 py-3.5">
           <div className="text-sm text-gray-500">
-            <div className="font-semibold text-gray-700 dark:text-gray-200">No matching places</div>
-            <div className="text-xs mt-0.5">MeloPark covers Melbourne CBD only. Try a landmark or CBD street.</div>
+            <div className="font-semibold text-gray-700 dark:text-gray-200">{MAP_SEARCH_COPY.noResultsTitle}</div>
+            <div className="text-xs mt-0.5">{MAP_SEARCH_COPY.noResultsDetail}</div>
           </div>
         </div>
       )}
@@ -322,7 +323,7 @@ export default function ChromeSearchBar({
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[200] bg-white dark:bg-surface-dark-secondary rounded-2xl p-7 text-center shadow-card-lg max-w-[280px] w-[90%]">
           <div className="text-base font-bold text-gray-900 dark:text-white mb-2">No results found</div>
           <div className="text-sm text-gray-500 leading-relaxed mb-4">
-            MeloPark covers <span className="font-semibold text-gray-700 dark:text-gray-300">Melbourne CBD only</span> — try "Flinders Street" or "Melbourne Central".
+            {MAP_SEARCH_COPY.noResultsToastDetail}
           </div>
           <button
             onClick={() => { setNoResults(false); clear() }}

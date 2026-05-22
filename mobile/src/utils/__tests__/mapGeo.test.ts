@@ -33,4 +33,13 @@ describe('normToLatLng / DEFAULT_MAP_CENTER', () => {
     expect(DEFAULT_MAP_CENTER[0]).toBeCloseTo(ll.lng, 10);
     expect(DEFAULT_MAP_CENTER[1]).toBeCloseTo(ll.lat, 10);
   });
+
+  /** Web mobile Leaflet default — same norm point as native Mapbox initial camera. */
+  test('DEFAULT_MAP_CENTER matches web mobile CBD overview WGS84', () => {
+    const ll = normToLatLng(0.52, 0.66);
+    expect(ll.lat).toBeCloseTo(-37.817, 2);
+    expect(ll.lng).toBeCloseTo(144.962, 2);
+    expect(DEFAULT_MAP_CENTER[0]).toBeCloseTo(144.962, 2);
+    expect(DEFAULT_MAP_CENTER[1]).toBeCloseTo(-37.817, 2);
+  });
 });

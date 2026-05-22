@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { MAP_SEARCH_COPY } from '../../content/searchCopy'
 import { LANDMARKS } from '../../data/mapData'
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
@@ -154,8 +155,8 @@ export default function SearchBar({ destination, onPick, onClear }) {
           onKeyDown={handleKeyDown}
           onFocus={() => setShowDrop(true)}
           onBlur={() => setTimeout(() => setShowDrop(false), 150)}
-          placeholder="Search Melbourne CBD address or landmark..."
-          aria-label="Search for a destination in Melbourne CBD"
+          placeholder={MAP_SEARCH_COPY.placeholder}
+          aria-label={MAP_SEARCH_COPY.accessibilityLabelEmpty}
           aria-autocomplete="list"
           className="flex-1 border-none bg-transparent outline-none focus-visible:outline-none font-sans text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
         />
@@ -179,7 +180,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
         >
           {query.trim().length < 2 && (
             <div className="px-4 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-              Popular places
+              {MAP_SEARCH_COPY.dropdownSection}
             </div>
           )}
           {displayMatches.map((item, i) => (
@@ -211,8 +212,8 @@ export default function SearchBar({ destination, onPick, onClear }) {
           <div className="flex items-center gap-2.5 text-gray-400 text-sm">
             <SearchIcon size={18} className="shrink-0 text-gray-400" />
             <div>
-              <div className="font-semibold">No matching places</div>
-              <div className="text-xs mt-0.5">MeloPark covers Melbourne CBD only. Try "Flinders", "RMIT", or a CBD street name.</div>
+              <div className="font-semibold">{MAP_SEARCH_COPY.noResultsTitle}</div>
+              <div className="text-xs mt-0.5">{MAP_SEARCH_COPY.noResultsDetail}</div>
             </div>
           </div>
         </div>
@@ -224,7 +225,7 @@ export default function SearchBar({ destination, onPick, onClear }) {
           <div className="mb-3 text-gray-300 dark:text-gray-500"><SearchIcon size={40} /></div>
           <div className="text-base font-bold text-gray-900 dark:text-white mb-2">No results found</div>
           <div className="text-sm text-gray-500 leading-relaxed mb-4">
-            We couldn't find "{query}". MeloPark covers <span className="font-semibold text-gray-700 dark:text-gray-300">Melbourne CBD only</span> - try a landmark like "Flinders Street" or "Melbourne Central".
+            We couldn&apos;t find &quot;{query}&quot;. {MAP_SEARCH_COPY.noResultsToastDetail}
           </div>
           <button
             onClick={() => { setNoResults(false); clear() }}
