@@ -3,6 +3,7 @@ import { DEFAULT_PLANNER_DURATION_MINS } from '../../utils/plannerTime'
 import { bayHeading, bayMissingStreetNote, streetShort } from '../../utils/bayLabels'
 import { cn } from '../../utils/cn'
 import { fetchBayEvaluation, fetchBayCarbon } from '../../services/apiBays'
+import { calcCarbon } from '../../utils/carbonModel'
 import ParkingVerdictPanel from './ParkingVerdictPanel'
 import BayStatusAndLimits from './BayStatusAndLimits'
 import ParkingSignTranslator from './ParkingSignTranslator'
@@ -34,9 +35,32 @@ export default function BayDetailSheet({
   useEffect(() => {
     if (!bay?.id) { setCarbonData(null); return }
     let cancelled = false
-    fetchBayCarbon(bay.id).then((d) => { if (!cancelled) setCarbonData(d) })
+    const statusToOcc = { present: 85, absent: 20, unknown: 54 }
+    const occupancyPct = statusToOcc[bay.status] ?? 54
+    const clientCarbon = calcCarbon({ occupancyPct, walkMetres: 0 })
+    fetchBayCarbon(bay.id)
+      .then((d) => {
+        if (cancelled) return
+        const isConstantFallback = d?.score === 25 && d?.saved_g === 39
+        if (!d || isConstantFallback) {
+          setCarbonData({
+            saved_g:     clientCarbon?.savedG ?? 39,
+            pct_avoided: clientCarbon?.pct    ?? 10,
+            score:       clientCarbon?.score  ?? 25,
+          })
+        } else {
+          setCarbonData(d)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCarbonData({
+          saved_g:     clientCarbon?.savedG ?? 39,
+          pct_avoided: clientCarbon?.pct    ?? 10,
+          score:       clientCarbon?.score  ?? 25,
+        })
+      })
     return () => { cancelled = true }
-  }, [bay?.id])
+  }, [bay?.id, bay?.status])
   const [evalLoading, setEvalLoading] = useState(false)
   const durationMins = savedPlannerDurationMins ?? DEFAULT_PLANNER_DURATION_MINS
 

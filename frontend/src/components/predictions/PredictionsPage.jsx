@@ -101,16 +101,14 @@ function Donut({chart,sel,onSel,dark}){
     if(!ref.current||!chart.length)return
     const el=ref.current
     d3.select(el).selectAll('*').remove()
-    const W=Math.min(el.clientWidth||220,240),H=W+40,cx=W/2,cy=(H+10)/2,R=W*0.32,thick=R*0.26
+    const W=Math.min(el.clientWidth||220,240),H=W+20,cx=W/2,cy=H/2,R=W*0.36,thick=R*0.28
     const tc=dark?'#f1f5f9':'#0f172a',dim=dark?'#64748b':'#94a3b8'
     const svg=d3.select(el).append('svg').attr('width','100%').attr('viewBox',`0 0 ${W} ${H}`).attr('preserveAspectRatio','xMidYMid meet')
-    const n=chart.length,sA=(2*Math.PI)/n,gap=0.06
+    const n=chart.length,sA=(2*Math.PI)/n,gap=0.07
     chart.forEach((d,i)=>{
       const tt=TIERS[d.level]??TIERS.low,isSel=i===sel
       const s=-Math.PI/2+i*sA+gap/2,e=-Math.PI/2+(i+1)*sA-gap/2
-      svg.append('path').attr('d',d3.arc().innerRadius(R-thick).outerRadius(isSel?R+8:R).startAngle(s).endAngle(e)()).attr('transform',`translate(${cx},${cy})`).attr('fill',tt.c).attr('opacity',isSel?1:0.5).style('cursor','pointer').on('click',()=>onSel(i))
-      const mA=-Math.PI/2+(i+0.5)*sA,lR=R+22
-      svg.append('text').attr('x',cx+lR*Math.cos(mA)).attr('y',cy+lR*Math.sin(mA)).attr('text-anchor','middle').attr('dominant-baseline','middle').attr('font-size',isSel?10:8).attr('font-weight',isSel?700:500).attr('fill',isSel?tt.c:dim).style('cursor','pointer').on('click',()=>onSel(i)).text(Math.round(d.occ*100)+'%')
+      svg.append('path').attr('d',d3.arc().innerRadius(R-thick).outerRadius(isSel?R+6:R).startAngle(s).endAngle(e)()).attr('transform',`translate(${cx},${cy})`).attr('fill',tt.c).attr('opacity',isSel?1:0.45).style('cursor','pointer').on('click',()=>onSel(i))
     })
     const cur=chart[sel]??{occ:0.19,level:'low'},ct=TIERS[cur.level]??TIERS.low
     svg.append('text').attr('x',cx).attr('y',cy-9).attr('text-anchor','middle').attr('font-size',W*0.14).attr('font-weight',700).attr('fill',tc).text(Math.round(cur.occ*100)+'%')
