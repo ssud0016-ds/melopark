@@ -18,6 +18,7 @@ export default function App() {
   const [colorBlindMode, setColorBlindMode] = useState(false)
   const [accessibilityAvailableOnly, setAccessibilityAvailableOnly] = useState(false)
   const [triggerOnboarding, setTriggerOnboarding] = useState(false)
+  const [predictionState, setPredictionState] = useState(null)
 
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 900,
@@ -28,9 +29,14 @@ export default function App() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  const handleNavigateToMap = (lat, lon, label) => {
+  const handleNavigateToMap = (lat, lon, label, state = null) => {
+    if (state) setPredictionState(state)
     setFlyTarget({ lat, lon, label, ts: Date.now() })
     setPage('map')
+  }
+  const handleReturnToPredictions = () => {
+    setFlyTarget(null)
+    setPage('predictions')
   }
 
   return (
@@ -66,6 +72,8 @@ export default function App() {
             onSetAccessibilityAvailableOnly={setAccessibilityAvailableOnly}
             triggerOnboarding={triggerOnboarding}
             onOnboardingConsumed={() => setTriggerOnboarding(false)}
+            onReturnToPredictions={handleReturnToPredictions}
+            onFlyTargetConsumed={() => setFlyTarget(null)}
           />
         )}
         {page === 'predictions' && (
@@ -75,6 +83,8 @@ export default function App() {
             darkMode={darkMode}
             onToggleDark={toggleDark}
             onSetTheme={setTheme}
+            savedState={predictionState}
+            onStateChange={setPredictionState}
           />
         )}
         {page === 'about'       && <AboutPage onNavigate={setPage} />}

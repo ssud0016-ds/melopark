@@ -70,18 +70,64 @@ function isSignificantBoundsChange(prev, next) {
   return Math.abs(nextArea - prevArea) / denom >= BOUNDS_AREA_EPS_RATIO
 }
 
-export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry, flyTarget, onNavigate, darkMode, onToggleDark, onSetTheme, onSettingsOpen, colorBlindMode, onToggleColorBlind, accessibilityAvailableOnly, onSetAccessibilityAvailableOnly, triggerOnboarding, onOnboardingConsumed }) {
+export default function MapPage({ bays, lastUpdated, apiError, apiLoading, onRetry, flyTarget, onNavigate, darkMode, onToggleDark, onSetTheme, onSettingsOpen, colorBlindMode, onToggleColorBlind, accessibilityAvailableOnly, onSetAccessibilityAvailableOnly, triggerOnboarding, onOnboardingConsumed, onReturnToPredictions, onFlyTargetConsumed = null }) {
   const mapRef = useRef(null)
   const lastReportedBoundsRef = useRef(null)
 
   // Navigate from Predictions page: fly to selected zone
-  useEffect(() => {
-    if (!flyTarget || !mapRef.current) return
-    const { lat, lon } = flyTarget
-    if (typeof lat === 'number' && typeof lon === 'number') {
-      setTimeout(() => mapRef.current?.flyTo([lat, lon], 17, { duration: 1.2 }), 300)
+  // Navigate from Predictions page: fly to selected zone
+useEffect(() => {
+  if (!flyTarget) return
+  const { lat, lon, label } = flyTarget
+  if (typeof lat !== 'number' || typeof lon !== 'number') return
+
+  // Retry until map is ready — mapRef may be null on first mount
+  let attempts = 0
+  const tryFly = () => {
+    if (mapRef.current) {
+      mapRef.current.flyTo([lat, lon], 17, { duration: 1.2 })
+      // Drop a named popup after fly completes
+      if (label) {
+        setTimeout(() => {
+          if (!mapRef.current) return
+          const parts = label.match(/^(.+?)\s*\((.+)\)$/)
+          const mainName = parts ? parts[1] : label
+          const cross = parts ? parts[2] : null
+          const wrap = document.createElement('div')
+          wrap.style.cssText = 'min-width:160px;font-family:sans-serif;padding:4px 0;'
+          const nameEl = document.createElement('p')
+          nameEl.style.cssText = 'font-weight:700;font-size:13px;margin:0 0 2px;color:#111827;'
+          nameEl.textContent = mainName
+          wrap.appendChild(nameEl)
+          if (cross) {
+            const sub = document.createElement('p')
+            sub.style.cssText = 'font-size:11px;color:#6b7280;margin:0 0 8px;'
+            sub.textContent = cross
+            wrap.appendChild(sub)
+          }
+          if (onReturnToPredictions) {
+            const btn = document.createElement('button')
+            btn.style.cssText = 'width:100%;padding:6px 12px;background:#2E2A8A;color:white;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;'
+            btn.textContent = '← Back to Predictions'
+            btn.onclick = () => { mapRef.current?.closePopup(); onReturnToPredictions() }
+            wrap.appendChild(btn)
+          }
+          const popup = L.popup({ closeButton: true, maxWidth: 240 })
+          .setLatLng([lat, lon])
+          .setContent(wrap)
+          .openOn(mapRef.current)
+        popup.on('remove', () => {
+          onFlyTargetConsumed?.()
+        })
+        }, 1400)
+      }
+    } else if (attempts < 15) {
+      attempts++
+      setTimeout(tryFly, 200)
     }
-  }, [flyTarget])
+  }
+  setTimeout(tryFly, 300)
+}, [flyTarget, onReturnToPredictions, onFlyTargetConsumed])
   const segmentPopupRef = useRef(null)
   const segmentReactRootRef = useRef(null)
   const segmentFetchAbortRef = useRef(null)
