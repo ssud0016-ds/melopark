@@ -7,6 +7,7 @@ import { getStatusFillColor } from './ParkingMap'
 import { SEARCH_RADIUS_M } from '../../utils/mapGeo'
 import * as useBusyNowModule from '../../hooks/useBusyNow'
 import { fetchEvaluateBulk } from '../../services/apiBays'
+import SettingsSheet from '../settings/SettingsSheet'
 
 const mockMapState = vi.hoisted(() => ({ destination: null }))
 const mockDebouncedPlanner = vi.hoisted(() => ({
@@ -142,18 +143,38 @@ function setViewportWidth(w) {
 function renderMapPage(overrides = {}) {
   function Harness() {
     const [settingsOpen, setSettingsOpen] = useState(false)
+    const [colorBlindMode, setColorBlindMode] = useState(false)
+    const [accessibleOnly, setAccessibleOnly] = useState(false)
+
     return (
-      <MapPage
-        bays={[]}
-        lastUpdated={null}
-        apiError={null}
-        apiLoading={false}
-        onRetry={undefined}
-        settingsOpen={settingsOpen}
-        onSettingsOpen={() => setSettingsOpen(true)}
-        onSettingsClose={() => setSettingsOpen(false)}
-        {...overrides}
-      />
+      <>
+        <MapPage
+          bays={[]}
+          lastUpdated={null}
+          apiError={null}
+          apiLoading={false}
+          onRetry={undefined}
+          onSettingsOpen={() => setSettingsOpen(true)}
+          colorBlindMode={colorBlindMode}
+          onToggleColorBlind={() => setColorBlindMode((v) => !v)}
+          accessibilityAvailableOnly={accessibleOnly}
+          onSetAccessibilityAvailableOnly={setAccessibleOnly}
+          onSetTheme={() => {}}
+          {...overrides}
+        />
+        <SettingsSheet
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          darkMode={false}
+          onSetTheme={() => {}}
+          colorBlindMode={colorBlindMode}
+          onToggleColorBlind={() => setColorBlindMode((v) => !v)}
+          accessibleOnly={accessibleOnly}
+          onToggleAccessible={() => setAccessibleOnly((v) => !v)}
+          onNavigate={() => {}}
+          onHelpOpen={() => {}}
+        />
+      </>
     )
   }
   return render(<Harness />)
