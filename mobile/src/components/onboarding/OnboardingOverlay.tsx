@@ -79,7 +79,7 @@ export function OnboardingOverlay({ hasPressureData, destination, onActiveChange
           This app helps you find nearby parking bays, check availability, and view parking rules before you park.
         </Text>
         <Text style={{ fontSize: 14, color: colors.accent, fontWeight: '700' }}>
-          Stop Circling — Start Parking.
+          Park Smart — Never Circle Again.
         </Text>
         <Pressable
           accessibilityRole="button"

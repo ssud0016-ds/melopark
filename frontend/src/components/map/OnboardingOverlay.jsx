@@ -80,7 +80,7 @@ export default function OnboardingOverlay({ onPick, onSkip, busyNowManifest, onS
           <div className="mt-4 text-sm leading-relaxed text-white/80">
             This app helps you find nearby parking bays, check availability, and view parking rules before you park.
           </div>
-          <div className="mt-5 text-sm font-semibold text-accent">Stop Circling — Start Parking</div>
+          <div className="mt-5 text-sm font-semibold text-accent">Park Smart — Never Circle Again</div>
           <button
             type="button"
             onClick={handleStart}

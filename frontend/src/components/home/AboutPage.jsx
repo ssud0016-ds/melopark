@@ -155,7 +155,7 @@ export default function AboutPage({ onNavigate }) {
 
         <section className="bg-brand px-5 py-12 text-center sm:px-8">
           <h2 className="text-[30px] font-extrabold tracking-tight text-white sm:text-[42px]">
-            Stop Circling. Start Parking
+            Park Smart. Never Circle Again.
           </h2>
           <button
             type="button"

@@ -26,7 +26,7 @@ export function AboutCtaBand({ onPress }: Props) {
           textAlign: 'center',
         }}
       >
-        Stop Circling. Start Parking
+        Park Smart. Never Circle Again.
       </Text>
       <Pressable
         accessibilityRole="button"
